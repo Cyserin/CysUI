@@ -55,6 +55,21 @@ local function AddonList()
     return list
 end
 
+-- memory sizes: KB below 1 MB, then MB with one decimal
+local function FmtMem(kb)
+    if kb >= 1024 then return format("%.1f MB", kb / 1024) end
+    return format("%.0f KB", kb)
+end
+-- green = light, yellow = getting heavy, red = a lot for a weaker PC (total addon memory, in MB)
+local MEM_YELLOW, MEM_RED = 50, 100
+local function MemColor(kb)
+    local mb = kb / 1024
+    if mb >= MEM_RED then return T.danger, "Heavy" end
+    if mb >= MEM_YELLOW then return T.accent, "Getting heavy" end
+    return T.green, "Light"
+end
+local function Hex(c) return format("|cFF%02X%02X%02X", c[1] * 255, c[2] * 255, c[3] * 255) end
+
 local function RefreshMemory(page)
     if not (page and page.memNames) then return end
     CUI:UpdateMemory()
@@ -62,13 +77,47 @@ local function RefreshMemory(page)
     for _, addon in ipairs(AddonList()) do
         local kb = CUI:GetMemoryKB(addon)
         names[#names + 1] = addon
-        values[#values + 1] = kb and format("%.0f KB", kb) or "-"
+        values[#values + 1] = kb and FmtMem(kb) or "-"
         total = total + (kb or 0)
     end
     names[#names + 1] = "|cFFFFD100Total|r"
-    values[#values + 1] = "|cFFFFD100" .. format("%.0f KB", total) .. "|r"
+    values[#values + 1] = "|cFFFFD100" .. FmtMem(total) .. "|r"
     page.memNames:SetText(table.concat(names, "\n"))
     page.memValues:SetText(table.concat(values, "\n"))
+    local col, word = MemColor(total)
+    page.memStatus:SetText(format("%s%s|r   %s%s|r", Hex(col), FmtMem(total), Hex(col), word))
+end
+
+local function ModuleCounts()
+    local on, all = 0, 0
+    for _, key in ipairs(CUI.order) do
+        local def = CUI.modules[key]
+        if CUI:ClassAllowed(def) then
+            all = all + 1
+            if CUI:IsModuleEnabled(key) then on = on + 1 end
+        end
+    end
+    return on, all
+end
+
+-- a one-line box with text you can select and copy
+local function CopyField(parent, width, text)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(width, 22)
+    W.Texture(f, "BACKGROUND", T.field):SetAllPoints()
+    W.Border(f, 1, T.line, "BORDER")
+    local eb = CreateFrame("EditBox", nil, f)
+    eb:SetPoint("TOPLEFT", 6, 0)
+    eb:SetPoint("BOTTOMRIGHT", -6, 0)
+    eb:SetFont(STANDARD_TEXT_FONT, 11, "")
+    eb:SetTextColor(T.text[1], T.text[2], T.text[3])
+    eb:SetAutoFocus(false)
+    eb:SetText(text)
+    eb:SetCursorPosition(0)
+    eb:SetScript("OnTextChanged", function(s, user) if user then s:SetText(text); s:HighlightText() end end)
+    eb:SetScript("OnEditFocusGained", function(s) s:HighlightText() end)
+    eb:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
+    return f
 end
 
 CUI:RegisterPage("General", function(page)
@@ -87,9 +136,10 @@ CUI:RegisterPage("General", function(page)
     desc:SetText("A light, minimal UI made of small addons that share one look. "
         .. "Turn the pieces you want on or off under |cFFFFD100Modules|r. Type |cFFFFD100/cui|r any time to come back here.")
 
+    local on, all = ModuleCounts()
     local client = W.Text(page, 11, T.desc)
     client:SetPoint("TOPLEFT", 0, -84)
-    client:SetText(format("Client: |cFFE0E0E0%s|r  (interface %d)", CUI.flavor, CUI.interface))
+    client:SetText(format("Client: |cFFE0E0E0%s|r (interface %d)    Modules on: |cFFE0E0E0%d of %d|r", CUI.flavor, CUI.interface, on, all))
 
     local layoutHeader = W.Header(page, "Layout", CONTENT_W)
     layoutHeader:SetPoint("TOPLEFT", 0, -112)
@@ -102,26 +152,68 @@ CUI:RegisterPage("General", function(page)
 
     local memHeader = W.Header(page, "Memory use", CONTENT_W)
     memHeader:SetPoint("TOPLEFT", 0, -184)
+    page.memStatus = W.Text(page, 16, T.text)
+    page.memStatus:SetPoint("TOPLEFT", 4, -210)
+    local legend = W.Text(page, 10, T.desc)
+    legend:SetPoint("TOPLEFT", 4, -234)
+    legend:SetWidth(CONTENT_W - 12)
+    legend:SetJustifyV("TOP")
+    legend:SetSpacing(2)
+    legend:SetText(format("|cFF59D959Green|r under %d MB   |cFFFFD100Yellow|r %d-%d MB   |cFFFF4D4DRed|r over %d MB\nAddon memory only; other addons are not counted.", MEM_YELLOW, MEM_YELLOW, MEM_RED, MEM_RED))
     page.memNames = W.Text(page, 11, T.text)
-    page.memNames:SetPoint("TOPLEFT", 4, -212)
+    page.memNames:SetPoint("TOPLEFT", 4, -270)
     page.memNames:SetSpacing(3)
     page.memValues = W.Text(page, 11, T.accent, "RIGHT")
-    page.memValues:SetPoint("TOPLEFT", 160, -212)
+    page.memValues:SetPoint("TOPLEFT", 160, -270)
     page.memValues:SetWidth(90)
     page.memValues:SetSpacing(3)
 
-    local newsHeader = W.Header(page, "What's New", CONTENT_W)
-    newsHeader:SetPoint("TOPLEFT", 0, -332)
-    local y = -360
+    -- tools sit below the memory list, wherever it ends
+    local tools = W.Header(page, "Tools", CONTENT_W)
+    tools:SetPoint("TOPLEFT", page.memNames, "BOTTOMLEFT", -4, -18)
+    local b1 = W.Button(page, 150, 22, "Copy debug info")
+    b1:SetPoint("TOPLEFT", tools, "BOTTOMLEFT", 4, -10)
+    b1:SetScript("OnClick", function() CUI:ShowDebugBox() end)
+    local b2 = W.Button(page, 130, 22, "Export settings")
+    b2:SetPoint("LEFT", b1, "RIGHT", 8, 0)
+    b2:SetScript("OnClick", function() CUI:ShowExportBox() end)
+    local b3 = W.Button(page, 130, 22, "Import settings")
+    b3:SetPoint("LEFT", b2, "RIGHT", 8, 0)
+    b3:SetScript("OnClick", function() CUI:ShowImportBox() end)
+    local b4 = W.Button(page, 150, 22, "Reset everything")
+    b4:SetPoint("TOPLEFT", b1, "BOTTOMLEFT", 0, -8)
+    b4:SetScript("OnClick", function() CUI:ResetEverything() end)
     if CysChangelog then
-        for _, name in ipairs(CysChangelog.order) do
-            local b = W.Button(page, 220, 22, "What's New: " .. name)
-            b:SetPoint("TOPLEFT", 4, y)
-            b:SetScript("OnClick", function() CysChangelog:Show(name) end)
-            y = y - 28
+        local b5 = W.Button(page, 130, 22, #CysChangelog.order == 1 and "View changelog" or "Changelogs")
+        b5:SetPoint("LEFT", b4, "RIGHT", 8, 0)
+        b5:SetScript("OnClick", function()
+            local first = CysChangelog.order[1]
+            if first then CysChangelog:Show(first) end
+        end)
+        if #CysChangelog.order > 1 then
+            local y = 0
+            for i = 2, #CysChangelog.order do
+                local name = CysChangelog.order[i]
+                local bx = W.Button(page, 150, 22, "Changelog: " .. name)
+                bx:SetPoint("LEFT", i == 2 and b5 or page["clog" .. (i - 1)], "RIGHT", 8, 0)
+                bx:SetScript("OnClick", function() CysChangelog:Show(name) end)
+                page["clog" .. i] = bx
+            end
         end
     end
-    page.contentHeight = -y + 8
+
+    local links = W.Header(page, "Links and bug reports", CONTENT_W)
+    links:SetPoint("TOPLEFT", b4, "BOTTOMLEFT", -4, -20)
+    local gh = CopyField(page, 300, "https://github.com/Cyserin/CysUI")
+    gh:SetPoint("TOPLEFT", links, "BOTTOMLEFT", 4, -10)
+    local note = W.Text(page, 11, T.desc)
+    note:SetPoint("TOPLEFT", gh, "BOTTOMLEFT", 0, -8)
+    note:SetWidth(CONTENT_W - 8)
+    note:SetJustifyV("TOP")
+    note:SetSpacing(3)
+    note:SetText("Found a bug? Press |cFFFFD100Copy debug info|r, then post it with a screenshot at the address above under Issues.")
+
+    page.contentHeight = 780
     RefreshMemory(page)
 end, RefreshMemory)
 
@@ -339,7 +431,7 @@ local function CreateWindow()
     fline:SetPoint("TOPLEFT"); fline:SetPoint("TOPRIGHT"); fline:SetHeight(1)
     local info = W.Text(footer, 11, T.desc)
     info:SetPoint("LEFT", 12, 0)
-    info:SetText(format("%s - interface %d", CUI.flavor, CUI.interface))
+    info:SetText("Cys's UI v" .. CUI:GetVersion("CysUI"))
     f.hint = W.Text(footer, 11, T.accent, "RIGHT")
     f.hint:SetPoint("RIGHT", -120, 0)
     f.reload = W.Button(footer, 100, 24, "Reload UI")

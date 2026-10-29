@@ -177,24 +177,43 @@ local API_CHECKS = {
     "C_Item", "C_Spell", "C_UnitAuras", "C_Map", "C_NamePlate", "C_CVar",
 }
 
-function CUI:Debug()
+function CUI:DebugLines()
+    local L = {}
     local version, build = GetBuildInfo()
-    self:Print(format("%s - client %s (build %s), interface %d, Cys's UI %s",
-        self.flavor, tostring(version), tostring(build), self.interface, self:GetVersion(ADDON)))
+    L[#L + 1] = format("%s - client %s (build %s), interface %d, Cys's UI %s",
+        self.flavor, tostring(version), tostring(build), self.interface, self:GetVersion(ADDON))
     for _, key in ipairs(self.order) do
         local def = self.modules[key]
         local on = self:IsModuleEnabled(key)
         local note = (def.loadedEnabled ~= nil and def.loadedEnabled ~= on) and "  (reload pending)" or ""
-        print(format("  %-8s %s%s", key, on and "on" or "OFF", note))
+        L[#L + 1] = format("  %-8s %s%s", key, on and "on" or "OFF", note)
     end
     local present, missing = {}, {}
     for _, name in ipairs(API_CHECKS) do
         if _G[name] ~= nil then present[#present + 1] = name else missing[#missing + 1] = name end
     end
-    print("  present: " .. table.concat(present, ", "))
-    print("  missing: " .. (#missing > 0 and table.concat(missing, ", ") or "none"))
+    L[#L + 1] = "  present: " .. table.concat(present, ", ")
+    L[#L + 1] = "  missing: " .. (#missing > 0 and table.concat(missing, ", ") or "none")
     local sh = CysUICompat and CysUICompat.shimmed or {}
-    print("  filled in by Compat.lua: " .. (#sh > 0 and table.concat(sh, ", ") or "nothing (all old functions exist)"))
+    L[#L + 1] = "  filled in by Compat.lua: " .. (#sh > 0 and table.concat(sh, ", ") or "nothing (all old functions exist)")
+    -- which other addons are loaded (clashes are often visible here)
+    local names = {}
+    local getNum = (C_AddOns and C_AddOns.GetNumAddOns) or GetNumAddOns
+    local getInfo = (C_AddOns and C_AddOns.GetAddOnInfo) or GetAddOnInfo
+    if getNum and getInfo then
+        for i = 1, getNum() do
+            local name = getInfo(i)
+            if name and self:IsAddonLoaded(name) then names[#names + 1] = name end
+        end
+    end
+    L[#L + 1] = format("  addons loaded (%d): %s", #names, table.concat(names, ", "))
+    return L
+end
+
+function CUI:Debug()
+    local L = self:DebugLines()
+    self:Print(L[1])
+    for i = 2, #L do print(L[i]) end
 end
 
 --------------------------------------------------------------------------------
@@ -279,9 +298,22 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.38.37",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.1",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.39.1", date = "2026-10-29",
+              changed = {
+                  "General page: the memory legend wraps onto two lines instead of being cut off.",
+              },
+            },
+            { version = "0.39.0", date = "2026-10-29",
+              changed = {
+                  "General page reworked: memory shows in MB above 1 MB, with a green / yellow / red light (under 50 MB, 50-100 MB, over 100 MB).",
+                  "New Tools: Copy debug info (for bug reports), Export / Import settings as one pasteable line, and Reset everything.",
+                  "General page: modules-on count, a GitHub link, one changelog button; the footer now shows the version.",
+                  "/cui debug now also lists the other addons you have loaded.",
+              },
+            },
             { version = "0.38.37", date = "2026-10-29",
               changed = {
                   "Battleground 'ready to enter' pop-up now has the Cys look.",
