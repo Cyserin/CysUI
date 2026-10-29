@@ -1,0 +1,10 @@
+# working copies and editor files - not part of the addon
+_backup/
+.vscode/
+*.pre*.lua
+*.cur.lua
+chk.lua
+part*.lua
+*.zip
+.DS_Store
+Thumbs.db

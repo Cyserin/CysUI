@@ -1,0 +1,9 @@
+package-as: CysUI
+
+ignore:
+  - README.md
+  - .github
+  - .vscode
+  - _backup
+  - .gitignore
+  - screenshots

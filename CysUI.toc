@@ -1,0 +1,48 @@
+## Interface: 11509, 16001
+## Title: Cys's UI
+## Notes: A light, minimal UI made of small Cys addons: settings window (/cui), module switches and vendor helpers.
+## Author: Randon
+## Version: 0.38.37
+## SavedVariables: CysUIDB, CysMapDB, CysBagsDB, CysArmoryDB, CysSkillsDB, CysTotemsDB, CysRollTrackerDB
+## OptionalDeps: Postal, ElvUI, Plater, Platynator, Bagnon, CysBags, CysArmory, CysSkills, CysTotems, CysRollTracker
+## IconTexture: Interface\Icons\INV_Misc_Gear_01
+
+Compat.lua
+CysChangelog.lua
+Core.lua
+Widgets.lua
+Movers.lua
+Config.lua
+Scale.lua
+Conflicts.lua
+Vendor.lua
+InfoBar.lua
+Chat.lua
+Tooltip.lua
+Minimap.lua
+MinimapButtons.lua
+UnitFrames.lua
+RaidTemplates.xml
+RaidFrames.lua
+CastBar.lua
+Nameplates.lua
+CysKillTracker.lua
+CysXP.lua
+GroupLoot.lua
+MicroMenu.lua
+PlayerAuras.lua
+ActionBars.lua
+Skins.lua
+Friends.lua
+Modules\Bags\CysBags.lua
+Modules\Bags\CysBank.lua
+Modules\Upgrade\CysUpgrade.lua
+Modules\Armory\CysArmory.lua
+Modules\Armory\CysFlyout.lua
+Modules\Skills\CysSkills.lua
+Modules\Mail\CysMail.lua
+Modules\Totems\CysTotems.lua
+Modules\Warrior\CysWarrior.lua
+Modules\RaidDebuffs\CysRaidDebuffs.lua
+Modules\DamageMeters\CysDamageMeters.lua
+Modules\RollTracker\CysRollTracker.lua

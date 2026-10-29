@@ -1,0 +1,9 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\..\FrameXML\UI.xsd">
+    <!-- the unit button the raid frame headers create for each raid member; RaidFrames.lua dresses it up -->
+    <Button name="CysUIRaidUnitTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+        <Scripts>
+            <OnLoad>CysUI_RaidButton_OnLoad(self)</OnLoad>
+            <OnAttributeChanged>CysUI_RaidButton_OnAttributeChanged(self, name, value)</OnAttributeChanged>
+        </Scripts>
+    </Button>
+</Ui>
