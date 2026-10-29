@@ -1,0 +1,44 @@
+name: Suggestion
+description: Something you'd like Cys's UI to do or look like
+labels: ["suggestion"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part is this about?
+      options:
+        - General UI
+        - Skins (Blizzard windows)
+        - Action bars
+        - Unit / raid frames
+        - Chat
+        - Bags / Bank
+        - Settings window
+        - Warrior
+        - Paladin
+        - Hunter
+        - Rogue
+        - Priest
+        - Shaman
+        - Mage
+        - Warlock
+        - Druid
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe it. A screenshot or a link to an addon that does it helps.
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client
+      options:
+        - Classic Era
+        - WoW Forever
+        - Both
