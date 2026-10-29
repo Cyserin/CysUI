@@ -1,0 +1,53 @@
+name: Bug report
+description: Something looks wrong or throws an error
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part is this about?
+      options:
+        - General UI
+        - Skins (Blizzard windows)
+        - Action bars
+        - Unit / raid frames
+        - Chat
+        - Bags / Bank
+        - Settings window
+        - Warrior
+        - Paladin
+        - Hunter
+        - Rogue
+        - Priest
+        - Shaman
+        - Mage
+        - Warlock
+        - Druid
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you got. Screenshots welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error text
+      description: Paste the red error from BugSack / BugGrabber if there was one.
+  - type: textarea
+    id: debug
+    attributes:
+      label: Debug info
+      description: In game open /cui, press "Copy debug info", and paste it here.
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client
+      options:
+        - Classic Era
+        - WoW Forever
