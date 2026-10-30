@@ -21,7 +21,7 @@ local CUI = CysUI
 local W = CUI.W
 local T = W.T
 
-local floor, max, min = math.floor, math.max, math.min
+local floor, max, min, abs = math.floor, math.max, math.min, math.abs
 
 CUI.movers = CUI.movers or {}
 CUI.moverOrder = CUI.moverOrder or {}
@@ -89,20 +89,94 @@ local function SelectMover(key)
     if panel then panel:RefreshAll() end
 end
 
+-- Alignment: finds where the dragged box lines up with the screen centre or with another box
+-- (left / middle / right, top / middle / bottom). Returns, per direction, how far to nudge and what matched.
+local ALIGN_RANGE = 8
+
+-- The grid cuts the screen into equal cells (like ElvUI), around 64 units wide, with a line through the centre.
+local function GridSteps()
+    local want = (CysUIDB.snapSize or 8) * 8
+    local w, h = UIParent:GetWidth(), UIParent:GetHeight()
+    local nx = max(2, 2 * floor(w / (2 * want) + 0.5))
+    local ny = max(2, 2 * floor(h / (2 * want) + 0.5))
+    return w / nx, h / ny, nx, ny
+end
+
+local function Align(m)
+    local mover = m.mover
+    local l, r, t, b = mover:GetLeft(), mover:GetRight(), mover:GetTop(), mover:GetBottom()
+    if not (l and r and t and b) then return nil end
+    local mine = {
+        x = { { l, "edge" }, { (l + r) / 2, "mid" }, { r, "edge" } },
+        y = { { b, "edge" }, { (t + b) / 2, "mid" }, { t, "edge" } },
+    }
+    local ux, uy = UIParent:GetCenter()
+    local targets = { x = { { ux, "mid", "the screen" } }, y = { { uy, "mid", "the screen" } } }
+    for key, o in pairs(CUI.movers) do
+        if o ~= m and o.mover:IsShown() then
+            local ol, or_, ot, ob = o.mover:GetLeft(), o.mover:GetRight(), o.mover:GetTop(), o.mover:GetBottom()
+            if ol and or_ and ot and ob then
+                local name = (o.label or key):gsub("\n", " ")
+                local tx, ty = targets.x, targets.y
+                tx[#tx + 1] = { ol, "edge", name }; tx[#tx + 1] = { (ol + or_) / 2, "mid", name }; tx[#tx + 1] = { or_, "edge", name }
+                ty[#ty + 1] = { ob, "edge", name }; ty[#ty + 1] = { (ot + ob) / 2, "mid", name }; ty[#ty + 1] = { ot, "edge", name }
+            end
+        end
+    end
+    -- the grid lines count too, but a real box or the screen centre wins a close call
+    local stepX, stepY = GridSteps()
+    local steps = { x = stepX, y = stepY }
+    local origin = { x = ux, y = uy }
+    local out = {}
+    for _, axis in ipairs({ "x", "y" }) do
+        local best
+        local function Try(mv, tg, penalty)
+            local d = tg[1] - mv[1]
+            local score = abs(d) + penalty
+            if abs(d) <= ALIGN_RANGE and (not best or score < best.score
+                or (score == best.score and mv[2] == "mid" and tg[2] == "mid")) then
+                best = { d = d, pos = tg[1], score = score, center = (mv[2] == "mid" and tg[2] == "mid"), name = tg[3] }
+            end
+        end
+        for _, mv in ipairs(mine[axis]) do
+            for _, tg in ipairs(targets[axis]) do Try(mv, tg, 0) end
+            if CysUIDB.snap and CysUIDB.showGrid ~= false then
+                local g = origin[axis] + floor((mv[1] - origin[axis]) / steps[axis] + 0.5) * steps[axis]
+                Try(mv, { g, "edge", "the grid" }, 3)
+            end
+        end
+        out[axis] = best
+    end
+    return out
+end
+
 -- store where the mover ended up after a drag (always as an offset from the screen centre)
 local function CaptureDrag(m)
     local cx, cy = m.mover:GetCenter()
     local ux, uy = UIParent:GetCenter()
     if not (cx and ux) then return end
+    local al = Align(m)
     local x, y = cx - ux, cy - uy
+    local snappedX, snappedY
+    if al and al.x then x = x + al.x.d; snappedX = true end
+    if al and al.y then y = y + al.y.d; snappedY = true end
     if CysUIDB.snap then
         local s = CysUIDB.snapSize or 8
-        x, y = floor(x / s + 0.5) * s, floor(y / s + 0.5) * s
+        if not snappedX then x = floor(x / s + 0.5) * s end
+        if not snappedY then y = floor(y / s + 0.5) * s end
     end
     local e = Entry(m.key, true)
     e.point, e.x, e.y = "CENTER", x, y
     CUI:ApplyLayout(m.key)
     if panel then panel:RefreshAll() end
+end
+
+-- while dragging: light up the lines the box is lining up with
+local function DragTick(m)
+    local g = guides
+    if not g then return end
+    local al = Align(m)
+    g:ShowAlign(al)
 end
 
 function CUI:RegisterMovable(frame, key, label, opts)
@@ -132,9 +206,32 @@ function CUI:RegisterMovable(frame, key, label, opts)
     text:SetText(m.label)
 
     mover:SetScript("OnMouseDown", function() SelectMover(key) end)
-    mover:SetScript("OnDragStart", function(s) SelectMover(key); s:StartMoving() end)
+    -- scroll over a box to nudge it: up / down, Shift = sideways, Ctrl = 10 at a time
+    mover:EnableMouseWheel(true)
+    mover:SetScript("OnMouseWheel", function(_, delta)
+        SelectMover(key)
+        local e = Entry(key, true)
+        if not e.point then e.point, e.x, e.y = Position(m) end
+        local amount = (delta > 0 and 1 or -1) * (IsControlKeyDown() and 10 or 1)
+        if IsShiftKeyDown() then e.x = (e.x or 0) + amount else e.y = (e.y or 0) + amount end
+        CUI:ApplyLayout(key)
+        if panel then panel:RefreshAll() end
+    end)
+    mover:SetScript("OnDragStart", function(s)
+        SelectMover(key)
+        s:StartMoving()
+        local acc = 0
+        s:SetScript("OnUpdate", function(_, e)
+            acc = acc + e
+            if acc < 0.03 then return end
+            acc = 0
+            DragTick(m)
+        end)
+    end)
     mover:SetScript("OnDragStop", function(s)
+        s:SetScript("OnUpdate", nil)
         s:StopMovingOrSizing()
+        if guides then guides:ShowAlign(nil) end
         CaptureDrag(m)
     end)
 
@@ -189,9 +286,9 @@ local function BuildPanel()
     help:SetPoint("TOPLEFT", 14, -32)
     help:SetWidth(332)
     help:SetJustifyV("TOP")
-    help:SetText("Drag a gold box to move it. Click one to fine-tune it below.")
+    help:SetText("Drag a gold box to move it. Click one to fine-tune it below, or scroll over it to nudge it (Shift = sideways, Ctrl = 10 at a time).")
     f.name = W.Text(f, 12, T.text)
-    f.name:SetPoint("TOPLEFT", 14, -62)
+    f.name:SetPoint("TOPLEFT", 14, -80)
 
     local function Edit(fn)
         local m = Current()
@@ -255,6 +352,9 @@ local function BuildPanel()
     f.snap = W.Checkbox(f, "Snap to a grid when dragging", function() return CysUIDB.snap end,
         function(on) CysUIDB.snap = on end)
 
+    f.showGrid = W.Checkbox(f, "Show grid lines", function() return CysUIDB.showGrid ~= false end,
+        function(on) CysUIDB.showGrid = on; if guides then guides:DrawGrid() end end)
+
     f.resetOne = W.Button(f, 110, 22, "Reset this one")
     f.resetOne:SetScript("OnClick", function() if selected then CUI:ResetMover(selected) end end)
     f.resetAll = W.Button(f, 90, 22, "Reset all")
@@ -265,7 +365,7 @@ local function BuildPanel()
     function f:RefreshAll()
         local m = Current()
         self.name:SetText(m and ("Editing: |cFFFFD100" .. m.label:gsub("\n", " ") .. "|r") or "|cFF777777Click a box to edit it.|r")
-        local y = -88
+        local y = -106
         for _, row in ipairs(self.rows) do
             if m and (not row.applies or row.applies(m)) then
                 row:ClearAllPoints()
@@ -281,7 +381,10 @@ local function BuildPanel()
         self.snap:ClearAllPoints()
         self.snap:SetPoint("TOPLEFT", 14, y - 6)
         self.snap:Refresh()
-        y = y - 40
+        self.showGrid:ClearAllPoints()
+        self.showGrid:SetPoint("TOPLEFT", 14, y - 32)
+        self.showGrid:Refresh()
+        y = y - 66
         self.resetOne:ClearAllPoints(); self.resetOne:SetPoint("TOPLEFT", 14, y)
         self.resetAll:ClearAllPoints(); self.resetAll:SetPoint("LEFT", self.resetOne, "RIGHT", 8, 0)
         self.done:ClearAllPoints(); self.done:SetPoint("TOPRIGHT", -14, y)
@@ -296,12 +399,104 @@ local function BuildGuides()
     g:SetFrameStrata("DIALOG")
     g:SetFrameLevel(1)
     g:Hide()
-    local v = W.Texture(g, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.25 })
+
+    -- the centre of the screen
+    local v = W.Texture(g, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.5 })
     v:SetWidth(1)
     v:SetPoint("TOP"); v:SetPoint("BOTTOM")
-    local h = W.Texture(g, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.25 })
+    local h = W.Texture(g, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.5 })
     h:SetHeight(1)
     h:SetPoint("LEFT"); h:SetPoint("RIGHT")
+
+    -- grid lines (every 8 snap steps), counted out from the centre
+    g.grid = {}
+    function g:DrawGrid()
+        for _, t in ipairs(self.grid) do t:Hide() end
+        if CysUIDB.showGrid == false then return end
+        local stepX, stepY, nx, ny = GridSteps()
+        local n = 0
+        -- one screen pixel in UI units, so every line lands on a whole pixel and the spacing looks even
+        local px = 1
+        if GetPhysicalScreenSize then
+            local _, ph = GetPhysicalScreenSize()
+            if ph and ph > 0 then px = UIParent:GetHeight() / ph end
+        end
+        local function Line(vertical, off)
+            off = floor(off / px + 0.5) * px
+            n = n + 1
+            local t = self.grid[n]
+            if not t then
+                t = W.Texture(self, "BACKGROUND", { 1, 0.9, 0.5, 0.5 })
+                self.grid[n] = t
+            end
+            t:ClearAllPoints()
+            if vertical then
+                t:SetWidth(px)
+                t:SetPoint("TOP", UIParent, "TOP", off, 0)
+                t:SetPoint("BOTTOM", UIParent, "BOTTOM", off, 0)
+            else
+                t:SetHeight(px)
+                t:SetPoint("LEFT", UIParent, "LEFT", 0, off)
+                t:SetPoint("RIGHT", UIParent, "RIGHT", 0, off)
+            end
+            t:Show()
+        end
+        for i = 1, nx / 2 do Line(true, i * stepX); Line(true, -i * stepX) end
+        for i = 1, ny / 2 do Line(false, i * stepY); Line(false, -i * stepY) end
+    end
+
+    -- bright lines while a box lines up with something
+    local function Mark()
+        local t = W.Texture(g, "OVERLAY", { 0.3, 0.8, 1, 0.95 })
+        t:Hide()
+        return t
+    end
+    g.markV, g.markH = Mark(), Mark()
+    local function Label()
+        local fs = g:CreateFontString(nil, "OVERLAY")
+        fs:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+        fs:Hide()
+        return fs
+    end
+    g.labelV, g.labelH = Label(), Label()
+
+    function g:ShowAlign(al)
+        local ax = al and al.x
+        local ay = al and al.y
+        if ax then
+            local c = ax.center and { 0.3, 1, 0.4 } or { 0.3, 0.8, 1 }
+            self.markV:SetColorTexture(c[1], c[2], c[3], 0.95)
+            self.markV:SetWidth(1)
+            self.markV:ClearAllPoints()
+            self.markV:SetPoint("TOP", UIParent, "TOPLEFT", ax.pos, 0)
+            self.markV:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", ax.pos, 0)
+            self.markV:Show()
+            self.labelV:ClearAllPoints()
+            self.labelV:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", ax.pos + 4, 40)
+            self.labelV:SetTextColor(c[1], c[2], c[3])
+            self.labelV:SetText((ax.center and "Centered with " or "Lined up with ") .. ax.name)
+            self.labelV:Show()
+        else
+            self.markV:Hide(); self.labelV:Hide()
+        end
+        if ay then
+            local c = ay.center and { 0.3, 1, 0.4 } or { 0.3, 0.8, 1 }
+            self.markH:SetColorTexture(c[1], c[2], c[3], 0.95)
+            self.markH:SetHeight(1)
+            self.markH:ClearAllPoints()
+            self.markH:SetPoint("LEFT", UIParent, "BOTTOMLEFT", 0, ay.pos)
+            self.markH:SetPoint("RIGHT", UIParent, "BOTTOMRIGHT", 0, ay.pos)
+            self.markH:Show()
+            self.labelH:ClearAllPoints()
+            self.labelH:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 40, ay.pos + 4)
+            self.labelH:SetTextColor(c[1], c[2], c[3])
+            self.labelH:SetText((ay.center and "Centered with " or "Lined up with ") .. ay.name)
+            self.labelH:Show()
+        else
+            self.markH:Hide(); self.labelH:Hide()
+        end
+    end
+    g:DrawGrid()
     return g
 end
 

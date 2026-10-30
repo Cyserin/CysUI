@@ -476,7 +476,12 @@ local function OnTooltipItem(tooltip)
             ep = (sn - se) * (weights["ITEM_MOD_ATTACK_SPEED"] or 0) }
     end
     -- like the site: gains first, then losses, each group in alphabetical order
-    local function IsGain(c) return c.delta > 0 end
+    -- "gain" means good for you: judged by the EP it adds (so a slower weapon with a negative speed weight,
+    -- or fewer of a stat you give no weight, reads right); stats with no EP effect go by plain more/less
+    local function IsGain(c)
+        if math.abs(c.ep) >= 0.05 then return c.ep > 0 end
+        return c.delta > 0
+    end
     table.sort(changes, function(a, b)
         local ga, gb = IsGain(a), IsGain(b)
         if ga ~= gb then return ga end
@@ -489,10 +494,11 @@ local function OnTooltipItem(tooltip)
         local effect = ""
         if math.abs(c.ep) >= 0.05 then effect = string.format("  |cff999999(%+.1f EP)|r", c.ep) end
         local num = c.speed and FmtSpeed(c.delta) or Fmt(c.delta)
-        if c.delta > 0 then
-            tooltip:AddLine(string.format("  • +%s %s%s", num, c.label, effect), 0.2, 1, 0.2)
+        local text = string.format(c.delta > 0 and "  • +%s %s%s" or "  • %s %s%s", num, c.label, effect)
+        if IsGain(c) then
+            tooltip:AddLine(text, 0.2, 1, 0.2)
         else
-            tooltip:AddLine(string.format("  • %s %s%s", num, c.label, effect), 1, 0.2, 0.2)
+            tooltip:AddLine(text, 1, 0.2, 0.2)
         end
     end
 end
