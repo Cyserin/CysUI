@@ -101,7 +101,8 @@ Modules that depend on your class or spec. Anything not listed is on the list to
 
 | Module | Class / spec | Client | State |
 | --- | --- | --- | --- |
-| Level-Up Spells | Shaman: Earth Warden (Enhancement tank), Dungeon DPS, Healer, Questing | Era | in alpha, new in 0.41.0 |
+| Level-Up Spells | Shaman: Earth Warden (Enhancement tank), Enhancement DPS, Healer, Questing | Era | in alpha, new in 0.41.0 |
+| Level-Up Spells | Shaman: Elemental DPS | Era | draft (uses the shared DPS list) |
 | Level-Up Spells | every other class | Era | to add |
 | Level-Up Spells | every class | WoW Forever | work in progress (no leveling guides out yet) |
 | Totem bar | Shaman | Era | in alpha |

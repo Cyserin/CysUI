@@ -31,7 +31,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Roll Tracker** *(layout)*: tracks /roll and pass results for loot and announces the winner; in raids only the leader, assistants and master looter announce.
 - **Raid Debuffs** *(layout)*: tracks the key debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements and more) and only shows the ones your group can apply.
 - **Kill Tracker**: learns your average XP per kill and shows how many more kills it takes to level.
-- **Level-Up Spells**: when you level up or open your trainer, a box lists the spells worth buying now and why; spells you skipped stay on the list. `/cuilevel` shows it, `/cuiscan` checks the guide against your trainer. Shaman guides so far (tank, dungeon DPS, healer, questing), see Class support below; it also lists what to skip and why.
+- **Level-Up Spells**: when you level up or open your trainer, a box lists the spells worth buying now and why; spells you skipped stay on the list. `/cuilevel` shows it, `/cuiscan` checks the guide against your trainer. Shaman guides so far (tank, Enhancement, Elemental draft, healer, questing), see Class support below; it also lists what to skip and why.
 - **Interrupt announcer**: says "Interrupted <target>'s <spell>!" to your group (or just you) when you interrupt a cast. Any class.
 - **Waypoints**: a TomTom-style arrow with distance and time left. Ctrl + left-click the world map, `/way 45 62 Name`, or mark a Questie quest. *(layout)*
 - **Vendor**: Sell Junk button, optional auto-sell of grey items, auto-repair.
@@ -51,7 +51,7 @@ What each class-dependent module covers today (Classic Era). Guides and class mo
 
 | Module | Supported | To add |
 | --- | --- | --- |
-| Level-Up Spells | Shaman: Earth Warden (tank), Dungeon DPS, Healer, Questing | every other class |
+| Level-Up Spells | Shaman: Earth Warden (tank), Enhancement DPS, Healer, Questing; Elemental DPS (draft) | every other class |
 | Totems | Shaman | |
 | Battle Shout alert | Warrior | |
 | Raid Debuffs, Interrupts, Waypoints, Upgrade | all classes | |

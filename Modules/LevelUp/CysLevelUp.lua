@@ -104,15 +104,28 @@ local function Build()
     box:SetFrameStrata("DIALOG")
     box:SetClampedToScreen(true)
     W.Texture(box, "BACKGROUND", T.bg):SetAllPoints()
-    W.Border(box, 1, T.border, "BORDER")
+    W.Border(box, 2, T.border, "BORDER") -- two pixels so no edge is lost after the box is moved
+
+    -- header strip with the module's name
+    local strip = W.Texture(box, "ARTWORK", T.header)
+    strip:SetPoint("TOPLEFT", 2, -2)
+    strip:SetPoint("TOPRIGHT", -2, -2)
+    strip:SetHeight(20)
+    local line = W.Texture(box, "ARTWORK", T.brand)
+    line:SetPoint("TOPLEFT", 2, -22)
+    line:SetPoint("TOPRIGHT", -2, -22)
+    line:SetHeight(2)
+    box.header = W.Text(box, 11, T.accent)
+    box.header:SetPoint("TOPLEFT", 10, -7)
+    box.header:SetText("CYS'S SPELL SCOUT")
 
     box.title = W.Text(box, 13, T.accent)
-    box.title:SetPoint("TOPLEFT", 10, -9)
-    box.sub = W.Text(box, 10, T.desc)
-    box.sub:SetPoint("TOPLEFT", 10, -27)
+    box.title:SetPoint("TOPLEFT", 10, -32)
+    box.sub = W.Text(box, 10, T.desc, "RIGHT") -- the loaded guide, in the header strip
+    box.sub:SetPoint("TOPRIGHT", -28, -8)
 
     local close = W.Button(box, 18, 18, "x")
-    close:SetPoint("TOPRIGHT", -6, -6)
+    close:SetPoint("TOPRIGHT", -5, -4)
     close:SetScript("OnClick", function() box:Hide() end)
 
     box.rows = {}
@@ -167,9 +180,9 @@ local function Render(level)
     shownLevel = level
 
     box.title:SetText("Level " .. level .. ": spells worth buying")
-    box.sub:SetText(guide.name .. " guide (" .. guide.role .. ")")
+    box.sub:SetText(guide.name)
 
-    local y = -46
+    local y = -54
     local shown = math.min(#buy, MAXROWS)
     for i = 1, MAXROWS do
         local r, e = box.rows[i], buy[i]
@@ -242,7 +255,7 @@ local function Render(level)
     else
         box.foot:Hide()
     end
-    box:SetHeight(math.max(70, -y + 10))
+    box:SetHeight(math.max(90, math.ceil((-y + 10) / 2) * 2)) -- whole, even height keeps the edges on whole pixels
     if CUI.ApplyLayout then CUI:ApplyLayout("levelup") end -- keep the layout-mode box the same size
     return #buy
 end
@@ -483,7 +496,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     W.Notes(page, 4, y, width, "", {
         { "/cuilevel", "show the box now; /cuilevel 30 previews what you would buy at level 30" },
         { "/cuiscan", "at your class trainer: saves the trainer's spells and checks the guide's levels (helps fix the guides)" },
-        "The Dungeon DPS, Healer and Questing guides start at level 10; levels 1 to 8 are only in Earth Warden.",
+        "The Enhancement, Elemental, Healer and Questing guides start at level 10; levels 1 to 8 are only in Earth Warden.",
         "Other classes and specs, and WoW Forever, are being added as guides become available.",
     })
 end)

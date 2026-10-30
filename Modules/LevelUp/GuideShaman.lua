@@ -85,7 +85,7 @@ table.insert(CUI.LevelGuides.SHAMAN, {
 -- The full Shaman table: one row per trainer level, split by what you play.
 --   T = tank (Earth Warden above is the tank list)   D = dungeon DPS   H = healing   Q = questing
 --   all = worth buying whatever you play             skip = spells NOT worth the gold, and why
--- Three more guides (Dungeon DPS, Healer, Questing) are built from it below.
+-- More guides (Enhancement DPS, Elemental DPS, Healer, Questing) are built from it below.
 --------------------------------------------------------------------------------
 local ROWS = {
     { 10, D = "Strength of Earth R1", Q = "Flametongue Weapon R1, Searing Totem R1, Flame Shock R1" },
@@ -164,7 +164,19 @@ local function Build(key, name, role, spec, tag)
     return g
 end
 
-table.insert(CUI.LevelGuides.SHAMAN, Build("dps", "Dungeon DPS", "Enhancement / Elemental", "Enhancement or Elemental", "D"))
+table.insert(CUI.LevelGuides.SHAMAN, Build("enhancement", "Enhancement DPS", "Enhancement, dungeon DPS", "Enhancement", "D"))
+
+-- Elemental: only the shared DPS list exists so far, so this one is a draft. Windfury Weapon is a melee
+-- spell and the table's skip notes assume an Enhancement pull, so both are left out until there is an Elemental list.
+do
+    local g = Build("elemental", "Elemental DPS (draft)", "Elemental, dungeon DPS", "Elemental", "D")
+    local keep = {}
+    for _, e in ipairs(g.spells) do
+        if e.spell ~= "Windfury Weapon" then keep[#keep + 1] = e end
+    end
+    g.spells, g.skips, g.draft = keep, {}, true
+    table.insert(CUI.LevelGuides.SHAMAN, g)
+end
 table.insert(CUI.LevelGuides.SHAMAN, Build("heal", "Healer", "Restoration", "Restoration", "H"))
 table.insert(CUI.LevelGuides.SHAMAN, Build("quest", "Questing", "Any spec", "any", "Q"))
 
