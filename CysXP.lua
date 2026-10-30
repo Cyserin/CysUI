@@ -266,8 +266,20 @@ CUI:RegisterPage("XP Bar", function(page)
     local qb = W.Checkbox(page, "Show XP from completed quests as a segment on the bar", function() return db.questBar end,
         function(on) db.questBar = on; Refresh() end)
     qb:SetPoint("TOPLEFT", 4, -150)
+    -- the same switch as on the Action Bars page: Blizzard's own XP and reputation bars
+    local blizz = W.Checkbox(page, "Hide Blizzard's experience and reputation bars (turning off needs a /reload)",
+        function()
+            local ab = CysUIDB.actionbars
+            return not ab or ab.hideStatusBars ~= false
+        end,
+        function(on)
+            CysUIDB.actionbars = CysUIDB.actionbars or {}
+            CysUIDB.actionbars.hideStatusBars = on
+            if on and CUI.ActionBars and CUI.ActionBars.HideStatusBars then CUI.ActionBars:HideStatusBars() end
+        end)
+    blizz:SetPoint("TOPLEFT", 4, -176)
 
-    W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -186)
+    W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -212)
     local function ColorButton(y, label, key)
         local opts = {}
         for i, p in ipairs(PALETTE) do
@@ -277,19 +289,18 @@ CUI:RegisterPage("XP Bar", function(page)
             function(v) db[key] = v; Refresh() end, label .. ": ")
         b:SetPoint("TOPLEFT", 4, y)
     end
-    ColorButton(-216, "Your XP", "xpColor")
-    ColorButton(-244, "Rested XP", "restedColor")
-    ColorButton(-272, "Completed-quest XP", "questColor")
+    ColorButton(-242, "Your XP", "xpColor")
+    ColorButton(-270, "Rested XP", "restedColor")
+    ColorButton(-298, "Completed-quest XP", "questColor")
 
     local move = W.Button(page, 280, 22, "Move and resize the bar (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -310)
+    move:SetPoint("TOPLEFT", 4, -336)
     move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", 4, -348)
+    note:SetPoint("TOPLEFT", 4, -374)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)
-    note:SetText("Width and height are set in layout mode. Blizzard's own experience and reputation bars are hidden by "
-        .. "the Action Bars module (Action Bars page).")
+    note:SetText("Width and height are set in layout mode. The Blizzard bars switch is the same one as on the Action Bars page.")
 end)

@@ -341,6 +341,7 @@ if CysChangelog then
                   "Upgrade tooltip: a stat change is green when it adds EP and red when it costs EP, so a slower weapon you weight negatively for speed shows green instead of red.",
               },
               fixed = {
+                  "New installs: Blizzard's experience and reputation bars are now hidden by default (the option existed but started off, so the game's bar showed next to Cys's XP bar). Only the action bars the game itself has switched on are shown at first, instead of every bar at once, and Action Bars 6 to 8 start off. Existing setups are not changed. The same switch is now also on the XP Bar page.",
                   "Totem action-bar macros now follow the totem you pick (the icon no longer stays on the old one), and the Drop all button shows your four picked totems instead of a blank square.",
               },
             },

@@ -46,6 +46,7 @@ local DEFAULTS = {
     showEmpty = true,      -- draw a dark slot behind every button, even empty ones
     goldBorders = true,    -- Cys gold edge on every slot (off = a quiet dark edge)
     blockEditMode = true,  -- Blizzard's HUD Edit Mode is switched off (it puts the old bars back); use /cui layout
+    hideStatusBars = true, -- hide Blizzard's experience / reputation bars (Cys's XP bar replaces them)
     hideBagButtons = true, -- hide Blizzard's backpack / bag slot buttons (Cys's Bags has its own bag bar)
     bars = {
         main   = BarCfg(12, 36), bl = BarCfg(12, 36), br = BarCfg(12, 36),
@@ -67,8 +68,18 @@ local function MergeDefaults(dst, src)
 end
 
 local function EnsureDB()
+    local firstRun = CysUIDB.actionbars == nil or CysUIDB.actionbars.bars == nil
     CysUIDB.actionbars = CysUIDB.actionbars or {}
     MergeDefaults(CysUIDB.actionbars, DEFAULTS)
+    if firstRun then
+        -- a fresh install starts like a fresh game: only the bars the game itself has switched on are shown
+        local bars = CysUIDB.actionbars.bars
+        local ok, bl, br, right, right2 = pcall(function() return GetActionBarToggles() end)
+        if not ok then bl, br, right, right2 = false, false, false, false end
+        bars.bl.enabled, bars.br.enabled = bl and true or false, br and true or false
+        bars.right.enabled, bars.right2.enabled = right and true or false, right2 and true or false
+        bars.bar6.enabled, bars.bar7.enabled, bars.bar8.enabled = false, false, false
+    end
     return CysUIDB.actionbars
 end
 
