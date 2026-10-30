@@ -1,7 +1,7 @@
 ## Interface: 11509, 16001
 ## Title: Cys's UI
 ## Notes: A light, minimal UI made of small Cys addons: settings window (/cui), module switches and vendor helpers.
-## Author: Randon
+## Author: Cyserin
 ## Version: 0.39.2
 ## SavedVariables: CysUIDB, CysMapDB, CysBagsDB, CysArmoryDB, CysSkillsDB, CysTotemsDB, CysRollTrackerDB
 ## OptionalDeps: Postal, ElvUI, Plater, Platynator, Bagnon, CysBags, CysArmory, CysSkills, CysTotems, CysRollTracker
