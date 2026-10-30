@@ -290,6 +290,7 @@ SlashCmdList["CYSUI"] = function(msg)
         if CUI.ToggleConfig then CUI:ToggleConfig() end
     else
         CUI:Print("Commands: /cui (settings)  /cui layout (move and resize)  /cui debug  /cui reload")
+        CUI:Print("More: /cfriends (friends)  /armory  /cysbags  /cysbank  /cysskills  /crt (rolls)  /cystotems  /cysraid  /cysmap  /way (waypoint)  /cuilevel (Spell Scout)  /cuiscan (trainer scan)  /cuiheal (heal log)")
     end
 end
 
@@ -304,7 +305,7 @@ if CysChangelog then
         entries = {
             { version = "0.41.0", date = "2026-10-30",
               added = {
-                  "Level-Up Spells, Spell Scout (new): when you level up or open your class trainer, a small box lists the spells worth buying now with the reason for each. It reads your spellbook, so spells you have are left out and anything you skipped stays on the list (marked 'from level N'). Optional picks are tagged. Guides so far, all Shaman: Earth Warden (the community tank build, from level 1), Enhancement, Elemental (a draft until there is an Elemental list) and Restoration (from level 10). At level 10, and again at 40, it asks which guide you are following, once per character; you can change it any time in the settings. The box also lists what to skip at your level and why (for example Lightning Bolt ranks that are pull-only), and the settings page has a which-spell-to-use cheat sheet. Settings: /cui -> Level-Up Spells; drag the box with the left mouse button to move it (or use /cui layout); /cuilevel shows it, /cuilevel 30 previews level 30.",
+                  "Level-Up Spells, Spell Scout (new): when you level up or open your class trainer, a small box lists the spells worth buying now with the reason for each. It reads your spellbook, so spells you have are left out and anything you skipped stays on the list (marked 'from level N'). Optional picks are tagged. Guides so far, all Shaman: Earth Warden (the community tank build, from level 1), Enhancement, Elemental (a draft: it uses the shared DPS and questing picks plus the caster spells until there is an Elemental list) and Restoration (from level 10). At level 10, and again when you get a second talent spec, it asks which guide you are following (once per character); you can change it any time in the settings. The box also lists what to skip at your level and why (for example Lightning Bolt ranks that are pull-only), and the settings page has a which-spell-to-use cheat sheet. Settings: /cui -> Level-Up Spells; drag the box with the left mouse button to move it (or use /cui layout); /cuilevel shows it, /cuilevel 30 previews level 30.",
                   "Trainer scan: type /cuiscan at your class trainer to save its spells, levels and costs, and to check the guide's levels against the real ones.",
                   "Class support list: the README, FEATURES.md and the new settings page show which classes and specs each module covers and what is still to add.",
               },

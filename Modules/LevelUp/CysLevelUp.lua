@@ -13,7 +13,7 @@ local CUI = CysUI
 local W = CUI.W
 local T = W.T
 
-local DEFAULTS = { onLevel = true, onTrainer = true, char = {}, asked = {} } -- char / asked: per character
+local DEFAULTS = { onLevel = true, onTrainer = true, char = {}, asked = {}, askedDual = {} } -- char / asked / askedDual: per character
 
 local function DB()
     CysUIDB = CysUIDB or {}
@@ -378,8 +378,8 @@ local function BuildChooser()
     line:SetPoint("TOPLEFT", 2, -22)
     line:SetPoint("TOPRIGHT", -2, -22)
     line:SetHeight(2)
-    local head = W.Text(chooser, 11, T.accent)
-    head:SetPoint("TOPLEFT", 10, -7)
+    local head = W.Text(chooser, 11, T.accent, "CENTER")
+    head:SetPoint("TOP", chooser, "TOP", 0, -7)
     head:SetText("CYS'S SPELL SCOUT")
     chooser.title = W.Text(chooser, 13, T.accent)
     chooser.title:SetPoint("TOPLEFT", 10, -32)
@@ -387,6 +387,10 @@ local function BuildChooser()
     chooser.text:SetPoint("TOPLEFT", 10, -52)
     chooser.text:SetWidth(320)
     chooser.text:SetJustifyV("TOP")
+    chooser.src = W.Text(chooser, 10, { 0.69, 0.69, 0.69 })
+    chooser.src:SetWidth(320)
+    chooser.src:SetJustifyV("TOP")
+    chooser.src:SetText("Picks come from Wowhead's Classic Era leveling recommendations and community guides.")
     chooser.btns = {}
     chooser:Hide()
     return chooser
@@ -400,24 +404,32 @@ local function Choose(key)
     Show(UnitLevel("player"), "level")
 end
 
--- asks once per milestone (10, then 40) per character; returns true when the question is up
-local function MaybeAsk(level)
+local function DualSpec()
+    local n
+    if GetNumTalentGroups then
+        local ok, v = pcall(GetNumTalentGroups)
+        n = ok and v
+    elseif C_SpecializationInfo and C_SpecializationInfo.GetNumSpecGroups then
+        local ok, v = pcall(C_SpecializationInfo.GetNumSpecGroups)
+        n = ok and v
+    end
+    return (n or 1) >= 2
+end
+
+-- kind: "level" (reached 10) or "dual" (a second talent spec exists)
+local function AskNow(kind)
     local list = ClassGuides()
-    if #list < 2 then return false end
-    local db = DB()
-    local key = CharKey()
-    local milestone = level >= 40 and 40 or (level >= 10 and 10 or 0)
-    if milestone == 0 or (db.asked[key] or 0) >= milestone then return false end
-    db.asked[key] = milestone
     BuildChooser()
-    if milestone == 10 then
+    if kind == "level" then
         chooser.title:SetText("Which are you leveling as?")
         chooser.text:SetText("Pick the guide Spell Scout follows for your spell recommendations. You can change it any time under /cui -> Level-Up Spells.")
     else
-        chooser.title:SetText("Level 40: still on the same guide?")
-        chooser.text:SetText("If your plan changed (a new spec, or questing as a different one), pick the guide to follow from here.")
+        chooser.title:SetText("Dual spec: which guide now?")
+        chooser.text:SetText("You have a second talent spec. Pick the guide to follow from here; you can change it any time under /cui -> Level-Up Spells.")
     end
-    local y = -92
+    chooser.src:ClearAllPoints()
+    chooser.src:SetPoint("TOPLEFT", chooser, "TOPLEFT", 10, -90)
+    local y = -118
     for i, g in ipairs(list) do
         local b = chooser.btns[i]
         if not b then
@@ -445,6 +457,23 @@ local function MaybeAsk(level)
     return true
 end
 
+-- asks once at level 10, and once more when the character gets a second talent spec; true when the question is up
+local function MaybeAsk(level)
+    if #ClassGuides() < 2 then return false end
+    local db = DB()
+    local key = CharKey()
+    if DualSpec() and not db.askedDual[key] then
+        db.askedDual[key] = true
+        db.asked[key] = math.max(db.asked[key] or 0, 10) -- no need for the level-10 question after this one
+        return AskNow("dual")
+    end
+    if (level or 0) >= 10 and (db.asked[key] or 0) < 10 then
+        db.asked[key] = 10
+        return AskNow("level")
+    end
+    return false
+end
+
 --------------------------------------------------------------------------------
 -- Events and commands
 --------------------------------------------------------------------------------
@@ -457,6 +486,10 @@ local function Enable()
     frame = CreateFrame("Frame")
     frame:RegisterEvent("PLAYER_LEVEL_UP")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    -- these only exist on clients with dual spec; an unknown event name would raise an error, so each is tried safely
+    for _, ev in ipairs({ "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE" }) do
+        pcall(frame.RegisterEvent, frame, ev)
+    end
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
     frame:RegisterEvent("TRAINER_SHOW")
     frame:RegisterEvent("TRAINER_CLOSED")
@@ -479,6 +512,9 @@ local function Enable()
             else
                 Show(pendingLevel, "level"); pendingLevel = nil
             end
+        elseif event == "ACTIVE_TALENT_GROUP_CHANGED" or event == "PLAYER_TALENT_UPDATE" then
+            -- buying dual spec (or swapping to the second spec for the first time) both mean a second spec exists
+            if db.onLevel and not InCombatLockdown() then MaybeAsk(UnitLevel("player")) end
         elseif event == "PLAYER_ENTERING_WORLD" then
             -- already past 10 (or 40) on a character that was never asked
             if db.onLevel and C_Timer and C_Timer.After then
@@ -615,7 +651,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     W.Notes(page, 4, y, width, "", {
         { "/cuilevel", "show the box now; /cuilevel 30 previews what you would buy at level 30" },
         { "/cuiscan", "at your class trainer: saves the trainer's spells and checks the guide's levels (helps fix the guides)" },
-        "Enhancement, Elemental and Restoration start at level 10; levels 1 to 8 are only in Earth Warden. At level 10 (and again at 40) the first time you play each character, Spell Scout asks which guide to follow.",
+        "Enhancement, Elemental and Restoration start at level 10; levels 1 to 8 are only in Earth Warden. At level 10, and again when you get a second talent spec, Spell Scout asks which guide to follow (once per character).",
         "Other classes and specs, and WoW Forever, are being added as guides become available.",
     })
 end)

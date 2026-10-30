@@ -167,17 +167,40 @@ end
 -- Enhancement and Elemental both level by questing and run dungeons, so they take the dungeon-DPS (D) and questing (Q) picks.
 table.insert(CUI.LevelGuides.SHAMAN, Build("enhancement", "Enhancement", nil, "Enhancement", { "D", "Q" }))
 
--- Elemental: only the shared DPS list exists so far, so this one is a draft. The weapon imbues are melee spells
--- and the table's skip notes assume an Enhancement pull, so all of those are left out until there is an Elemental list.
+-- Elemental: the shared table has no Elemental-specific column, and its main spells (Lightning Bolt, Chain Lightning,
+-- Flame Shock, Earth Shock, Lightning Shield) are marked "skip" or "tank" there. So this guide takes the shared
+-- DPS / questing picks (weapon imbues too: a leveling Elemental still melees when mana runs low) and adds the caster
+-- spells below. The rank levels come from the same table. Skip notes about those spells are dropped, since they
+-- assume a tank or Enhancement pull. It stays a draft until there is a real Elemental list.
 do
     local g = Build("elemental", "Elemental (draft)", nil, "Elemental", { "D", "Q" })
-    local keep = {}
-    for _, e in ipairs(g.spells) do
-        if e.spell ~= "Windfury Weapon" and e.spell ~= "Flametongue Weapon" then keep[#keep + 1] = e end
+    local have = {}
+    for _, e in ipairs(g.spells) do have[e.spell .. ":" .. (e.rank or 0)] = true end
+    local function Add(spell, ranks, note)
+        local list = {}
+        for rank in pairs(ranks) do list[#list + 1] = rank end
+        table.sort(list)
+        for i, rank in ipairs(list) do
+            if not have[spell .. ":" .. rank] then
+                g.spells[#g.spells + 1] = { level = ranks[rank], spell = spell, rank = rank, note = (i == 1) and note or nil }
+            end
+        end
     end
-    g.spells, g.skips, g.draft = keep, {}, true
+    Add("Lightning Bolt", { [2] = 8, [3] = 14, [4] = 20, [5] = 26, [6] = 32, [7] = 38, [8] = 44, [9] = 50, [10] = 56 }, "Your main damage spell: always take the new rank")
+    Add("Chain Lightning", { [1] = 32, [2] = 40, [3] = 48, [4] = 56 }, "Pack damage: always take the new rank")
+    Add("Earth Shock", { [1] = 4, [2] = 8, [3] = 14, [4] = 24, [5] = 36, [6] = 48, [7] = 60 }, "Interrupt and burst")
+    Add("Lightning Shield", { [1] = 8, [2] = 16, [3] = 24, [4] = 32, [5] = 40, [6] = 48, [7] = 56 })
+    Add("Flame Shock", { [4] = 40, [5] = 52, [6] = 60 })
+    local drop = { ["Lightning Bolt"] = true, ["Chain Lightning"] = true, ["Flame Shock"] = true, ["Searing Totem"] = true,
+                   ["Magma Totem"] = true, ["Fire Nova Totem"] = true }
+    local skips = {}
+    for _, sk in ipairs(g.skips) do
+        if not drop[sk.spell] then skips[#skips + 1] = sk end
+    end
+    g.skips, g.draft = skips, true
     table.insert(CUI.LevelGuides.SHAMAN, g)
 end
+
 table.insert(CUI.LevelGuides.SHAMAN, Build("heal", "Restoration", nil, "Restoration", { "H" }))
 
 -- quick reference shown on the settings page: which spell to use for what

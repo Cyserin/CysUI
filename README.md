@@ -39,6 +39,14 @@ Running ElvUI too? Open the **Conflicts** page in `/cui`. Don't run two versions
 | `/cui debug` | Prints client version and feature checks (include this in bug reports) |
 | `/cui reload` | Reload the UI |
 | `/cfriends` | Friends window |
+| `/armory` | Armory (gear sets) |
+| `/cysbags`, `/cysbank` | Bags and bank windows |
+| `/cysskills` | Weapon skill and profession tracker |
+| `/crt` | Roll tracker |
+| `/cystotems` | Totem loadouts (`load`, `save`, `list`), Shaman |
+| `/cysraid` | Raid frames: `test`, or `role <name> tank/healer/dps/clear` |
+| `/cysmap` | Reset the world map position, or `scale 0.8` to resize it |
+| `/cuiheal` | Heal log for testing the healing numbers (see Help test) |
 | `/way 45 62 Name` | Drop a waypoint arrow (or Ctrl + left-click the world map) |
 | `/cuilevel` | Show the level-up spell box now (`/cuilevel 30` previews level 30) |
 | `/cuiscan` | At your class trainer: save its spell list and check the guide's levels |
