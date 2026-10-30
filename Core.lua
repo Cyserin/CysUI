@@ -314,7 +314,7 @@ if CysChangelog then
                   "Waypoints (TomTom-style): Ctrl + left-click the world map, or type /way 45.2 62.1 Name, and an arrow shows the way with the distance and time left. Right-click the arrow to clear it. Settings: /cui -> Waypoints; move it with /cui layout.",
               },
               improved = {
-                  "Layout mode: a faint grid, a brighter center cross, and guide lines while you drag. A box lines up with the screen center or another box (green = centered with it, blue = edges lined up) and snaps there when you let go. Edges and centers also snap to the grid lines. Scroll the mouse wheel over a box to nudge it one pixel (Shift = sideways, Ctrl = 10 at a time). Grid lines can be turned off in the layout panel.",
+                  "Layout mode: a faint grid, a brighter center cross, and guide lines while you drag. A box lines up with the screen center or another box (green = centered with it, blue = edges lined up) and snaps there when you let go. Edges and centers also snap to the grid lines. Scroll the mouse wheel over a box to nudge it one pixel (Shift = sideways, Ctrl = 10 at a time). Grid lines can be turned off in the layout panel. A Show: button at the top of the layout panel limits the boxes to one group (action bars, solo, party and loot, raid, or windows and info), like ElvUI.",
                   "Upgrade tooltip: a stat change is green when it adds EP and red when it costs EP, so a slower weapon you weight negatively for speed shows green instead of red.",
               },
               fixed = {

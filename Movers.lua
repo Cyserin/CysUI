@@ -77,6 +77,56 @@ function CUI:ApplyLayout(key)
 end
 
 --------------------------------------------------------------------------------
+-- Layout-mode filter (like ElvUI's): show only one kind of box at a time
+--------------------------------------------------------------------------------
+local FILTERS = {
+    { id = "all",    name = "Everything" },
+    { id = "bars",   name = "Action bars" },
+    { id = "solo",   name = "Solo (you and your target)" },
+    { id = "party",  name = "Party and loot" },
+    { id = "raid",   name = "Raid" },
+    { id = "ui",     name = "Windows and info" },
+}
+
+local function CategoryOf(m)
+    local key, label = (m.key or ""):lower(), (m.label or ""):lower()
+    if key:find("^bar_") or label:find("action bar") or label:find("stance") or label:find("micro menu") then return "bars" end
+    if key:find("^raid") or label:find("raid") then return "raid" end
+    if key == "party" or key == "rolls" or key:find("^grouploot") or key == "lootwindow" or label:find("party") then return "party" end
+    if key == "player" or key == "target" or key == "targettarget" or key == "pet" or key == "focus"
+        or key:find("^castbar") or label:find("^player") or label:find("^target") or label:find("^pet")
+        or label:find("buff") or key == "killtracker" or key == "totems" or key == "warriorshout"
+        or key == "skills" or key == "waypoint" then return "solo" end
+    return "ui"
+end
+
+local function FilterName(id)
+    for _, f in ipairs(FILTERS) do if f.id == id then return f.name end end
+    return FILTERS[1].name
+end
+
+local function Filter() return CysUIDB.layoutFilter or "all" end
+
+function CUI:ApplyLayoutFilter()
+    local f = Filter()
+    local firstVisible
+    for _, key in ipairs(self.moverOrder) do
+        local m = self.movers[key]
+        local show = self.layoutMode and not m.disabled and (f == "all" or CategoryOf(m) == f)
+        m.mover:SetShown(show and true or false)
+        if show and not firstVisible then firstVisible = key end
+    end
+    if firstVisible and (not selected or not self.movers[selected] or not self.movers[selected].mover:IsShown()) then
+        selected = firstVisible
+    end
+    if panel then
+        panel.filter:SetLabel("Show: " .. FilterName(f) .. "   |cFFFFD100v|r")
+        panel:RefreshAll()
+    end
+    if guides then guides:ShowAlign(nil) end
+end
+
+--------------------------------------------------------------------------------
 -- Selection + editor panel
 --------------------------------------------------------------------------------
 local function SelectMover(key)
@@ -287,6 +337,37 @@ local function BuildPanel()
     help:SetWidth(332)
     help:SetJustifyV("TOP")
     help:SetText("Drag a gold box to move it. Click one to fine-tune it below, or scroll over it to nudge it (Shift = sideways, Ctrl = 10 at a time).")
+    f.filter = W.Button(f, 200, 20, "")
+    f.filter:SetPoint("TOPRIGHT", -14, -10)
+
+    -- a small drop-down list of the groups
+    local list = CreateFrame("Frame", nil, f)
+    list:SetFrameStrata("FULLSCREEN_DIALOG")
+    list:SetFrameLevel(f:GetFrameLevel() + 20)
+    list:SetSize(200, #FILTERS * 22 + 6)
+    list:SetPoint("TOPRIGHT", f.filter, "BOTTOMRIGHT", 0, -2)
+    W.Texture(list, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
+    W.Border(list, 1, T.border, "BORDER")
+    list:Hide()
+    list.rows = {}
+    for i, fl in ipairs(FILTERS) do
+        local row = W.Button(list, 192, 20, fl.name)
+        row:SetPoint("TOPLEFT", 4, -3 - (i - 1) * 22)
+        row:SetScript("OnClick", function()
+            CysUIDB.layoutFilter = fl.id
+            list:Hide()
+            CUI:ApplyLayoutFilter()
+        end)
+        list.rows[fl.id] = row
+    end
+    list:SetScript("OnShow", function(self)
+        for id, row in pairs(self.rows) do
+            row:SetLabel((id == Filter() and "|cFFFFD100> |r" or "   ") .. FilterName(id))
+        end
+    end)
+    f.filterList = list
+    f.filter:SetScript("OnClick", function() list:SetShown(not list:IsShown()) end)
+    f:HookScript("OnHide", function() list:Hide() end)
     f.name = W.Text(f, 12, T.text)
     f.name:SetPoint("TOPLEFT", 14, -80)
 
@@ -421,23 +502,26 @@ local function BuildGuides()
             local _, ph = GetPhysicalScreenSize()
             if ph and ph > 0 then px = UIParent:GetHeight() / ph end
         end
+        local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
         local function Line(vertical, off)
-            off = floor(off / px + 0.5) * px
             n = n + 1
             local t = self.grid[n]
             if not t then
-                t = W.Texture(self, "BACKGROUND", { 1, 0.9, 0.5, 0.5 })
+                t = W.Texture(self, "BACKGROUND", { 1, 1, 1, 0.26 })
                 self.grid[n] = t
             end
             t:ClearAllPoints()
+            -- two screen pixels thick, placed on whole pixels counted from the screen edge, so no line is ever dropped
             if vertical then
-                t:SetWidth(px)
-                t:SetPoint("TOP", UIParent, "TOP", off, 0)
-                t:SetPoint("BOTTOM", UIParent, "BOTTOM", off, 0)
+                local x = floor((sw / 2 + off) / px + 0.5) * px
+                t:SetWidth(px * 2)
+                t:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, 0)
+                t:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, 0)
             else
-                t:SetHeight(px)
-                t:SetPoint("LEFT", UIParent, "LEFT", 0, off)
-                t:SetPoint("RIGHT", UIParent, "RIGHT", 0, off)
+                local y = floor((sh / 2 + off) / px + 0.5) * px
+                t:SetHeight(px * 2)
+                t:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y)
+                t:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", 0, y)
             end
             t:Show()
         end
@@ -513,9 +597,10 @@ function CUI:SetLayoutMode(on)
     self.layoutMode = on
     panel = panel or BuildPanel()
     guides = guides or BuildGuides()
-        for _, key in ipairs(self.moverOrder) do self.movers[key].mover:SetShown(on and not self.movers[key].disabled) end
+        for _, key in ipairs(self.moverOrder) do self.movers[key].mover:SetShown(false) end
     guides:SetShown(on)
     panel:SetShown(on)
+    self:ApplyLayoutFilter()
     if on then
         if CysUIConfigFrame then CysUIConfigFrame:Hide() end
         SelectMover(selected or self.moverOrder[1])
