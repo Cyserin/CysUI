@@ -160,8 +160,9 @@ function CUI:HasPendingReload()
 end
 
 -- Settings pages for the /cui window: build(parent) runs the first time the page is shown.
-function CUI:RegisterPage(title, build, onShow)
-    self.pages[#self.pages + 1] = { title = title, build = build, onShow = onShow }
+-- class (optional, a class token like "SHAMAN"): the page is listed under Class > that class.
+function CUI:RegisterPage(title, build, onShow, class)
+    self.pages[#self.pages + 1] = { title = title, build = build, onShow = onShow, class = class }
 end
 
 --------------------------------------------------------------------------------
@@ -290,7 +291,7 @@ SlashCmdList["CYSUI"] = function(msg)
         if CUI.ToggleConfig then CUI:ToggleConfig() end
     else
         CUI:Print("Commands: /cui (settings)  /cui layout (move and resize)  /cui debug  /cui reload")
-        CUI:Print("More: /cfriends (friends)  /armory  /cysbags  /cysbank  /cysskills  /crt (rolls)  /cystotems  /cysraid  /cysmap  /way (waypoint)  /cuilevel (Spell Scout)  /cuiscan (trainer scan)  /cuiheal (heal log)")
+        CUI:Print("More: /cfriends (friends)  /armory  /cysbags  /cysbank  /cysskills  /crt (rolls)  /cystotems  /cysraid  /cysmap  /way (waypoint)  /cuilevel (Spell Scout)  /cuiscan (trainer scan)  /cuitremor (Tremor alert)  /cuiheal (heal log)")
     end
 end
 
@@ -305,11 +306,17 @@ if CysChangelog then
         entries = {
             { version = "0.41.0", date = "2026-10-30",
               added = {
-                  "Level-Up Spells, Spell Scout (new): when you level up or open your class trainer, a small box lists the spells worth buying now with the reason for each. It reads your spellbook, so spells you have are left out and anything you skipped stays on the list (marked 'from level N'). Optional picks are tagged. Guides so far, all Shaman: Earth Warden (the community tank build, from level 1), Enhancement, Elemental (a draft: it uses the shared DPS and questing picks plus the caster spells until there is an Elemental list) and Restoration (from level 10). At level 10, and again when you get a second talent spec, it asks which guide you are following (once per character); you can change it any time in the settings. The box also lists what to skip at your level and why (for example Lightning Bolt ranks that are pull-only), and the settings page has a which-spell-to-use cheat sheet. Settings: /cui -> Level-Up Spells; drag the box with the left mouse button to move it (or use /cui layout); /cuilevel shows it, /cuilevel 30 previews level 30.",
+                  "Level-Up Spells, Spell Scout (new): when you level up or open your class trainer, a small box lists the spells worth buying now with the reason for each. It reads your spellbook, so spells you have are left out and anything you skipped stays on the list (marked 'from level N'). Optional picks are tagged. Guides so far, all Shaman: Earth Warden (the community tank build, from level 1), and Enhancement, Elemental and Restoration (from level 1, built from Wowhead's Classic Era leveling guides). At level 10, and again when you get a second talent spec, it asks which guide you are following (once per character); you can change it any time in the settings. The box also lists what to skip at your level and why (for example Lightning Bolt ranks that are pull-only), and the settings page has a which-spell-to-use cheat sheet. Settings: /cui -> Level-Up Spells; drag the box with the left mouse button to move it (or use /cui layout); /cuilevel shows it, /cuilevel 30 previews level 30, and /cuilevel 24 restoration previews another guide without changing yours (/cuilevel list names them).",
                   "Trainer scan: type /cuiscan at your class trainer to save its spells, levels and costs, and to check the guide's levels against the real ones.",
+                  "Tremor Alert (new, Shaman): a Tremor Totem icon with 'Mob - ability' lines when a mob that fears, charms or sleeps is in the pack (nameplates, your target, mouseover, party targets, or mobs fighting your group). It ships with a dungeon list (Wailing Caverns to Scholomance, bosses plus a few trash packs; entries marked ? still need checking in game) and learns the rest: when a hostile NPC puts a fear, charm or sleep debuff on you or a party member, the mob and spell are saved and shown next time. NPCs only, never players or pets, and it stays off in battlegrounds and arenas. One line per mob (the same mob twice is still one line, marked x2), up to three mobs. Left-click and drag to move it (or /cui layout); /cuitremor shows a test alert with a random boss or a small pack, /cuitremor list shows what it learned, /cuitremor clear forgets them.",
+                  "Battle Shout Reminder (new, every class but Warrior): shows 'BATTLE SHOUT MISSING - ask your Warrior' when a Warrior is in your group and you do not have the buff. On by default for Rogues, Hunters, Paladins, Shamans and Druids (Enhancement and Earth Warden gain the most); casters and healers can switch it on. Options on the Battle Shout page under Class: hide while resting, only in combat; move it with /cui layout.",
                   "Class support list: the README, FEATURES.md and the new settings page show which classes and specs each module covers and what is still to add.",
               },
               improved = {
+                  "Settings: every button that cycled through choices when clicked is now a drop-down (Interrupt channel, Kill Tracker format, unit and raid frame health text, role icons, XP bar numbers and colors, waypoint arrival distance, Spell Scout guide).",
+                  "Spell Scout settings: the which-spell-to-use cheat sheet now sits at the top of the page and follows the guide you picked, and the page lists every slash command.",
+                  "Settings window: the sidebar headings fold and unfold (click one; it is remembered), and the fold marks are [+] and [-], and there is a new Class section: General (Spell Scout) first, then every class in its class color (yours first, Shaman in blue) with that class's pages under it (Shaman: Totem Bar and Tremor Alert; Warrior: Battle Shout), listed A to Z with a bullet in the class color. The Battle Shout page shows its options on every class. Classes with nothing yet say (soon), so it works as an overview of what each class has. Pages can be tagged with a class when they are registered.",
+                  "Spell Scout: the which-spell-to-use cheat sheets for all four Shaman guides were rewritten (rotations, imbues, totems, stats, level notes).",
                   "README: a Class support table and a 'Help test: healing numbers' note (/cuiheal works at full health).",
               },
             },

@@ -109,19 +109,10 @@ CUI:RegisterPage("Interrupts", function(page)
     local chLabel = W.Text(page, 12, T.accent)
     chLabel:SetPoint("TOPLEFT", 4, -78)
     chLabel:SetText("Where to say it")
-    local chBtn = W.Button(page, 230, 22, "")
+    local chOpts = {}
+    for _, c in ipairs(CHANNELS) do chOpts[#chOpts + 1] = { c, CHANNEL_LABEL[c] } end
+    local chBtn = W.Dropdown(page, 260, chOpts, function() return db.channel end, function(v) db.channel = v end)
     chBtn:SetPoint("TOPLEFT", 4, -98)
-    local function ShowChannel() chBtn:SetLabel(CHANNEL_LABEL[db.channel] or db.channel) end
-    ShowChannel()
-    chBtn:SetScript("OnClick", function()
-        local idx = 1
-        for i, c in ipairs(CHANNELS) do if c == db.channel then idx = i end end
-        db.channel = CHANNELS[idx % #CHANNELS + 1]
-        ShowChannel()
-    end)
-    local chNote = W.Text(page, 10, T.desc)
-    chNote:SetPoint("LEFT", chBtn, "RIGHT", 10, 0)
-    chNote:SetText("click to change")
 
     local msgLabel = W.Text(page, 12, T.accent)
     msgLabel:SetPoint("TOPLEFT", 4, -138)

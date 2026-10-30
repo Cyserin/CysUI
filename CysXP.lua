@@ -251,15 +251,11 @@ CUI:RegisterPage("XP Bar", function(page)
         function(on) db.show = on; Refresh() end)
     show:SetPoint("TOPLEFT", 4, -34)
 
-    local mode = W.Button(page, 260, 22, "")
-    local function SetModeLabel() mode:SetLabel("Numbers on the bar: " .. TEXT_MODES[db.textMode]) end
-    SetModeLabel()
+    local modeOpts = {}
+    for i, name in ipairs(TEXT_MODES) do modeOpts[i] = { i, name } end
+    local mode = W.Dropdown(page, 260, modeOpts, function() return db.textMode end,
+        function(v) db.textMode = v; Refresh() end, "Numbers on the bar: ")
     mode:SetPoint("TOPLEFT", 4, -66)
-    mode:SetScript("OnClick", function()
-        db.textMode = db.textMode % #TEXT_MODES + 1
-        SetModeLabel()
-        Refresh()
-    end)
 
     local cap = W.Checkbox(page, "Hide it at max level", function() return db.hideAtMax end,
         function(on) db.hideAtMax = on; Refresh() end)
@@ -273,18 +269,13 @@ CUI:RegisterPage("XP Bar", function(page)
 
     W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -186)
     local function ColorButton(y, label, key)
-        local b = W.Button(page, 260, 22, "")
-        local function SetLabel()
-            local r, g, b2 = Color(key)
-            b:SetLabel(format("%s: |cFF%02X%02X%02X%s|r", label, floor(r * 255 + 0.5), floor(g * 255 + 0.5), floor(b2 * 255 + 0.5), PALETTE[db[key]][1]))
+        local opts = {}
+        for i, p in ipairs(PALETTE) do
+            opts[i] = { i, format("|cFF%02X%02X%02X%s|r", floor(p[2] * 255 + 0.5), floor(p[3] * 255 + 0.5), floor(p[4] * 255 + 0.5), p[1]) }
         end
-        SetLabel()
+        local b = W.Dropdown(page, 260, opts, function() return db[key] end,
+            function(v) db[key] = v; Refresh() end, label .. ": ")
         b:SetPoint("TOPLEFT", 4, y)
-        b:SetScript("OnClick", function()
-            db[key] = db[key] % #PALETTE + 1
-            SetLabel()
-            Refresh()
-        end)
     end
     ColorButton(-216, "Your XP", "xpColor")
     ColorButton(-244, "Rested XP", "restedColor")

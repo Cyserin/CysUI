@@ -637,18 +637,13 @@ CUI:RegisterPage("Unit Frames", function(page)
         function(on) db.classColors = on; for _, f in pairs(UF.frames) do if UnitExists(f.unit) then UF:Update(f) end end end)
     colors:SetPoint("TOPLEFT", 4, -34)
 
-    local modes = { "both", "value", "percent" }
-    local textBtn = W.Button(page, 190, 22, "")
+    local textBtn = W.Dropdown(page, 230, { { "both", "value and percent" }, { "value", "value" }, { "percent", "percent" } },
+        function() return db.healthText end,
+        function(v)
+            db.healthText = v
+            for _, f in pairs(UF.frames) do if UnitExists(f.unit) then UF:Update(f) end end
+        end, "Health text: ")
     textBtn:SetPoint("TOPLEFT", 4, -66)
-    local function Label() textBtn:SetLabel("Health text: " .. db.healthText) end
-    Label()
-    textBtn:SetScript("OnClick", function()
-        for i, m in ipairs(modes) do
-            if m == db.healthText then db.healthText = modes[i % #modes + 1]; break end
-        end
-        Label()
-        for _, f in pairs(UF.frames) do if UnitExists(f.unit) then UF:Update(f) end end
-    end)
 
     W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -108)
     local y = -138

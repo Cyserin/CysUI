@@ -48,8 +48,9 @@ Running ElvUI too? Open the **Conflicts** page in `/cui`. Don't run two versions
 | `/cysmap` | Reset the world map position, or `scale 0.8` to resize it |
 | `/cuiheal` | Heal log for testing the healing numbers (see Help test) |
 | `/way 45 62 Name` | Drop a waypoint arrow (or Ctrl + left-click the world map) |
-| `/cuilevel` | Show the level-up spell box now (`/cuilevel 30` previews level 30) |
+| `/cuilevel` | Show the level-up spell box now. `/cuilevel 30` previews level 30, `/cuilevel 24 restoration` previews another guide, `/cuilevel list` names them |
 | `/cuiscan` | At your class trainer: save its spell list and check the guide's levels |
+| `/cuitremor` | Shaman: test the Tremor alert (`list` shows learned mobs, `clear` forgets them) |
 
 ## Screenshots
 
@@ -109,11 +110,11 @@ Modules that depend on your class or spec. Anything not listed is on the list to
 
 | Module | Class / spec | Client | State |
 | --- | --- | --- | --- |
-| Level-Up Spells | Shaman: Earth Warden (tank), Enhancement, Restoration | Era | in alpha, new in 0.41.0 |
-| Level-Up Spells | Shaman: Elemental | Era | draft (uses the shared DPS list) |
+| Level-Up Spells | Shaman: Earth Warden (tank), Enhancement, Elemental, Restoration | Era | in alpha, new in 0.41.0 (Enhancement, Elemental, Restoration follow Wowhead's leveling guides) |
 | Level-Up Spells | every other class | Era | to add |
 | Level-Up Spells | every class | WoW Forever | work in progress (no leveling guides out yet) |
 | Totem bar | Shaman | Era | in alpha |
+| Tremor Alert | Shaman (dungeon list Wailing Caverns to Scholomance, learns new NPCs) | Era | in alpha, new in 0.41.0 |
 | Battle Shout alert | Warrior | Era | in alpha |
 | Raid debuffs, interrupt announcer, waypoints, upgrade scores | every class | Era | in alpha |
 

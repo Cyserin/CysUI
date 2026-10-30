@@ -23,7 +23,19 @@ local GROUPS = {
     { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters" } },
     { "Loot & Items",    { "Vendor", "Loot", "Roll Tracker", "Upgrade" } },
     { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs" } },
-    { "Class",           { "Warrior" } },
+}
+
+-- Class pages live under CLASS: a General page (works for every class), then a heading for your own class
+-- (in its class color) with that class's pages under it. Only your own class is listed.
+local CLASS_GENERAL = { "Level-Up Spells" }
+local LABELS = { ["Level-Up Spells"] = "General" } -- sidebar text when it differs from the page title
+-- Classic still uses the old pink for Shamans; the game's newer clients use blue, so we do too.
+local CLASSES = {
+    { "DRUID", "Druid", 1.00, 0.49, 0.04 },     { "HUNTER", "Hunter", 0.67, 0.83, 0.45 },
+    { "MAGE", "Mage", 0.41, 0.80, 0.94 },       { "PALADIN", "Paladin", 0.96, 0.55, 0.73 },
+    { "PRIEST", "Priest", 1.00, 1.00, 1.00 },   { "ROGUE", "Rogue", 1.00, 0.96, 0.41 },
+    { "SHAMAN", "Shaman", 0.00, 0.44, 0.87 },   { "WARLOCK", "Warlock", 0.58, 0.51, 0.79 },
+    { "WARRIOR", "Warrior", 0.78, 0.61, 0.43 },
 }
 
 local window
@@ -264,7 +276,7 @@ local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "grouploot", "rolls", "upgrade" } },
-    { "Character & Class", { "armory", "flyout", "skills", "totems", "warrior" } },
+    { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "warrior", "shoutremind" } },
 }
 
 CUI:RegisterPage("Modules", function(page)
@@ -375,7 +387,7 @@ local function SelectPage(index)
         local selected = (i == index)
         b.accent:SetShown(selected)
         if selected then b.bg:Show() else b.bg:Hide() end
-        local c = selected and T.accent or T.text
+        local c = selected and T.accent or (b.baseColor or T.text)
         b.label:SetTextColor(c[1], c[2], c[3])
     end
     local def = CUI.pages[index]
@@ -468,47 +480,138 @@ local function CreateWindow()
 
     local byTitle, placed = {}, {}
     for i, page in ipairs(CUI.pages) do byTitle[page.title] = i end
-    local sections = {}
-    for _, g in ipairs(GROUPS) do
+    local function Collect(titles)
         local list = {}
-        for _, title in ipairs(g[2]) do
+        for _, title in ipairs(titles) do
             if byTitle[title] then list[#list + 1] = byTitle[title]; placed[byTitle[title]] = true end
         end
-        if #list > 0 then sections[#sections + 1] = { name = g[1], pages = list } end
+        return list
+    end
+    local sections = {}
+    for _, g in ipairs(GROUPS) do
+        local list = Collect(g[2])
+        if #list > 0 then sections[#sections + 1] = { name = g[1], key = g[1], level = 1, pages = list } end
+    end
+    -- class section: General (works for every class), then every class in its class color (yours first)
+    -- with the pages tagged for it. Classes with nothing yet say so, so the section doubles as an overview.
+    local _, myClass = UnitClass("player")
+    local general = Collect(CLASS_GENERAL)
+    local byClass = {}
+    for i, page in ipairs(CUI.pages) do
+        if page.class then
+            byClass[page.class] = byClass[page.class] or {}
+            table.insert(byClass[page.class], i)
+            placed[i] = true
+        end
+    end
+    sections[#sections + 1] = { name = "Class", key = "Class", level = 1, pages = general }
+    local ordered = {}
+    for _, c in ipairs(CLASSES) do if c[1] == myClass then ordered[#ordered + 1] = c end end
+    for _, c in ipairs(CLASSES) do if c[1] ~= myClass then ordered[#ordered + 1] = c end end
+    for _, c in ipairs(ordered) do
+        local list = byClass[c[1]] or {}
+        table.sort(list, function(a, b) return CUI.pages[a].title < CUI.pages[b].title end)
+        sections[#sections + 1] = { name = c[2], key = "Class/" .. c[2], level = 2, pages = list,
+            color = { r = c[3], g = c[4], b = c[5] }, empty = #list == 0 }
     end
     local other = {}
     for i in ipairs(CUI.pages) do if not placed[i] then other[#other + 1] = i end end
-    if #other > 0 then sections[#sections + 1] = { name = "Other", pages = other } end
+    if #other > 0 then sections[#sections + 1] = { name = "Other", key = "Other", level = 1, pages = other } end
 
-    local y = -8
+    -- headings are buttons: click one to fold or unfold its pages (remembered in the saved settings)
+    local function Folded()
+        CysUIDB.sideFolded = CysUIDB.sideFolded or {}
+        return CysUIDB.sideFolded
+    end
+    local entries = {}
+    local Layout
     for _, section in ipairs(sections) do
         if section.name then
-            y = y - 8
-            local h = W.Text(side, 11, T.accent)
-            h:SetPoint("TOPLEFT", 14, y - 4)
-            h:SetText(string.upper(section.name))
-            y = y - 20
+            local h = CreateFrame("Button", nil, side)
+            h:SetHeight(22)
+            h.level = section.level
+            local c = section.color and { section.color.r, section.color.g, section.color.b } or (section.level == 1 and T.accent or T.text)
+            h.label = W.Text(h, 11, c)
+            h.label:SetPoint("LEFT", section.level == 1 and 14 or 24, 0)
+            h.label:SetText(section.level == 1 and string.upper(section.name) or (section.name .. (section.empty and "  (soon)" or "")))
+            h.sign = W.Text(h, 13, T.accent)
+            h.sign:SetPoint("RIGHT", -10, 0)
+            h.empty = section.empty
+            h:SetScript("OnClick", function()
+                if section.empty then return end
+                local fold = Folded()
+                fold[section.key] = not fold[section.key] or nil
+                Layout()
+            end)
+            entries[#entries + 1] = { head = h, key = section.key, level = section.level }
         end
         for _, i in ipairs(section.pages) do
             local b = CreateFrame("Button", nil, side)
             b:SetHeight(26)
-            b:SetPoint("TOPLEFT", 0, y)
-            b:SetPoint("TOPRIGHT", 0, y)
             b.bg = W.Texture(b, "BACKGROUND", T.selected)
             b.bg:SetAllPoints()
             b.bg:Hide()
             b.accent = W.Texture(b, "ARTWORK", T.accent)
             b.accent:SetPoint("TOPLEFT"); b.accent:SetPoint("BOTTOMLEFT"); b.accent:SetWidth(2)
             b.accent:Hide()
-            b.label = W.Text(b, 12, T.text)
-            b.label:SetPoint("LEFT", 14, 0)
-            b.label:SetText(CUI.pages[i].title)
+            b.baseColor = T.text
+            if section.level == 2 and section.color then
+                -- a page under a class: indented, with a bullet in the class color and softer text
+                b.baseColor = { 0.72, 0.86, 0.80 }
+                b.bullet = W.Text(b, 12, { section.color.r, section.color.g, section.color.b })
+                b.bullet:SetPoint("LEFT", 24, 0)
+                b.bullet:SetText("\226\128\162")
+            end
+            b.label = W.Text(b, 12, b.baseColor)
+            b.label:SetPoint("LEFT", section.level == 2 and 36 or 14, 0)
+            b.label:SetText(LABELS[CUI.pages[i].title] or CUI.pages[i].title)
             b:SetScript("OnClick", function() SelectPage(i) end)
             pageButtons[i] = b
-            y = y - 27
+            entries[#entries + 1] = { page = b, level = section.level, hasHead = section.name ~= nil }
         end
     end
-    side:SetHeight(max(-y + 8, 100))
+    function Layout()
+        local fold = Folded()
+        local y = -8
+        local topFolded, subFolded = false, false
+        for _, e in ipairs(entries) do
+            if e.head then
+                local h = e.head
+                if e.level == 1 then
+                    topFolded, subFolded = fold[e.key] and true or false, false
+                    y = y - 8
+                    h:ClearAllPoints()
+                    h:SetPoint("TOPLEFT", 0, y); h:SetPoint("TOPRIGHT", 0, y)
+                    h:Show()
+                    y = y - 24
+                else
+                    subFolded = fold[e.key] and true or false
+                    if topFolded then
+                        h:Hide()
+                    else
+                        h:ClearAllPoints()
+                        h:SetPoint("TOPLEFT", 0, y); h:SetPoint("TOPRIGHT", 0, y)
+                        h:Show()
+                        y = y - 24
+                    end
+                end
+                h.sign:SetText(h.empty and "" or (fold[e.key] and "[+]" or "[-]"))
+            else
+                local hide = (e.level == 1 and e.hasHead and topFolded) or (e.level == 2 and (topFolded or subFolded))
+                local b = e.page
+                if hide then
+                    b:Hide()
+                else
+                    b:ClearAllPoints()
+                    b:SetPoint("TOPLEFT", 0, y); b:SetPoint("TOPRIGHT", 0, y)
+                    b:Show()
+                    y = y - 27
+                end
+            end
+        end
+        side:SetHeight(max(-y + 8, 100))
+    end
+    Layout()
 
     -- content
     -- pages scroll (mouse wheel) when they're taller than the window, so adding modules never overflows it

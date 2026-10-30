@@ -127,15 +127,11 @@ CUI:RegisterPage("Kill Tracker", function(page)
         function(on) db.show = on; Refresh() end)
     show:SetPoint("TOPLEFT", 4, -34)
 
-    local fmt = W.Button(page, 300, 22, "")
-    local function SetFmtLabel() fmt:SetLabel("Shows: " .. (FORMATS[db.format] or FORMATS[1]).name) end
-    SetFmtLabel()
+    local fmtOpts = {}
+    for i, f in ipairs(FORMATS) do fmtOpts[i] = { i, f.name } end
+    local fmt = W.Dropdown(page, 300, fmtOpts, function() return db.format end,
+        function(v) db.format = v; Refresh() end, "Shows: ")
     fmt:SetPoint("TOPLEFT", 4, -66)
-    fmt:SetScript("OnClick", function()
-        db.format = db.format % #FORMATS + 1
-        SetFmtLabel()
-        Refresh()
-    end)
 
     local lvl = W.Checkbox(page, "Start counting again when I level up", function() return db.resetOnLevel end,
         function(on) db.resetOnLevel = on end)

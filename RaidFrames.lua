@@ -827,32 +827,14 @@ CUI:RegisterPage("Raid Frames", function(page)
         y = y - 26
     end
 
-    local texts = { "deficit", "percent", "none" }
-    local textBtn = W.Button(page, 230, 22, "")
+    local textBtn = W.Dropdown(page, 230, { { "deficit", "missing health" }, { "percent", "percent" }, { "none", "none" } },
+        function() return db.healthText end,
+        function(v) db.healthText = v; All() end, "Health text: ")
     textBtn:SetPoint("TOPLEFT", 4, y - 4)
-    local function Label() textBtn:SetLabel("Health text: " .. db.healthText) end
-    Label()
-    textBtn:SetScript("OnClick", function()
-        for i, m in ipairs(texts) do
-            if m == db.healthText then db.healthText = texts[i % #texts + 1]; break end
-        end
-        Label()
-        All()
-    end)
-    local roleModes = { "all", "tankheal", "off" }
-    local roleNames = { all = "Role icons: all", tankheal = "Role icons: tank and healer only", off = "Role icons: off" }
-    local roleBtn = W.Button(page, 230, 22, "")
+    local roleBtn = W.Dropdown(page, 230, { { "all", "all" }, { "tankheal", "tank and healer only" }, { "off", "off" } },
+        function() return db.roleIcons or "all" end,
+        function(v) db.roleIcons = v; All(); EachActive(UpdateRole) end, "Role icons: ")
     roleBtn:SetPoint("TOPLEFT", 242, y - 4)
-    local function RoleLabel() roleBtn:SetLabel(roleNames[db.roleIcons] or roleNames.all) end
-    RoleLabel()
-    roleBtn:SetScript("OnClick", function()
-        for i, m in ipairs(roleModes) do
-            if m == db.roleIcons then db.roleIcons = roleModes[i % #roleModes + 1]; break end
-        end
-        RoleLabel()
-        All()
-        EachActive(UpdateRole)
-    end)
     y = y - 34
 
     local wstep = W.Stepper(page, "Width adjust", function() return db.wAdj end,

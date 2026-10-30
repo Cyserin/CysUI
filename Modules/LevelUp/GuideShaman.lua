@@ -164,55 +164,162 @@ local function Build(key, name, role, spec, tags)
     return g
 end
 
--- Enhancement and Elemental both level by questing and run dungeons, so they take the dungeon-DPS (D) and questing (Q) picks.
-table.insert(CUI.LevelGuides.SHAMAN, Build("enhancement", "Enhancement", nil, "Enhancement", { "D", "Q" }))
+--------------------------------------------------------------------------------
+-- Enhancement, Elemental and Restoration: which spells to buy comes from Wowhead's Classic Era leveling guides for each
+-- spec (patch 1.15.8): always keep Rockbiter, Lightning Shield and the damage spells current, take the group totems when
+-- you group, the cheap utility spells as early as you can, and skip what the guides say to skip. The rank levels are
+-- the ones the trainer scan (/cuiscan) confirmed, not the level lists on the web pages (those disagree with each other).
+--------------------------------------------------------------------------------
+local RANKS = {
+    ["Rockbiter Weapon"]  = { 1, 8, 16, 24, 34, 44, 54 },
+    ["Lightning Shield"]  = { 8, 16, 24, 32, 40, 48, 56 },
+    ["Earth Shock"]       = { 4, 8, 14, 24, 36, 48, 60 },
+    ["Lightning Bolt"]    = { 1, 8, 14, 20, 26, 32, 38, 44, 50, 56 },
+    ["Chain Lightning"]   = { 32, 40, 48, 56 },
+    ["Flame Shock"]       = { 10, 18, 28, 40, 52, 60 },
+    ["Strength of Earth Totem"] = { 10, 24, 38, 52, 60 },
+    ["Windfury Totem"]    = { 32, 42, 52 },
+    ["Healing Wave"]      = { 1, 6, 12, 18, 24, 32, 40, 48, 56, 60 },
+    ["Lesser Healing Wave"] = { 20, 28, 36, 44, 52, 60 },
+    ["Chain Heal"]        = { 40, 46, 54 },
+    ["Healing Stream Totem"] = { 20, 30, 40, 50, 60 },
+    ["Mana Spring Totem"] = { 26, 36, 46, 56 },
+    ["Ancestral Spirit"]  = { 12, 24, 36, 48, 60 },
+}
 
--- Elemental: the shared table has no Elemental-specific column, and its main spells (Lightning Bolt, Chain Lightning,
--- Flame Shock, Earth Shock, Lightning Shield) are marked "skip" or "tank" there. So this guide takes the shared
--- DPS / questing picks (weapon imbues too: a leveling Elemental still melees when mana runs low) and adds the caster
--- spells below. The rank levels come from the same table. Skip notes about those spells are dropped, since they
--- assume a tank or Enhancement pull. It stays a draft until there is a real Elemental list.
+local function Add(g, spell, opts)
+    opts = opts or {}
+    local lv = RANKS[spell]
+    for rank, level in ipairs(lv) do
+        local e = { level = level, spell = spell, rank = rank, optional = opts.optional }
+        if rank == 1 or (opts.noteAll) then e.note = opts.note end
+        g.spells[#g.spells + 1] = e
+    end
+end
+
+local function One(g, spell, level, note, optional)
+    g.spells[#g.spells + 1] = { level = level, spell = spell, note = note, optional = optional }
+end
+
+local function Skip(g, level, spell, why)
+    g.skips[#g.skips + 1] = { level = level, spell = spell, why = why }
+end
+
+local function Base(key, name, spec)
+    local g = { key = key, name = name, spec = spec, client = "Era", spells = {}, skips = {}, source = "Wowhead" }
+    Add(g, "Rockbiter Weapon", { note = "Keep it on at all times; Wowhead: more consistent and higher average damage than Windfury Weapon" })
+    Add(g, "Lightning Shield", { note = "One of your most efficient damage sources: always buy the new rank" })
+    Add(g, "Earth Shock", { note = "Use on cooldown for kill speed: buy every rank" })
+    Add(g, "Strength of Earth Totem", { optional = true, note = "Big when grouped; skip only if you never group" })
+    Add(g, "Windfury Totem", { optional = true, note = "Big when grouped (melee); skip only if you never group" })
+    One(g, "Frost Shock", 20, "First rank only, for the slow. Higher ranks are for PvP", false)
+    g.spells[#g.spells].rank = 1
+    One(g, "Ghost Wolf", 20, "Cheap: buy it as soon as you can; it cuts travel time")
+    One(g, "Water Breathing", 22, "Cheap: buy it as soon as you can")
+    One(g, "Water Walking", 28, "Cheap: buy it as soon as you can")
+    One(g, "Reincarnation", 30, "Cheap, and it saves a death")
+    One(g, "Astral Recall", 30, "Cheap: buy it as soon as you can")
+    One(g, "Cure Poison", 16)
+    One(g, "Cure Disease", 22)
+    Add(g, "Ancestral Spirit", { note = "Resurrection" })
+    Skip(g, 30, "Windfury Weapon", "PvP only while leveling; Rockbiter is the PvE imbue")
+    Skip(g, 34, "Frost Shock rank 2 and up", "PvP only")
+    return g
+end
+
+-- Enhancement: melee. Healing is for dungeons only.
 do
-    local g = Build("elemental", "Elemental (draft)", nil, "Elemental", { "D", "Q" })
-    local have = {}
-    for _, e in ipairs(g.spells) do have[e.spell .. ":" .. (e.rank or 0)] = true end
-    local function Add(spell, ranks, note)
-        local list = {}
-        for rank in pairs(ranks) do list[#list + 1] = rank end
-        table.sort(list)
-        for i, rank in ipairs(list) do
-            if not have[spell .. ":" .. rank] then
-                g.spells[#g.spells + 1] = { level = ranks[rank], spell = spell, rank = rank, note = (i == 1) and note or nil }
-            end
-        end
-    end
-    Add("Lightning Bolt", { [2] = 8, [3] = 14, [4] = 20, [5] = 26, [6] = 32, [7] = 38, [8] = 44, [9] = 50, [10] = 56 }, "Your main damage spell: always take the new rank")
-    Add("Chain Lightning", { [1] = 32, [2] = 40, [3] = 48, [4] = 56 }, "Pack damage: always take the new rank")
-    Add("Earth Shock", { [1] = 4, [2] = 8, [3] = 14, [4] = 24, [5] = 36, [6] = 48, [7] = 60 }, "Interrupt and burst")
-    Add("Lightning Shield", { [1] = 8, [2] = 16, [3] = 24, [4] = 32, [5] = 40, [6] = 48, [7] = 56 })
-    Add("Flame Shock", { [4] = 40, [5] = 52, [6] = 60 })
-    local drop = { ["Lightning Bolt"] = true, ["Chain Lightning"] = true, ["Flame Shock"] = true, ["Searing Totem"] = true,
-                   ["Magma Totem"] = true, ["Fire Nova Totem"] = true }
-    local skips = {}
-    for _, sk in ipairs(g.skips) do
-        if not drop[sk.spell] then skips[#skips + 1] = sk end
-    end
-    g.skips, g.draft = skips, true
+    local g = Base("enhancement", "Enhancement", "Enhancement")
+    Add(g, "Healing Wave", { optional = true, note = "Only if you run dungeons; downrank to rank 5 for small heals" })
+    Add(g, "Chain Heal", { optional = true, note = "Only if you run dungeons: rank 1 when everyone is hurt and close together" })
+    Skip(g, 20, "Lesser Healing Wave", "avoid it unless someone would die without it")
     table.insert(CUI.LevelGuides.SHAMAN, g)
 end
 
-table.insert(CUI.LevelGuides.SHAMAN, Build("heal", "Restoration", nil, "Restoration", { "H" }))
+-- Elemental: casts damage spells, melees to finish.
+do
+    local g = Base("elemental", "Elemental", "Elemental")
+    Add(g, "Lightning Bolt", { note = "Main damage spell: always buy the new rank" })
+    Add(g, "Chain Lightning", { note = "Pack damage: always buy the new rank" })
+    Add(g, "Flame Shock", { note = "Shocks on cooldown for kill speed" })
+    Add(g, "Healing Wave", { optional = true, note = "Only if you run dungeons; downrank to rank 5 for small heals" })
+    Add(g, "Chain Heal", { optional = true, note = "Only if you run dungeons" })
+    Skip(g, 20, "Lesser Healing Wave", "avoid it unless someone would die without it")
+    table.insert(CUI.LevelGuides.SHAMAN, g)
+end
 
--- quick reference shown on the settings page: which spell to use for what
-CUI.LevelTips = CUI.LevelTips or {}
-CUI.LevelTips.SHAMAN = {
-    { "Threat", "Earth Shock; Frost Shock if the target resists nature or is fleeing" },
-    { "Pull", "Lightning Bolt; Chain Lightning (level 32+) to tag 2-3 mobs" },
-    { "Questing imbue", "Flametongue Weapon (10-29), Windfury Weapon (30+); Rockbiter when tanking" },
-    { "Big heal", "Healing Wave; Lesser Healing Wave when a 3-second cast would land too late" },
-    { "Earth totem", "Stoneskin; Strength of Earth if you DPS or another shaman has Stoneskin" },
-    { "Air totem", "Grace of Air (42+); Windfury Totem or Grounding for melee DPS or caster packs" },
-    { "Water totem", "Healing Stream; Mana Spring when someone is low on mana" },
-    { "Fire totem", "Searing; Magma or Fire Nova on packs you already have threat on" },
-    { "Loose mob", "Earth Shock, then Stoneclaw Totem when two or more mobs are on the healer" },
+-- Restoration: heals dungeons, levels with a Flame Shock / Lightning Bolt rotation.
+do
+    local g = Base("heal", "Restoration", "Restoration")
+    Add(g, "Healing Wave", { note = "Main heal: always buy the new rank, and downrank to rank 5 for small heals" })
+    Add(g, "Lesser Healing Wave", { note = "Emergency quick heal" })
+    Add(g, "Chain Heal", { note = "Group heal: buy every rank for dungeons" })
+    Add(g, "Healing Stream Totem")
+    Add(g, "Mana Spring Totem")
+    Add(g, "Lightning Bolt", { note = "Main damage while leveling" })
+    Add(g, "Chain Lightning")
+    Add(g, "Flame Shock", { note = "Put it on the target, then Lightning Bolt, then melee to finish" })
+    One(g, "Poison Cleansing Totem", 22)
+    One(g, "Tremor Totem", 18, "Breaks fear, charm and sleep")
+    -- the old table's skip notes that still apply
+    for _, row in ipairs(ROWS) do
+        for _, sk in ipairs(row.skip or {}) do
+            local what, why = sk:match("^(.-)|(.*)$")
+            if not what:find("Lightning Bolt") and not what:find("Chain Lightning") and not what:find("Flame Shock")
+               and not what:find("Searing") and not what:find("Magma") and not what:find("Fire Nova") and not what:find("Water") then
+                Skip(g, row[1], what, why)
+            end
+        end
+    end
+    table.insert(CUI.LevelGuides.SHAMAN, g)
+end
+
+--------------------------------------------------------------------------------
+-- Quick reference on the settings page for the loaded guide: which spell to use for what.
+--------------------------------------------------------------------------------
+local TIPS = {
+    earthwarden = {
+        { "Threat", "Earth Shock (double threat) is your main threat button. Frost Shock if the target is immune or heavily resistant to nature, or fleeing." },
+        { "Rotation", "Keep Lightning Shield up and Earth Shock on cooldown. From 40, Stormstrike on cooldown, then Earth Shock in its 20% nature bonus window. Use max-rank Earth Shock until you're safely ahead on threat, then downrank to save mana." },
+        { "Weapon imbue", "Rockbiter at every level. It adds bonus threat to every auto-attack on top of normal damage threat. Never swap it out while tanking." },
+        { "Pull", "Lightning Bolt. Rank 1 for fast trash pulls; max rank for packs, elites and bosses (every rank from 4 up casts in 3 seconds). Chain Lightning from 32 to tag 2-3 mobs." },
+        { "Loose mob", "Earth Shock it. If two or more mobs are on the healer, drop Stoneclaw Totem, then put Stoneskin back once things settle." },
+        { "Earth totem", "Stoneskin. Tremor instead on any pull with fear, charm or sleep. Strength of Earth only if another shaman has Stoneskin down." },
+        { "Air totem", "Grace of Air from 42. Grounding on caster pulls at any level. Never Windfury Totem: it overwrites your Rockbiter." },
+        { "Water totem", "Healing Stream; Mana Spring when you or the healer are low on mana." },
+        { "Fire totem", "Searing on single targets. Magma or Fire Nova only on packs you already have threat on and with no crowd control, since they break sheep and sap. Fire Resistance in Blackrock Depths." },
+        { "Self-heal", "Lesser Healing Wave in emergencies only. It's slow to cast while being hit, and it costs mana you need for shocks." },
+    },
+    enhancement = {
+        { "Weapon imbue", "Rockbiter solo from 1 to 29; Flametongue against heavily armored mobs, since fire damage ignores armor. Flametongue in dungeons from 10 to 29, because Rockbiter adds threat to every swing. Windfury Weapon from 30, solo and in dungeons." },
+        { "Rotation, solo", "Lightning Shield up. Earth Shock on cooldown for damage and interrupts. From 40, Stormstrike on cooldown, then Earth Shock in its nature bonus window. Frost Shock on fleeing humanoids. Let auto-attacks and Windfury procs do the rest to save mana." },
+        { "Rotation, dungeons", "Stormstrike on cooldown and Flame Shock for damage. Earth Shock only to interrupt casters, since it deals double threat. Drop Lightning Shield if you're close to pulling aggro." },
+        { "Totems, solo", "Strength of Earth always. Searing on tough mobs or 2+ pulls. Grace of Air from 42 on long fights." },
+        { "Totems, groups", "Windfury Totem with other melee, but ask rogues first since it replaces their main-hand poison. It also overwrites your own Windfury Weapon with the totem's version. Strength of Earth or Grace of Air otherwise. Stoneskin if the tank is struggling, Mana Spring for casters, Tremor on fear, charm or sleep pulls." },
+        { "Weapons", "Highest damage-per-second weapon at any speed before 30. From 30, the slowest strong two-hander you can get, ideally 3.5 speed or slower. Two-handed axes and maces need the Two-Handed Axes and Maces talent." },
+        { "Stats", "Strength > Agility > Hit > Stamina > Intellect." },
+        { "Level 30", "Windfury Weapon, the biggest power spike Enhancement gets. Train it immediately." },
+        { "Level 40", "Stormstrike, mail armor and Windfury Weapon rank 2." },
+    },
+    elemental = {
+        { "Weapon imbue", "Rockbiter from 1 to 9, then Flametongue from 10 on, solo and in dungeons. Your spell damage gear may add a little to Flametongue but does nothing for Rockbiter. Fire also ignores armor, and Flametongue never adds threat in groups." },
+        { "Rotation, solo", "Pull with max-rank Lightning Bolt, a second one if the mob is still far, then Flame Shock as it arrives and Earth Shock to finish or interrupt. Chain Lightning from 32 on 2+ mobs. From 40, Elemental Mastery, then Chain Lightning or Lightning Bolt for a guaranteed crit. Downrank Lightning Bolt on easy mobs." },
+        { "Rotation, dungeons", "Lightning Bolt and Chain Lightning for damage, plus Flame Shock for its damage over time. Earth Shock only to interrupt." },
+        { "Mana", "Use Clearcasting procs on your most expensive spell. Melee-finish mobs below about 10% health to save drinking." },
+        { "Totems, solo", "Searing for extra damage, Mana Spring on long sessions, Stoneskin when a mob reaches you." },
+        { "Totems, groups", "Mana Spring for casters, Windfury Totem with melee, Grace of Air otherwise, Tremor on fear, charm or sleep pulls." },
+        { "Stats", "Spell damage > Intellect > Spell crit > Mp5 > Stamina. Spirit only helps out-of-combat regen while leveling." },
+        { "Level 40", "Elemental Mastery and Chain Lightning rank 2." },
+    },
+    heal = {
+        { "Heal priority", "Healing Wave for steady healing, downranked to the smallest rank that covers the damage. Lesser Healing Wave in emergencies. Chain Heal from 40 when several allies are hurt. Nature's Swiftness into max-rank Healing Wave for an instant emergency heal, once you have the talent." },
+        { "Cleanse", "Cure Poison (16) and Cure Disease (22). Poison Cleansing and Disease Cleansing Totems on pulls that apply a lot of either." },
+        { "Mana", "Mana Spring Totem always down in groups. Mana Tide Totem on long fights once you have the talent. Healing Stream when you have spare mana. Pause casting for 5 seconds when you can, so spirit regen kicks in." },
+        { "Weapon imbue", "Rockbiter solo, since healing gear does nothing for Flametongue. Flametongue in dungeons, so your occasional melee swings don't add threat. From 30, Windfury solo if you melee a lot with a two-hander." },
+        { "Totems, groups", "Mana Spring (water). Stoneskin for the tank, or Tremor on fear, charm or sleep pulls (earth). Windfury Totem with melee, Grace of Air otherwise (air). Searing or Fire Resistance as needed (fire)." },
+        { "Solo leveling", "Flame Shock and Lightning Bolt to pull, then melee. Heal yourself with downranked Healing Wave between pulls." },
+        { "Stats", "+Healing > Intellect > Mp5 > Spirit > Stamina." },
+        { "Level 40", "Chain Heal and mail armor. Chain Heal becomes your main group heal from here." },
+    },
 }
+for _, g in ipairs(CUI.LevelGuides.SHAMAN) do g.tips = TIPS[g.key] end

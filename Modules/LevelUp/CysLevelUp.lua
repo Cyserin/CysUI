@@ -103,7 +103,7 @@ end
 local box
 local MAXROWS = 10
 local ROW_W = 320
-local shownLevel, shownBy
+local shownLevel, shownBy, shownGuide
 
 local function Build()
     if box then return box end
@@ -181,15 +181,17 @@ local function Build()
     return box
 end
 
-local function Render(level)
-    local guide = CurrentGuide()
+-- override: show a guide other than the one this character follows (a preview from /cuilevel)
+local function Render(level, override)
+    shownGuide = override
+    local guide = override or CurrentGuide()
     if not guide then return false end
     local buy, later = Evaluate(guide, level)
     Build()
     shownLevel = level
 
     box.title:SetText("Level " .. level .. ": spells worth buying")
-    box.sub:SetText(guide.name)
+    box.sub:SetText(override and (guide.name .. " - preview") or guide.name)
 
     local y = -54
     local shown = math.min(#buy, MAXROWS)
@@ -270,17 +272,17 @@ local function Render(level)
 end
 
 -- who: "level" (leveled up), "trainer" (opened a trainer), "manual"
-local function Show(level, who)
+local function Show(level, who, override)
     level = level or UnitLevel("player")
-    local guide, cls = CurrentGuide()
+    local guide, cls = override or CurrentGuide()
     if not guide then
         if who == "manual" then
             local name = UnitClass("player")
-            CUI:Print("No level-up guide for " .. tostring(name) .. " yet. Guides so far are listed under /cui -> Level-Up Spells.")
+            CUI:Print("Cys's Spell Scout doesn't support " .. tostring(name) .. " yet. The guides it has so far are listed under /cui -> Class -> General.")
         end
         return
     end
-    local n = Render(level)
+    local n = Render(level, override)
     if n == 0 and who ~= "manual" then
         if box then box:Hide() end
         return
@@ -404,6 +406,10 @@ local function Choose(key)
     Show(UnitLevel("player"), "level")
 end
 
+local function HasDualAPI()
+    return GetNumTalentGroups ~= nil or (C_SpecializationInfo and C_SpecializationInfo.GetNumSpecGroups ~= nil)
+end
+
 local function DualSpec()
     local n
     if GetNumTalentGroups then
@@ -423,6 +429,9 @@ local function AskNow(kind)
     if kind == "level" then
         chooser.title:SetText("Which are you leveling as?")
         chooser.text:SetText("Pick the guide Spell Scout follows for your spell recommendations. You can change it any time under /cui -> Level-Up Spells.")
+    elseif kind == "forty" then
+        chooser.title:SetText("Level 40: still on the same guide?")
+        chooser.text:SetText("At 40 you can buy a second talent spec. If your plan changed, pick the guide to follow from here; you can change it any time under /cui -> Level-Up Spells.")
     else
         chooser.title:SetText("Dual spec: which guide now?")
         chooser.text:SetText("You have a second talent spec. Pick the guide to follow from here; you can change it any time under /cui -> Level-Up Spells.")
@@ -466,6 +475,11 @@ local function MaybeAsk(level)
         db.askedDual[key] = true
         db.asked[key] = math.max(db.asked[key] or 0, 10) -- no need for the level-10 question after this one
         return AskNow("dual")
+    end
+    -- a client that can't report talent specs: ask at 40, when dual spec becomes available
+    if not HasDualAPI() and (level or 0) >= 40 and (db.asked[key] or 0) < 40 then
+        db.asked[key] = 40
+        return AskNow("forty")
     end
     if (level or 0) >= 10 and (db.asked[key] or 0) < 10 then
         db.asked[key] = 10
@@ -539,7 +553,7 @@ local function Enable()
                 C_Timer.After(0.3, function()
                     pending = false
                     if box:IsShown() then
-                        local n = Render(shownLevel)
+                        local n = Render(shownLevel, shownGuide)
                         if n == 0 and shownBy ~= "manual" then box:Hide() end
                     end
                 end)
@@ -550,9 +564,39 @@ end
 
 SLASH_CYSLEVELUP1 = "/cuilevel"
 SlashCmdList["CYSLEVELUP"] = function(msg)
-    local lvl = tonumber(strtrim(msg or ""))
+    -- /cuilevel                       the box for you now
+    -- /cuilevel 30                    what your guide buys at level 30
+    -- /cuilevel 24 restoration        what another guide buys at 24 (a preview; your own guide is not changed)
+    -- /cuilevel list                  the guides you can name
+    msg = strtrim(msg or "")
+    local list = ClassGuides()
+    if msg:lower() == "list" then
+        local names = {}
+        for _, g in ipairs(list) do names[#names + 1] = g.key .. " (" .. GuideLabel(g) .. ")" end
+        CUI:Print("Guides: " .. (#names > 0 and table.concat(names, ", ") or "none for your class yet") .. ". Example: /cuilevel 24 " .. (list[1] and list[1].key or "name"))
+        return
+    end
+    local lvl, rest = msg:match("^(%d+)%s*(.-)$")
+    if not lvl then lvl, rest = nil, msg end
+    lvl = tonumber(lvl)
     if lvl and (lvl < 1 or lvl > 60) then lvl = nil end
-    Show(lvl, "manual")
+    local override
+    rest = (rest or ""):lower()
+    if rest ~= "" then
+        for _, g in ipairs(list) do
+            if g.key:lower() == rest or g.name:lower() == rest then override = g break end
+        end
+        if not override then
+            for _, g in ipairs(list) do
+                if g.key:lower():find(rest, 1, true) or g.name:lower():find(rest, 1, true) then override = g break end
+            end
+        end
+        if not override then
+            CUI:Print("No guide called '" .. rest .. "'. Type /cuilevel list to see them.")
+            return
+        end
+    end
+    Show(lvl, "manual", override)
 end
 SLASH_CYSSCAN1 = "/cuiscan"
 SlashCmdList["CYSSCAN"] = function() Scan() end
@@ -600,22 +644,22 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     local list, cls = ClassGuides()
     local gl = W.Text(page, 12, T.accent)
     gl:SetPoint("TOPLEFT", 4, y - 6)
-    gl:SetText("Guide this character follows (click to change)")
-    local gb = W.Button(page, 300, 22, "")
-    gb:SetPoint("TOPLEFT", 4, y - 26)
-    local function ShowGuide()
-        local g = CurrentGuide()
-        gb:SetLabel(g and GuideLabel(g) or "No guide for your class yet")
+    gl:SetText("Guide this character follows")
+    local opts = {}
+    for _, g in ipairs(list) do opts[#opts + 1] = { g.key, GuideLabel(g) } end
+    local tipsHolder, tipsY
+    local function BuildTips() end -- filled in below
+    if #opts > 0 then
+        local gb = W.Dropdown(page, 300, opts, function() local g = CurrentGuide(); return g and g.key end,
+            function(v) db.char[CharKey()] = v; BuildTips() end)
+        gb:SetPoint("TOPLEFT", 4, y - 26)
+    else
+        local none = W.Text(page, 12, T.desc)
+        none:SetPoint("TOPLEFT", 4, y - 26)
+        none:SetText("Cys's Spell Scout doesn't support your class yet. Shaman is first; the lists below show what is covered.")
+        none:SetWidth(width - 8)
+        none:SetJustifyH("LEFT")
     end
-    ShowGuide()
-    gb:SetScript("OnClick", function()
-        if #list < 2 then return end
-        local cur = CurrentGuide()
-        local idx = 1
-        for i, g in ipairs(list) do if cur and g.key == cur.key then idx = i end end
-        db.char[CharKey()] = list[idx % #list + 1].key
-        ShowGuide()
-    end)
     y = y - 62
 
     local show = W.Button(page, 150, 22, "Show the box now", true)
@@ -629,29 +673,40 @@ CUI:RegisterPage("Level-Up Spells", function(page)
         local gs = CUI.LevelGuides and CUI.LevelGuides[c]
         if gs then
             for _, g in ipairs(gs) do
-                lines[#lines + 1] = { CLASS_NAMES[c] .. " - " .. g.name, GuideLabel(g) .. ", " .. g.client }
+                local detail = g.role and (g.role .. " (" .. g.spec .. ")") or g.spec
+                lines[#lines + 1] = { CLASS_NAMES[c] .. " - " .. g.name, detail .. ", " .. g.client }
             end
         end
     end
-    local supported = W.Text(page, 12, T.accent)
-    supported:SetPoint("TOPLEFT", 4, y)
-    supported:SetText("Guides included")
-    W.Notes(page, 4, y - 22, width, "", lines)
-    y = y - 22 - (#lines * 20) - 18
-
-    local tips = CUI.LevelTips and CUI.LevelTips[cls]
-    if tips then
-        local th = W.Text(page, 12, T.accent)
-        th:SetPoint("TOPLEFT", 4, y)
-        th:SetText("Which spell to use")
-        W.Notes(page, 4, y - 22, width, "", tips)
-        y = y - 22 - (#tips * 34) - 12
-    end
-
-    W.Notes(page, 4, y, width, "", {
-        { "/cuilevel", "show the box now; /cuilevel 30 previews what you would buy at level 30" },
+    local cmdItems = {
+        { "/cuilevel", "show the box now; /cuilevel 30 previews level 30; /cuilevel 24 restoration previews another guide (yours is not changed); /cuilevel list names the guides" },
         { "/cuiscan", "at your class trainer: saves the trainer's spells and checks the guide's levels (helps fix the guides)" },
-        "Enhancement, Elemental and Restoration start at level 10; levels 1 to 8 are only in Earth Warden. At level 10, and again when you get a second talent spec, Spell Scout asks which guide to follow (once per character).",
+        "Earth Warden is a community tank build; Enhancement, Elemental and Restoration follow Wowhead's Classic Era leveling guides. At level 10, and again when you get a second talent spec (or reach level 40 on a client that can't say), Spell Scout asks which guide to follow, once per character.",
         "Other classes and specs, and WoW Forever, are being added as guides become available.",
-    })
+    }
+
+    -- Which spell to use sits first (it is what you look at most); the lists below it move down
+    -- when the quick reference changes height with the guide.
+    local tipsY = y
+    local tipsHead = W.Text(page, 12, T.accent)
+    tipsHead:SetPoint("TOPLEFT", 4, tipsY)
+    local lower = {}
+    function BuildTips()
+        if tipsHolder then tipsHolder:Hide() end
+        for _, o in ipairs(lower) do o:Hide() end
+        wipe(lower)
+        local g = CurrentGuide()
+        tipsHead:SetText(g and ("Which spell to use: " .. g.name) or "Which spell to use")
+        local items = (g and g.tips) or { "No quick reference for this guide yet." }
+        tipsHolder = W.Notes(page, 4, tipsY - 22, width, "", items)
+        local ly = tipsY - 22 - tipsHolder:GetHeight() - 16
+        local supported = W.Text(page, 12, T.accent)
+        supported:SetPoint("TOPLEFT", 4, ly)
+        supported:SetText("Guides included")
+        local sbox = W.Notes(page, 4, ly - 22, width, "", lines)
+        ly = ly - 22 - sbox:GetHeight() - 16
+        local cbox = W.Notes(page, 4, ly, width, "", cmdItems)
+        lower[1], lower[2], lower[3] = supported, sbox, cbox
+    end
+    BuildTips()
 end)

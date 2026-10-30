@@ -9,6 +9,7 @@
 --   W.Button(parent, w, h, label, primary)
 --   W.Checkbox(parent, label, get, set)   -> :Refresh(), :SetActive(bool)
 --   W.Stepper(parent, label, get, set, min, max, step, suffix)  -> :Refresh()
+--   W.Dropdown(parent, width, options, get, set, prefix)  options = { {value, "Label"}, ... }  -> :Refresh()
 --   W.Header(parent, text, width)         gold section title with a rule
 --   W.Text(parent, size, color, justify), W.Texture(...), W.Border(...)
 --------------------------------------------------------------------------------
@@ -243,6 +244,72 @@ end
 --------------------------------------------------------------------------------
 -- Stepper: "Label        [-]  20s  [+]"
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- Dropdown: a button showing the current choice; click it to open the list, click a choice to pick it.
+--   options = { { value, "Label" }, ... }   get() -> value   set(value)   prefix = text before the label ("Shows: ")
+--------------------------------------------------------------------------------
+function W.Dropdown(parent, width, options, get, set, prefix)
+    local b = W.Button(parent, width, 22, "")
+    b.arrow = W.Text(b, 10, T.accent, "RIGHT")
+    b.arrow:SetPoint("RIGHT", -8, 0)
+    b.arrow:SetText("v")
+
+    local list = CreateFrame("Frame", nil, UIParent)
+    list:SetFrameStrata("FULLSCREEN_DIALOG")
+    list:SetFrameLevel(50)
+    list:SetClampedToScreen(true)
+    list:SetSize(width, #options * 22 + 6)
+    list:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
+    W.Texture(list, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
+    W.Border(list, 1, T.border, "BORDER")
+    list:Hide()
+
+    -- clicking anywhere else closes the list
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:SetFrameLevel(40)
+    catcher:Hide()
+    catcher:SetScript("OnClick", function() list:Hide() end)
+    list:SetScript("OnShow", function() catcher:Show() end)
+    list:SetScript("OnHide", function() catcher:Hide() end)
+
+    local function Text(opt)
+        return (prefix or "") .. opt[2]
+    end
+    function b:Refresh()
+        local cur = get()
+        local shown = options[1] and Text(options[1]) or ""
+        for _, o in ipairs(options) do
+            if o[1] == cur then shown = Text(o) end
+        end
+        self:SetLabel(shown)
+    end
+
+    local rows = {}
+    for i, o in ipairs(options) do
+        local row = W.Button(list, width - 8, 20, o[2])
+        row:SetPoint("TOPLEFT", 4, -3 - (i - 1) * 22)
+        row:SetScript("OnClick", function()
+            list:Hide()
+            set(o[1])
+            b:Refresh()
+        end)
+        rows[i] = row
+    end
+    b:SetScript("OnClick", function()
+        if list:IsShown() then list:Hide() return end
+        local cur = get()
+        for i, o in ipairs(options) do
+            rows[i]:SetLabel((o[1] == cur and "|cFFFFD100> |r" or "   ") .. o[2])
+        end
+        list:Show()
+    end)
+    b:HookScript("OnHide", function() list:Hide() end)
+    b:Refresh()
+    return b
+end
+
 function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(320, 22)

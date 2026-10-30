@@ -511,17 +511,11 @@ CUI:RegisterPage("Waypoints", function(page)
     Check("Show the time left", "eta")
     Check("Clear a waypoint when I get there", "autoClear")
     Check("Remember waypoints after I log out", "keep", Save)
-    local arrive = W.Button(page, 300, 22, "")
-    local STEPS = { 3, 5, 10, 20, 40 }
-    local function ArriveLabel() arrive:SetLabel("Clear it when I'm within: " .. db.clearAt .. " yd (click to change)") end
-    ArriveLabel()
+    local stepOpts = {}
+    for _, v in ipairs({ 3, 5, 10, 20, 40 }) do stepOpts[#stepOpts + 1] = { v, v .. " yd" } end
+    local arrive = W.Dropdown(page, 300, stepOpts, function() return db.clearAt end,
+        function(v) db.clearAt = v end, "Clear it when I'm within: ")
     arrive:SetPoint("TOPLEFT", 4, y)
-    arrive:SetScript("OnClick", function()
-        local nxt = STEPS[1]
-        for i, v in ipairs(STEPS) do if v == db.clearAt then nxt = STEPS[i % #STEPS + 1] end end
-        db.clearAt = nxt
-        ArriveLabel()
-    end)
     y = y - 30
     local q = Check("Answer other addons' TomTom requests, like Questie's (needs a /reload)", "questie")
 
