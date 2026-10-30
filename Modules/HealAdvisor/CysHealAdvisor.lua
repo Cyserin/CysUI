@@ -913,6 +913,7 @@ function CUI.HealAdvisorReport()
     for _, row in ipairs(rows) do
         add("- " .. row.label .. ": " .. (row.rec and (row.rec.spell .. " " .. row.rec.rank) or "none"))
     end
+    if ht.unmatched then add("Heals heard but not matched to a rank: " .. ht.unmatched) end
     MYFAM, PV = saved, savedPV
 
     -- the Discord /bug command takes 1500 characters, so the report comes in parts of up to 1400
@@ -1076,6 +1077,15 @@ local function RefreshTest()
         Line(y, mark .. "  " .. r.name .. " Rank " .. r.rank .. "   " .. text, T.text, 12)
         y = y - 17
     end
+    if ht.heard then
+        y = y - 6
+        local hl = Line(y, "|cFF888888Last heard: " .. ht.heard .. "|r", T.desc, 10)
+        y = y - math.max(hl:GetStringHeight(), 12)
+    else
+        y = y - 6
+        local hl = Line(y, "|cFF888888Nothing heard yet. Cast a heal.|r", T.desc, 10)
+        y = y - 12
+    end
     testBox:SetHeight(-y + 14)
 end
 
@@ -1126,12 +1136,26 @@ ev:SetScript("OnEvent", function(_, event)
         if not spellID then return end
         local tgt = UnitExists("target") and UnitIsFriend("player", "target") and "target" or "player"
         ht.pending[spellID] = UnitGetIncomingHeals and UnitGetIncomingHeals(tgt) or nil
+        ht.lastCast = { name = name, id = spellID }
+        ht.heard = "cast " .. tostring(name) .. " (id " .. tostring(spellID) .. ")"
+        RefreshTest()
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        local _, sub, _, srcGUID, _, _, _, _, _, _, _, spellID, _, _, amount, overheal, _, crit = CombatLogGetCurrentEventInfo()
+        local _, sub, _, srcGUID, _, _, _, _, _, _, _, spellID, spellName, _, amount, overheal, _, crit = CombatLogGetCurrentEventInfo()
         if sub ~= "SPELL_HEAL" or srcGUID ~= UnitGUID("player") then return end
+        -- match the heal to a rank: by its spell ID, else by the spell that was just cast
+        local list = TestRanks()
         local known
-        for _, r in ipairs(TestRanks()) do if r.id == spellID then known = true break end end
-        if not known then return end
+        for _, r in ipairs(list) do if r.id == spellID then known = r.id break end end
+        if not known and ht.lastCast and (spellName == ht.lastCast.name or spellName == nil) then
+            for _, r in ipairs(list) do if r.id == ht.lastCast.id then known = r.id break end end
+        end
+        ht.heard = "heal " .. tostring(spellName) .. " (id " .. tostring(spellID) .. ", amount " .. tostring(amount) .. ")" .. (known and "" or " - not matched to a rank")
+        if not known then
+            ht.unmatched = (ht.unmatched or "") .. string.format("%s id %s; ", tostring(spellName), tostring(spellID))
+            RefreshTest()
+            return
+        end
+        spellID = known
         local old = ht.ranks[spellID]
         if old and old.clean then return end
         ht.ranks[spellID] = {
@@ -1173,6 +1197,7 @@ SlashCmdList["CUIHEAL"] = function(msg)
     end
     wipe(ht.ranks)
     wipe(ht.pending)
+    ht.heard, ht.unmatched, ht.lastCast = nil, nil, nil
     -- the scan runs by itself, so there is no Scan step
     TakeSnapshot()
     if win and win:IsShown() then Refresh(false) end
