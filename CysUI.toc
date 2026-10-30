@@ -16,6 +16,7 @@ Config.lua
 Profile.lua
 Update.lua
 Interrupt.lua
+Waypoints.lua
 Scale.lua
 Conflicts.lua
 Vendor.lua

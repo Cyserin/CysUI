@@ -311,6 +311,7 @@ if CysChangelog then
                   "Loadouts: save your four picks under a name and switch in one click, or with /cystotems load <name> (works in a macro).",
                   "Action-bar macros: switch on 'Keep action-bar macros in step' in the Drop all menu and CT_Earth, CT_Fire, CT_Water, CT_Air and CT_DropAll are made and kept up to date. Drag them onto your bars once; they follow your picks.",
                   "Interrupt announcer (any class): says 'Interrupted <target>'s <spell>!' when one of your spells interrupts a cast. Pick the channel and the wording under /cui -> Interrupts.",
+                  "Waypoints (TomTom-style): Ctrl + left-click the world map, or type /way 45.2 62.1 Name, and an arrow shows the way with the distance and time left. Right-click the arrow to clear it. Settings: /cui -> Waypoints; move it with /cui layout.",
               },
               fixed = {
                   "Totem action-bar macros now follow the totem you pick (the icon no longer stays on the old one), and the Drop all button shows your four picked totems instead of a blank square.",
