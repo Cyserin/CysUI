@@ -2,7 +2,7 @@
 
 A light, flat, gold-and-dark replacement UI for **WoW Classic Era**: one addon instead of a stack of them. It takes over from ElvUI without the weight. Every piece is a module you can switch on or off, and everything can be moved and resized.
 
-> **Status: public test.** Built and played on Classic Era (1.15.9). It is also being prepared for **WoW Forever** (interface 16001, launching Nov 4, 2026); that side is untested until launch. Bug reports from both are very welcome (see [Reporting a bug](#reporting-a-bug)).
+> **Status: alpha.** Public testing is open: expect rough edges, and settings may change between versions. Built and played on Classic Era (1.15.9). It is also being prepared for **WoW Forever** (interface 16001, launching Nov 4, 2026); that side is untested until launch. Bug reports from both are very welcome (see [Reporting a bug](#reporting-a-bug)).
 
 ![Cys's UI](Screenshots/readme/ui-overview.png)
 
