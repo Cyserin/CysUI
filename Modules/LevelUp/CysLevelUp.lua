@@ -134,6 +134,27 @@ local function Build()
     box.foot:SetJustifyV("TOP")
 
     CUI:RegisterMovable(box, "levelup", "Level-up spells", { point = "RIGHT", x = -60, y = 60 })
+
+    -- left-click and drag the box itself to move it (same saved position as layout mode)
+    box:EnableMouse(true)
+    box:RegisterForDrag("LeftButton")
+    box:SetScript("OnDragStart", function()
+        local m = CUI.movers and CUI.movers.levelup
+        if m and m.mover then m.mover:StartMoving() end
+    end)
+    box:SetScript("OnDragStop", function()
+        local m = CUI.movers and CUI.movers.levelup
+        if not (m and m.mover) then return end
+        m.mover:StopMovingOrSizing()
+        local cx, cy = m.mover:GetCenter()
+        local ux, uy = UIParent:GetCenter()
+        if not (cx and ux) then return end
+        CysUIDB.layout = CysUIDB.layout or {}
+        local e = CysUIDB.layout.levelup or {}
+        CysUIDB.layout.levelup = e
+        e.point, e.x, e.y = "CENTER", math.floor(cx - ux + 0.5), math.floor(cy - uy + 0.5)
+        CUI:ApplyLayout("levelup")
+    end)
     box:Hide()
     return box
 end
@@ -222,6 +243,7 @@ local function Render(level)
         box.foot:Hide()
     end
     box:SetHeight(math.max(70, -y + 10))
+    if CUI.ApplyLayout then CUI:ApplyLayout("levelup") end -- keep the layout-mode box the same size
     return #buy
 end
 
