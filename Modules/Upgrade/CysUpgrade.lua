@@ -368,6 +368,11 @@ local charDB = CysUIDB.upgrade.charProfiles[charKey]
 charDB.specBindings = charDB.specBindings or {}
 local activeSpec = GetActiveTalentGroup and GetActiveTalentGroup() or 1
 local targetProfile = charDB.specBindings[activeSpec]
+-- a worn Armory set that is linked to a profile wins over the talent spec
+if CysArmory and CysArmory.GetEquippedSetProfile then
+local okSet, setProfile = pcall(CysArmory.GetEquippedSetProfile, CysArmory)
+if okSet and setProfile and charDB.profiles[setProfile] then targetProfile = setProfile end
+end
 if targetProfile and CysUpgrade.activeProfileName ~= targetProfile and charDB.profiles[targetProfile] then
 CysUpgrade.activeProfileName = targetProfile
 charDB.activeProfile = targetProfile

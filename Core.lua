@@ -299,12 +299,21 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.3",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.4",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.39.4", date = "2026-10-30",
+              added = {
+                  "Take off gear: Alt-hover a slot on the character window for 'Take off' (this slot) and 'All' (everything that can lose durability; Shift also takes rings, trinkets and the rest). Handy for death runs. The Armory panel has Take off and Put back buttons, and /armory unequip, /armory putback.",
+                  "Armory sets remember the Upgrade profile you were using when you saved them. Wearing the set switches to that profile, so you stop seeing tank upgrades while healing. Change it with /armory profile <set> <profile|none>.",
+              },
+            },
             { version = "0.39.3", date = "2026-10-30",
               added = {
                   "Update notice: Cys's UI shares its version with your guild, party and raid. If someone has a newer one, you get one line in chat with the download address. Switch it off in /cui -> General.",
+              },
+              fixed = {
+                  "Trade window skin: odd child objects of the window no longer stop the skin (the 'GetObjectType on bad self' error).",
               },
             },
             { version = "0.39.2", date = "2026-10-29",

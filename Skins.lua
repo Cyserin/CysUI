@@ -50,6 +50,19 @@ local function Safe(fn, ...)
     end
 end
 
+-- Children of a frame, skipping anything that is not a normal frame (some windows hold odd objects
+-- that make GetObjectType / GetChildren error out)
+local function Kids(f)
+    local out = {}
+    local ok, list = pcall(function() return { f:GetChildren() } end)
+    if not ok or type(list) ~= "table" then return out end
+    for _, c in ipairs(list) do
+        local okT = pcall(c.GetObjectType, c)
+        if okT then out[#out + 1] = c end
+    end
+    return out
+end
+
 -- Fade out every texture on a frame (portraits included), except ours
 local function Blank(f, keep)
     if not f or not f.GetRegions then return end
@@ -170,7 +183,7 @@ local function SkinClose(btn, panel)
     -- some close buttons draw their red X from a child frame or a texture that gets set again later: hide those too
     local function Clean()
         BlankButtonArt(btn)
-        for _, c in ipairs({ btn:GetChildren() }) do
+        for _, c in ipairs(Kids(btn)) do
             if not c.cysOwn and c.SetAlpha then c:SetAlpha(0) end
         end
         if label then label:SetAlpha(0) end
@@ -335,7 +348,7 @@ end
 
 -- Walk a window's children (a few levels deep) and restyle the stone parts found there
 local function Walk(f, fn, depth, skip)
-    for _, c in ipairs({ f:GetChildren() }) do
+    for _, c in ipairs(Kids(f)) do
         if not c.cysOwn and not (skip and skip(c)) then
             Safe(fn, c)
             if depth > 1 then Walk(c, fn, depth - 1, skip) end
@@ -345,7 +358,8 @@ end
 
 local function SkinTree(f, depth, skip)
     Walk(f, function(c)
-        local t = c:GetObjectType()
+        local okT, t = pcall(c.GetObjectType, c)
+        if not okT then return end
         if t == "Slider" then
             local n = c:GetName() or ""
             if c.ScrollUpButton or n:find("ScrollBar") then SkinScrollBar(c) end
@@ -383,7 +397,7 @@ local function SkinMenu()
         end
     end
     local function BoxAll(self)
-        for _, c in ipairs({ self:GetChildren() }) do
+        for _, c in ipairs(Kids(self)) do
             if c.GetObjectType and c:GetObjectType() == "Button" and not c.cysOwn then Safe(BoxButton, c, 6, 1) end
         end
     end
@@ -622,9 +636,9 @@ local function PaintSideTabs()
         end
         Paint(c)
     end
-    for _, c in ipairs({ f:GetChildren() }) do
+    for _, c in ipairs(Kids(f)) do
         Consider(c)
-        for _, cc in ipairs({ c:GetChildren() }) do Consider(cc) end
+        for _, cc in ipairs(Kids(c)) do Consider(cc) end
     end
 end
 
@@ -1021,7 +1035,7 @@ local function SkinGossip()
         local box = f.GreetingPanel and f.GreetingPanel.ScrollBox
         local target = box and box.GetScrollTarget and box:GetScrollTarget()
         if not target then return end
-        for _, c in ipairs({ target:GetChildren() }) do
+        for _, c in ipairs(Kids(target)) do
             SetColor(c.GreetingText, LIGHT)
             local fs = c.GetFontString and c:GetFontString()
             SetColor(fs, LIGHT)
@@ -1078,7 +1092,7 @@ local function SkinFriends()
     end
     -- rows keep their text; hide the stone highlight bars
     local function Rows(self)
-        for _, c in ipairs({ self:GetChildren() }) do
+        for _, c in ipairs(Kids(self)) do
             if c.GetObjectType and c:GetObjectType() == "Button" and not c.cysOwn then
                 local n = c:GetName() or ""
                 if n:find("^FriendsFrameFriendsScrollFrameButton") or n:find("^WhoFrameButton") or n:find("^GuildFrame") then
@@ -1214,7 +1228,7 @@ local function SkinCommunities()
             if cd then
                 Safe(Strip, cd)
                 Safe(FadeKeyedArt, cd)
-                for _, b in ipairs({ cd:GetChildren() }) do
+                for _, b in ipairs(Kids(cd)) do
                     if b.GetObjectType and b:GetObjectType() == "Button" then Safe(FlatButton, b) end
                 end
             end
@@ -1318,7 +1332,7 @@ local function SkinCommunities()
         local box = list and list.ScrollBox
         local target = box and box.GetScrollTarget and box:GetScrollTarget()
         if target then
-            for _, c in ipairs({ target:GetChildren() }) do
+            for _, c in ipairs(Kids(target)) do
                 if not c.cysOwn then
                     if not c.cysEntry then
                         c.cysEntry = true
@@ -2098,7 +2112,7 @@ local function SkinTrade()
         end
     end
     -- the "Announce Trade" tick box in the same flat style as the /cui ones
-    for _, c in ipairs({ f:GetChildren() }) do
+    for _, c in ipairs(Kids(f)) do
         local okT, typ = pcall(function() return c:GetObjectType() end)
         if okT and typ == "CheckButton" and not c.cysCheck then
             c.cysCheck = true
@@ -2158,7 +2172,7 @@ local function SkinInspect()
     local m = Get("InspectModelFrame")
     if m then
         Blank(m)
-        for _, c in ipairs({ m:GetChildren() }) do if c.GetObjectType and c:GetObjectType() ~= "Model" then Blank(c) end end
+        for _, c in ipairs(Kids(m)) do if c.GetObjectType and c:GetObjectType() ~= "Model" then Blank(c) end end
     end
     -- equipment slots: flat boxes whose edge takes the item colour
     local slots = {}
@@ -2430,7 +2444,7 @@ local function SkinOptions()
                 if type(c) == "table" and c.SetAlpha and k ~= "Highlight" then c:SetAlpha(0) end
             end
             if depth > 0 then
-                for _, c in ipairs({ o:GetChildren() }) do
+                for _, c in ipairs(Kids(o)) do
                     if not ThirdParty(c) then Clear(c, depth - 1) end
                 end
             end
@@ -2478,7 +2492,7 @@ local function SkinOptions()
                     end
                 end
                 if d > 0 then
-                    for _, c in ipairs({ o:GetChildren() }) do
+                    for _, c in ipairs(Kids(o)) do
                         if not ThirdParty(c) and not c.cysOwn then KillRedX(c, d - 1) end
                     end
                 end
@@ -2507,7 +2521,7 @@ local function SkinOptions()
                         o:SetBackdropColor(T.bg[1], T.bg[2], T.bg[3], a)
                     end
                 end
-                if d > 0 then for _, c in ipairs({ o:GetChildren() }) do Tint(c, d - 1) end end
+                if d > 0 then for _, c in ipairs(Kids(o)) do Tint(c, d - 1) end end
             end
             Tint(f.Container, 9)
             Walk(f.Container or f, function(c)
@@ -2693,7 +2707,7 @@ local function SkinCombatLogBar()
             local panel = Panel(f, 0, 0, 0, 0)
             panel:SetFrameLevel(max(f:GetFrameLevel() - 1, 0))
             -- its buttons: plain text in the Cys colours
-            for _, c in ipairs({ f:GetChildren() }) do
+            for _, c in ipairs(Kids(f)) do
                 if c.GetObjectType and c:GetObjectType() == "Button" then
                     local fs = c.GetFontString and c:GetFontString()
                     if fs then fs:SetTextColor(T.text[1], T.text[2], T.text[3]) end
@@ -2730,7 +2744,7 @@ local function SkinLFG()
         d:SetColorTexture(c[1], c[2], c[3], 0.35)
     end
     -- the window's own close button has no name: find it among the children
-    for _, c in ipairs({ f:GetChildren() }) do
+    for _, c in ipairs(Kids(f)) do
         if c.GetObjectType and c:GetObjectType() == "Button" and not c:GetName() and c.GetNormalTexture then
             local nt = c:GetNormalTexture()
             local path = nt and nt.GetTexture and nt:GetTexture()
@@ -2766,7 +2780,7 @@ local function SkinLFG()
             if comment and not comment.cysBoxed then
                 comment.cysBoxed = true
                 Blank(comment)
-                for _, c in ipairs({ comment:GetChildren() }) do Blank(c) end
+                for _, c in ipairs(Kids(comment)) do Blank(c) end
                 for k, v in pairs(comment) do
                     if type(k) == "string" and type(v) == "table" and v.SetAlpha and k:find("Border") then v:SetAlpha(0) end
                 end
@@ -2943,7 +2957,7 @@ local function SkinDropdowns()
             end
         end
         if depth > 1 then
-            for _, c in ipairs({ fr:GetChildren() }) do SkinMenuFrame(c, depth - 1) end
+            for _, c in ipairs(Kids(fr)) do SkinMenuFrame(c, depth - 1) end
         end
     end
     -- some frames other addons make answer to nothing useful ("bad self"), so every look at a frame is guarded
@@ -2952,7 +2966,7 @@ local function SkinDropdowns()
         return ok and shown and strata == "FULLSCREEN_DIALOG"
     end
     local function ScanMenus()
-        for _, c in ipairs({ UIParent:GetChildren() }) do
+        for _, c in ipairs(Kids(UIParent)) do
             if Candidate(c) then pcall(SkinMenuFrame, c, 3) end
         end
     end
@@ -3165,7 +3179,7 @@ SlashCmdList["CYSSKIN"] = function(msg)
         end
     end
     CUI:Print("Children:")
-    for _, c in ipairs({ f:GetChildren() }) do
+    for _, c in ipairs(Kids(f)) do
         print("  " .. tostring(c:GetName() or "(unnamed)") .. "  [" .. tostring(c:GetObjectType()) .. "]")
     end
 end

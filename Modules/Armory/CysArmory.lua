@@ -19,7 +19,7 @@ local ADDON_NAME = ...
 CysArmoryDB = CysArmoryDB or {}
 CysArmory = CysArmory or {}
 local CysArmory = CysArmory
-CysArmory.version = "2.2.2"
+CysArmory.version = "2.3.0"
 
 local format, sort = string.format, table.sort
 local floor, max, min = math.floor, math.max, math.min
@@ -245,8 +245,9 @@ local function RebuildSetIndex()
     setIndex = {}
     for setName, set in pairs(GetDB()) do
         if type(set) == "table" then
-            for _, saved in pairs(set) do
-                local id, suffix = ParseItem(saved)
+            for key, saved in pairs(set) do
+                local id, suffix
+                if type(key) == "number" then id, suffix = ParseItem(saved) end
                 if id then
                     local list = setIndex[id]
                     if not list then list = {}; setIndex[id] = list end
@@ -344,8 +345,15 @@ function CysArmory:SaveSet(name)
         local str = GetItemString(GetInventoryItemLink("player", slot))
         if str then set[slot] = str end
     end
+    local prevProfile = type(GetDB()[name]) == "table" and GetDB()[name].profile
+    local active = CysUpgrade and CysUpgrade.activeProfileName
+    if type(active) == "string" and active ~= "" then
+        set.profile = active
+    elseif prevProfile then
+        set.profile = prevProfile
+    end
     GetDB()[name] = set
-    Say("Saved set: |cFFFFD100" .. name .. "|r")
+    Say("Saved set: |cFFFFD100" .. name .. "|r" .. (set.profile and ("  (Upgrade profile: " .. set.profile .. ")") or ""))
     AfterSetsChanged()
     return true
 end
@@ -409,6 +417,164 @@ function CysArmory:EquipSet(name)
         if sent > 0 and passes < 4 then C_Timer.After(0.35, Pass) end
     end
     Pass()
+end
+
+--------------------------------------------------------------------------------
+-- Take gear off (death runs: gear that is not worn does not lose durability)
+--------------------------------------------------------------------------------
+local GetNumFree = (CC and CC.GetContainerNumFreeSlots) or GetContainerNumFreeSlots
+local PickupBagItem = (CC and CC.PickupContainerItem) or PickupContainerItem
+local WEAPON_SLOTS = { [16] = true, [17] = true, [18] = true }
+
+-- first empty slot in an ordinary bag (ammo pouches, quivers and soul bags are skipped)
+local function FindFreeSlot()
+    for bag = 0, NUM_BAG_SLOTS or 4 do
+        local free, bagType = GetNumFree(bag)
+        if (free or 0) > 0 and (bagType == nil or bagType == 0) then
+            for slot = 1, (GetNumSlots(bag) or 0) do
+                if not GetSlotLink(bag, slot) then return bag, slot end
+            end
+        end
+    end
+end
+
+local function RemovedList()
+    local c = GetCharDB()
+    c.removed = c.removed or {}
+    return c.removed
+end
+
+local function UpdateBackButton()
+    local b = panel and panel.backBtn
+    if not b then return end
+    local any = next(RemovedList()) ~= nil
+    b:SetAlpha(any and 1 or 0.4)
+end
+
+-- returns true when the item went into a bag, or false and a reason
+local function TakeOff(slot)
+    local link = GetInventoryItemLink("player", slot)
+    if not link then return false, "empty" end
+    if InCombatLockdown() and not WEAPON_SLOTS[slot] then return false, "combat" end
+    local bag, bagSlot = FindFreeSlot()
+    if not bag then return false, "full" end
+    ClearCursor()
+    PickupInventoryItem(slot)
+    if not CursorHasItem() then return false, "locked" end
+    PickupBagItem(bag, bagSlot)
+    if CursorHasItem() then ClearCursor(); return false, "locked" end
+    RemovedList()[slot] = GetItemString(link)
+    return true
+end
+
+local REASON = {
+    full = "your bags are full",
+    combat = "armor can't be changed in combat",
+    locked = "the game wouldn't let go of it",
+}
+
+function CysArmory:UnequipSlot(slot)
+    if CursorHasItem() then Say("Drop the item on your cursor first."); return end
+    local ok, why = TakeOff(slot)
+    if not ok and why ~= "empty" then Say("|cFFFF4040Couldn't take that off:|r " .. (REASON[why] or why)) end
+    UpdateBackButton()
+end
+
+local takeToken = 0
+
+-- everything = also rings, trinkets, neck, shirt and tabard (they never lose durability)
+function CysArmory:UnequipAll(everything)
+    if CursorHasItem() then Say("Drop the item on your cursor first."); return end
+    local queue = {}
+    for slot = 1, 19 do
+        if GetInventoryItemLink("player", slot) then
+            local mx
+            if GetInventoryItemDurability then
+                local _, m = GetInventoryItemDurability(slot)
+                mx = m
+            end
+            if everything or mx then queue[#queue + 1] = slot end
+        end
+    end
+    if #queue == 0 then Say("Nothing to take off."); return end
+    wipe(RemovedList())
+    takeToken = takeToken + 1
+    local token, i, done, stopped = takeToken, 0, 0, nil
+    local function Step()
+        if token ~= takeToken then return end
+        if CursorHasItem() then C_Timer.After(0.15, Step); return end
+        i = i + 1
+        local slot = queue[i]
+        if not slot then
+            UpdateBackButton()
+            if done > 0 then
+                Say(format("Took off |cFFFFD100%d|r items. Press |cFFFFD100Put back|r (or /armory putback) to wear them again.", done))
+            end
+            if stopped then Say("|cFFFF4040Stopped:|r " .. (REASON[stopped] or stopped)) end
+            return
+        end
+        local ok, why = TakeOff(slot)
+        if ok then
+            done = done + 1
+        elseif why == "full" or why == "combat" then
+            if not stopped then stopped = why end
+        end
+        C_Timer.After(0.15, Step)
+    end
+    Step()
+end
+
+local putToken = 0
+
+function CysArmory:PutBack()
+    local removed = RemovedList()
+    if not next(removed) then Say("Nothing to put back."); return end
+    if CursorHasItem() then Say("Drop the item on your cursor first."); return end
+    putToken = putToken + 1
+    local token, passes = putToken, 0
+    local function Pass()
+        if token ~= putToken then return end
+        passes = passes + 1
+        local sent = EquipPass(removed)
+        if passes == 1 then
+            if sent == 0 then
+                wipe(removed)
+                UpdateBackButton()
+                Say("Nothing to put back (those items are already on, or not in your bags).")
+                return
+            end
+            Say("Putting your gear back on.")
+        end
+        if sent > 0 and passes < 4 then
+            C_Timer.After(0.35, Pass)
+        else
+            wipe(removed)
+            UpdateBackButton()
+        end
+    end
+    Pass()
+end
+
+-- the Upgrade profile of the set you are wearing (nil when none is linked)
+function CysArmory:GetEquippedSetProfile()
+    for _, set in pairs(GetDB()) do
+        if type(set) == "table" and type(set.profile) == "string" and set.profile ~= "" and IsSetEquipped(set) then
+            return set.profile
+        end
+    end
+end
+
+function CysArmory:SetProfile(setName, profile)
+    local db = GetDB()
+    local name = FindSetName(db, setName)
+    if not name then Say("|cFFFF4040Set not found.|r"); return end
+    if not profile or profile == "" or profile:lower() == "none" then
+        db[name].profile = nil
+        Say("Set |cFFFFD100" .. name .. "|r no longer changes your Upgrade profile.")
+    else
+        db[name].profile = profile
+        Say(format("Wearing set |cFFFFD100%s|r now switches your Upgrade profile to |cFFFFD100%s|r.", name, profile))
+    end
 end
 
 function CysArmory:CreateMacro(name)
@@ -493,6 +659,9 @@ local function ShowRowTooltip(row)
         end
     end
 
+    if type(set.profile) == "string" and set.profile ~= "" then
+        GameTooltip:AddLine("Upgrade profile: " .. set.profile, 0, 0.84, 1)
+    end
     GameTooltip:AddLine("Click to equip", C.dim[1], C.dim[2], C.dim[3])
     GameTooltip:AddLine(" ")
     local owned = row.owned or {}
@@ -714,6 +883,29 @@ local function CreatePanel()
     panel.count = CreateText(header, 10, C.dim, "RIGHT")
     panel.count:SetPoint("RIGHT", -34, 0)
 
+    local offBtn = CreateFlatButton(header, 58, 18, "Take off")
+    offBtn:SetPoint("LEFT", header, "LEFT", 104, 0)
+    offBtn:SetScript("OnClick", function() CysArmory:UnequipAll(IsShiftKeyDown()) end)
+    offBtn:HookScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_TOP")
+        GameTooltip:SetText("Take off your gear", 1, 1, 1)
+        GameTooltip:AddLine("Moves everything that can lose durability into your bags. Hold Shift to take off rings, trinkets and the rest too.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    offBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    local backBtn = CreateFlatButton(header, 58, 18, "Put back")
+    backBtn:SetPoint("LEFT", offBtn, "RIGHT", 4, 0)
+    backBtn:SetScript("OnClick", function() CysArmory:PutBack() end)
+    backBtn:HookScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_TOP")
+        GameTooltip:SetText("Put your gear back on", 1, 1, 1)
+        GameTooltip:AddLine("Wears what Take off removed.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    backBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    panel.backBtn = backBtn
+    UpdateBackButton()
+
     local close = CreateFrame("Button", nil, header)
     close:SetSize(24, 24)
     close:SetPoint("RIGHT", -6, 0)
@@ -879,6 +1071,14 @@ SlashCmdList["CYSARMORY"] = function(msg)
         CysArmory:EquipSet(name)
     elseif cmd == "delete" and name ~= "" then
         if not CysArmory:DeleteSet(name) then Say("|cFFFF4040Set not found.|r") end
+    elseif cmd == "unequip" or cmd == "takeoff" then
+        CysArmory:UnequipAll(name:lower() == "all")
+    elseif cmd == "putback" then
+        CysArmory:PutBack()
+    elseif cmd == "profile" and name ~= "" then
+        local setName, prof = name:match('^"(.-)"%s*(.-)$')
+        if not setName then setName, prof = name:match("^(%S+)%s*(.-)$") end
+        CysArmory:SetProfile(setName, prof)
     elseif cmd == "list" then
         names = {}
         for setName, set in pairs(GetDB()) do
@@ -892,6 +1092,9 @@ SlashCmdList["CYSARMORY"] = function(msg)
         print("  /armory equip <name>  - equip a set")
         print("  /armory delete <name> - delete a set")
         print("  /armory list          - list sets")
+        print("  /armory unequip [all] - take off gear (all = rings, trinkets too)")
+        print("  /armory putback       - wear it again")
+        print('  /armory profile <set> <profile|none> - Upgrade profile used with a set (use "set name" in quotes if it has spaces)')
     end
 end
 

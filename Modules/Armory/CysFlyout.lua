@@ -272,6 +272,42 @@ local function CreateFlyoutFrame()
     f.title = MakeText(f, 11, C.text)
     f.title:SetPoint("TOPLEFT", PAD, -8)
 
+    -- small "Take off" buttons (they use the Armory's take-off code, so they only show when it is on)
+    local function SmallButton(label, w, tipTitle, tipText)
+        local b = CreateFrame("Button", nil, f)
+        b:SetSize(w, 16)
+        local bg = b:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(C.slot[1], C.slot[2], C.slot[3], 1)
+        b.edges = MakeBorder(b, C.line, "BORDER")
+        b.label = MakeText(b, 10, C.accent)
+        b.label:SetPoint("CENTER")
+        b.label:SetText(label)
+        b:SetScript("OnEnter", function(self)
+            SetBorderColor(self.edges, C.accent[1], C.accent[2], C.accent[3])
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(tipTitle, 1, 1, 1)
+            GameTooltip:AddLine(tipText, 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        b:SetScript("OnLeave", function(self)
+            SetBorderColor(self.edges, C.line[1], C.line[2], C.line[3])
+            GameTooltip:Hide()
+        end)
+        return b
+    end
+    f.offAll = SmallButton("All", 28, "Take off all gear",
+        "Moves everything that can lose durability into your bags (good for a death run). Shift-click also takes off rings, trinkets and the rest. Cys's Armory's Put back button wears it again.")
+    f.offAll:SetPoint("TOPRIGHT", -PAD, -5)
+    f.offAll:SetScript("OnClick", function()
+        if CysArmory and CysArmory.UnequipAll then CysArmory:UnequipAll(IsShiftKeyDown()) end
+    end)
+    f.offOne = SmallButton("Take off", 48, "Take this off", "Moves the item in this slot into your bags.")
+    f.offOne:SetPoint("RIGHT", f.offAll, "LEFT", -4, 0)
+    f.offOne:SetScript("OnClick", function()
+        if CysArmory and CysArmory.UnequipSlot and f.invSlot then CysArmory:UnequipSlot(f.invSlot) end
+    end)
+
     local div = f:CreateTexture(nil, "BORDER")
     div:SetColorTexture(C.line[1], C.line[2], C.line[3], 1)
     div:SetPoint("TOPLEFT", PAD, -HEADER_H)
@@ -310,11 +346,15 @@ local function Populate(f, invSlot, info)
     local n = #list
 
     f.title:SetFormattedText("|cFFFFD100%s|r |cFF777777(%d)|r", _G[info[1]] or info[1], n)
+    local canOff = CysArmory and CysArmory.UnequipSlot and true or false
+    f.offAll:SetShown(canOff)
+    f.offOne:SetShown(canOff and GetInventoryItemLink("player", invSlot) ~= nil)
+    local minW = canOff and 190 or 130
     for i = 1, #f.buttons do f.buttons[i]:Hide() end
 
     if n == 0 then
         f.empty:Show()
-        f:SetSize(190, HEADER_H + 40)
+        f:SetSize(max(190, minW), HEADER_H + 40)
         return
     end
     f.empty:Hide()
@@ -323,7 +363,7 @@ local function Populate(f, invSlot, info)
     local cols = min(n, COLS_MAX)
     local rows = ceil(n / cols)
     local contentW = cols * SIZE + (cols - 1) * GAP
-    local width = max(contentW + PAD * 2, 130)
+    local width = max(contentW + PAD * 2, minW)
     local xOff = (width - contentW) / 2
     local top = HEADER_H + 8
     f:SetSize(width, top + rows * SIZE + (rows - 1) * GAP + PAD)
