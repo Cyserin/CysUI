@@ -2,7 +2,7 @@
 ## Title: Cys's UI
 ## Notes: A light, minimal UI made of small Cys addons: settings window (/cui), module switches and vendor helpers.
 ## Author: Cyserin
-## Version: 0.39.2
+## Version: 0.39.3
 ## SavedVariables: CysUIDB, CysMapDB, CysBagsDB, CysArmoryDB, CysSkillsDB, CysTotemsDB, CysRollTrackerDB
 ## OptionalDeps: Postal, ElvUI, Plater, Platynator, Bagnon, CysBags, CysArmory, CysSkills, CysTotems, CysRollTracker
 ## IconTexture: Interface\Icons\INV_Misc_Gear_01
@@ -14,6 +14,7 @@ Widgets.lua
 Movers.lua
 Config.lua
 Profile.lua
+Update.lua
 Scale.lua
 Conflicts.lua
 Vendor.lua

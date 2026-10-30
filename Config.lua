@@ -126,7 +126,8 @@ CUI:RegisterPage("General", function(page)
     title:SetText("Cys's UI")
     local ver = W.Text(page, 11, T.desc)
     ver:SetPoint("LEFT", title, "RIGHT", 8, -2)
-    ver:SetText("v" .. CUI:GetVersion("CysUI"))
+    ver:SetText("v" .. CUI:GetVersion("CysUI")
+        .. (CUI.newerVersion and ("   |cFF6CB6FFv" .. CUI.newerVersion .. " is out|r") or ""))
 
     local desc = W.Text(page, 12, T.text)
     desc:SetPoint("TOPLEFT", 0, -34)
@@ -213,7 +214,12 @@ CUI:RegisterPage("General", function(page)
     note:SetSpacing(3)
     note:SetText("Found a bug? Press |cFFFFD100Copy debug info|r, then post it with a screenshot at the address above under Issues.")
 
-    page.contentHeight = 780
+    local upd = W.Checkbox(page, "Tell me when a newer version is out (shared with guild and group)",
+        function() return CysUIDB.update and CysUIDB.update.enabled ~= false end,
+        function(v) CysUIDB.update = CysUIDB.update or {}; CysUIDB.update.enabled = v and true or false end)
+    upd:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -14)
+
+    page.contentHeight = 800
     RefreshMemory(page)
 end, RefreshMemory)
 

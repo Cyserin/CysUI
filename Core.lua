@@ -86,6 +86,7 @@ local DEFAULTS = {
     unitframes = { player = true, target = true, targettarget = true, pet = true, party = true,
                    classColors = true, healthText = "both" },
     castbar = { player = true, target = true, icon = true, time = true },
+    update = { enabled = true, notified = "0.0.0" },
     scale = { mode = "off", percent = 100, prompted = false },
     nameplates = { width = 112, height = 10, showLevel = true, healthText = true, classColors = true,
                    targetHighlight = true, myDebuffs = true, castBar = true, threat = "auto" },
@@ -298,21 +299,26 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.2",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.3",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.39.3", date = "2026-10-30",
+              added = {
+                  "Update notice: Cys's UI shares its version with your guild, party and raid. If someone has a newer one, you get one line in chat with the download address. Switch it off in /cui -> General.",
+              },
+            },
             { version = "0.39.2", date = "2026-10-29",
-              changed = {
+              fixed = {
                   "Upgrade page: the Guide button and the weight rows no longer sit under the scrollbar.",
               },
             },
             { version = "0.39.1", date = "2026-10-29",
-              changed = {
+              improved = {
                   "General page: the memory legend wraps onto two lines instead of being cut off.",
               },
             },
             { version = "0.39.0", date = "2026-10-29",
-              changed = {
+              improved = {
                   "General page reworked: memory shows in MB above 1 MB, with a green / yellow / red light (under 50 MB, 50-100 MB, over 100 MB).",
                   "New Tools: Copy debug info (for bug reports), Export / Import settings as one pasteable line, and Reset everything.",
                   "General page: modules-on count, a GitHub link, one changelog button; the footer now shows the version.",
@@ -320,49 +326,49 @@ if CysChangelog then
               },
             },
             { version = "0.38.37", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Battleground 'ready to enter' pop-up now has the Cys look.",
               },
             },
             { version = "0.38.36", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Options window: the stock 'Close' word no longer shows over the X on hover.",
               },
             },
             { version = "0.38.35", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Friends window: each person sits on a soft card with a status stripe, headers have a gold bar, and the title and footer have dividers. Names and details are a touch bigger.",
               },
             },
             { version = "0.38.34", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Options window: hovering the X no longer shows the stock 'Close' word and red X.",
                   "Options window, AddOns tab: other addons' pages now get flat tick boxes, sliders, dropdown boxes and buttons so they match.",
               },
             },
             { version = "0.38.33", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Options window: the Game and AddOns tab labels sit centred in their boxes.",
               },
             },
             { version = "0.38.32", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Key bindings page: the 'Not Bound' buttons are flat like the rest.",
               },
             },
             { version = "0.38.31", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Fixed the error when right-clicking a chat tab (the menu background no longer draws on the menu itself).",
                   "Fixed the 'Player trade window' skin failing when another addon adds odd frames to it.",
               },
             },
             { version = "0.38.30", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Options window: choice rows (Chat Style, New Whispers and the like) have flat < > arrows and a flat dropdown button.",
               },
             },
             { version = "0.38.29", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Options window: sliders are flat now - a thin dark track, a gold handle and flat end arrows.",
                   "Character window: the Honor tab's progress bar is flat in a hairline box, like the Reputation and Skills bars.",
               },
@@ -391,7 +397,7 @@ if CysChangelog then
               },
             },
             { version = "0.38.24", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Options window: the leftover stock lines and boxes around the category list and settings area are removed, and the Gameplay / Accessibility / System headers become gold text over a thin gold line.",
               },
             },
@@ -410,7 +416,7 @@ if CysChangelog then
               },
             },
             { version = "0.38.21", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Trade window: each item row (slot plus name) now sits in one dark box, and the Announce Trade tick box matches the ones in /cui.",
               },
             },
@@ -435,23 +441,23 @@ if CysChangelog then
               added = {
                   "Skins: the profession window (Alchemy, Blacksmithing, Cooking, First Aid...) now matches the rest of the UI: flat dark panel with a gold edge, flat skill bar, hairline icon boxes and flat buttons. It has its own switch on the Skins page.",
               },
-              changed = {
+              improved = {
                   "Layout mode: the Loot Window box name now wraps onto two lines.",
               },
             },
             { version = "0.38.16", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Layout mode: the names on the gold boxes are white with an outline, so they read on any background.",
                   "Menu bar: buttons get a soft gold highlight when you hover them, like the Esc menu.",
               },
             },
             { version = "0.38.15", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Experience bar: smaller text (10 at most), and the second line of the bar text now follows the same size as the first.",
               },
             },
             { version = "0.38.14", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Menu bar (Character, Spells, Talents...): every button now uses the same, slightly smaller text size instead of \"Character\" shrinking on its own.",
               },
             },
@@ -461,7 +467,7 @@ if CysChangelog then
               },
             },
             { version = "0.38.12", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Damage Meters: bars now run edge to edge inside the gold border (the edge sits outside the window now, so the extra inset is no longer needed).",
               },
             },
@@ -488,12 +494,12 @@ if CysChangelog then
               },
             },
             { version = "0.38.7", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Damage Meters: gold edge around the title strip (\"Damage Done\" / \"Healing Done\"), fainter bar colours, and white names and numbers on the bars. Press the skin button again to apply the bar and text changes.",
               },
             },
             { version = "0.38.6", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Damage Meters: taller title strip, bars are inset 3 pixels from the window edge so the spec icon no longer touches it, and each bar now has a subtle dark track behind it. Press the skin button again to apply.",
               },
             },
@@ -503,13 +509,13 @@ if CysChangelog then
               },
             },
             { version = "0.38.4", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Border color: Gold is now a brighter gold so it stands out on bright zones.",
                   "Damage Meters: the Details! title strip (\"Damage Done\", \"Healing Done\") now gets the dark Cys's UI background, and the window edge is two pixels thick (which also makes a clear gold line between two side-by-side windows).",
               },
             },
             { version = "0.38.3", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Action bars: slot borders are now two pixels thick so the gold (or class/blue) edge is easier to see.",
                   "Damage Meters: the Details! title strip now has a dark background with a gold line under it, and the bars are slightly taller with a 1 pixel gap. Pick the skin again (button on the Damage Meters page) to apply the bar changes.",
               },
@@ -520,7 +526,7 @@ if CysChangelog then
               },
             },
             { version = "0.38.1", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Damage Meters: the Details! skin now uses the game's normal font (bars and the gold window title) instead of Details' pixel font. Use the skin button again (or reselect the skin) to apply it.",
               },
             },
@@ -535,12 +541,12 @@ if CysChangelog then
               },
             },
             { version = "0.37.4", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Skins: skinned buttons (Esc menu, pop-ups and others) now light up gold under the mouse, not just brighten their edge; the right-click menu's gold border is drawn on top so nothing covers it.",
               },
             },
             { version = "0.37.3", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Skins: the right-click menu skin now searches every frame right after any click (the menu's frames do not sit where first guessed) and /cysmenu reports what it found.",
               },
             },
@@ -550,7 +556,7 @@ if CysChangelog then
               },
             },
             { version = "0.37.1", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Skins: the right-click menu on unit frames uses the game's newer menu system, so it now gets the flat dark look too (its background art is hidden and replaced as the menu and its submenus open).",
               },
             },
@@ -558,28 +564,28 @@ if CysChangelog then
               added = {
                   "Skins: pop-up dialogs (the logout countdown, confirmations) and right-click / dropdown menus now use the flat dark look with gold edges, and each has its own switch on the Skins page.",
               },
-              changed = {
+              improved = {
                   "Character window: the Reputation bars are flat (the standing colors stay) and the Skills bars are flat gold-brown in a thin box instead of glossy blue.",
                   "Character window, Skills tab: the skill list now spreads down toward the Close button instead of using only the top half of the window.",
               },
             },
             { version = "0.36.4", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Settings window: the long grey paragraphs on the Action Bars, Unit Frames, Raid Frames, Scale, Cast Bar, Chat, Minimap, Friends, Vendor, Roll Tracker and Skins pages are now short bulleted lists, with the key words in gold.",
               },
             },
             { version = "0.36.3", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Nameplates: the bulleted Auto threat explanation now indents its bullets and lines up wrapped lines under their own text.",
               },
             },
             { version = "0.36.2", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Nameplates: the Auto threat coloring description is now a short bulleted list (Tank, Damage, Healer, No role set), and the settings below it move with the text so nothing overlaps.",
               },
             },
             { version = "0.36.1", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Nameplates: Auto threat coloring now follows only the role you set for your group (Tank = tank colors, Damage or Healer = DPS colors, nothing set = DPS); the Upgrade profile and stance checks are gone. Tank, DPS and Off are still there to force a mode.",
                   "Settings window: descriptions and notes that were dark grey are now white, and a few section labels (like Threat coloring and the Upgrade stat/weight columns) are gold.",
               },
@@ -588,12 +594,12 @@ if CysChangelog then
               added = {
                   "Nameplates: threat coloring can be Auto (the new default). It follows your role: the role you set for your group, then your active Upgrade profile (a name with Tank, Prot or Defense counts as tank), then Defensive Stance, Bear Form or Righteous Fury; DPS otherwise. It switches by itself when that changes. Tank, DPS and Off are still there.",
               },
-              changed = {
+              improved = {
                   "Nameplates: the threat coloring setting is now a row of four buttons with a line under it saying what the choice means and which role Auto is using right now.",
               },
             },
             { version = "0.35.9", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Character window: the equipment slots are flat dark boxes with a thin edge in the item's quality colour (gold when empty or plain), instead of Blizzard's stone slot art.",
                   "Character window: the name, level/class and guild lines are centred on the window (they sat to the right, which pushed the guild line under the Sets button).",
               },
@@ -604,17 +610,17 @@ if CysChangelog then
               },
             },
             { version = "0.35.7", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Upgrade: the damage-and-healing stat is listed as Spell Power in the Replaces list, the same name SixtyUpgrades uses.",
               },
             },
             { version = "0.35.6", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Upgrade: the score and Upgrade/Downgrade number are now whole numbers like SixtyUpgrades (162 EP, +15 Upgrade), and Weapon Speed is listed as a plain change (-1 Weapon Speed) with the site's colors; the per-stat EP stays in grey.",
               },
             },
             { version = "0.35.5", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Upgrade: the \"Replaces\" list now shows gains first and losses after, each in alphabetical order like SixtyUpgrades, and lists the weapon's Damage (Min) and (Max) change too.",
               },
             },
@@ -633,7 +639,7 @@ if CysChangelog then
               added = {
                   "/cuiab prints what the first action buttons hold (stance, bonus bar, action slots, icons) so a bar that stays blank after login can be tracked down.",
               },
-              changed = {
+              improved = {
                   "Raid Debuffs: shorter category names under the icons (A.P., A.S., Judge) and tighter spacing so a full raid's ten boxes stay compact; the tooltip and settings page keep the full names, with the short form in brackets.",
                   "Raid Debuffs: boxes hide when the target is dead; the settings page says it covers your party or raid and explains what is tracked and how boxes are chosen.",
               },
@@ -643,7 +649,7 @@ if CysChangelog then
               },
             },
             { version = "0.35.1", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Warrior: the debuff icons were removed; Cys's Raid Debuffs does the same job for every class and only shows effects your group can apply. The Battle Shout alert is now hidden while resting (towns and inns) by default, with an option to show it only in combat.",
               },
               fixed = {
@@ -659,7 +665,7 @@ if CysChangelog then
               fixed = {
                   "Warrior: the Battle Shout missing alert now works with higher ranks of the spell (it only recognised rank 1).",
               },
-              changed = {
+              improved = {
                   "Warrior debuffs narrowed to the important effects: armor reduction, Thunder Clap and Demoralizing Shout (Rend, Hamstring and Mortal Strike removed).",
                   "Conflicts: MinimapButtonButton and Minimap Button Bag are detected and can be switched off in favor of Cys's Minimap Button.",
                   "Warrior debuffs: when several armor / attack-power debuffs are up, the strongest one is shown (Expose Armor, then Sunder, then Faerie Fire...), not just yours.",
@@ -682,7 +688,7 @@ if CysChangelog then
               fixed = {
                   "Action bars: the two empty dark boxes next to the bars on classes without stances (Blizzard's stance bar background) are hidden.",
               },
-              changed = {
+              improved = {
                   "Heal estimate now adds your bonus healing (cast time / 3.5, trimmed for low-level spells and low ranks). With no +healing it changes nothing.",
                   "Heal prediction: Classic Era gives no incoming-heal data, so the unit frames and raid frames now estimate your own heal from the spell's description while you cast it (the green segment, and the overheal sliver when it would be wasted).",
               },
@@ -702,7 +708,7 @@ if CysChangelog then
               },
             },
             { version = "0.33.12", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Loot: the loot window position (Blizzard's spot / at the mouse / fixed spot) and the group loot roll boxes now share one settings page, \"Loot\", under Loot & Items.",
               },
             },
@@ -731,7 +737,7 @@ if CysChangelog then
               added = {
                   "Upgrade: the tooltip shows Side-grade when two items score the same, lists only the stats that differ, biggest effect first, with what each is worth in EP, and says when the stats are identical.",
               },
-              changed = {
+              improved = {
                   "Upgrade: the settings page, the stat picker, and the import / export and guide windows now use the Cys theme.",
               },
             },
@@ -741,12 +747,12 @@ if CysChangelog then
               },
             },
             { version = "0.33.6", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Minimap Button: addon icons a touch smaller, with a little more room inside their boxes.",
               },
             },
             { version = "0.33.5", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Minimap Button: the addon icons fill their boxes instead of floating small in the middle.",
               },
             },
@@ -781,12 +787,12 @@ if CysChangelog then
               },
             },
             { version = "0.32.12", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Totems: each totem and the weapon button now sit on a black plate with the UI's border; the colored status rings (range, imbue, missing) stay inside it.",
               },
             },
             { version = "0.32.11", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Tooltip: new installs start with the follow-the-mouse tooltip lifted 20 px and shifted 160 px right, so it doesn't cover the icon under the mouse. Existing settings are untouched.",
               },
             },
@@ -847,7 +853,7 @@ if CysChangelog then
               fixed = {
                   "Experience bar: the text sits a little lower so it looks centered in the bar.",
               },
-              changed = {
+              improved = {
                   "Heal prediction: the overheal bar now reaches out past the player and target frames in proportion to how much of the heal would be wasted, and changes colour (teal, yellow, red) the more of it is wasted. It also shows when the unit is at full health.",
               },
             },
@@ -879,7 +885,7 @@ if CysChangelog then
                   "Raid Frames: role icons (tank shield, healer cross, damage sword) beside each name. A role set by the game's role check wins, then your Main Tank from the Raid tab, then a guess by class (priests heal, the rest damage). Set anyone by hand with /cysraid role [name] tank|healer|dps|clear (uses your target without a name), which is how to mark a tanking Shaman. A new button in /cui > Raid Frames switches icons between all roles, tank and healer only, or off.",
               } },
             { version = "0.28.4", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Raid Frames: the \"only debuffs my class can dispel\" borders now check which cleansing spells you have actually learned (Cure Disease, Dispel Magic, Remove Curse, Cleanse and so on), so a low-level character only sees what it can remove. Warlocks get Magic borders while a Felhunter is out.",
               } },
             { version = "0.28.3", date = "2026-10-29",
@@ -887,14 +893,14 @@ if CysChangelog then
                   "Raid Frames: new option \"Only borders for debuffs my class can dispel\" (on by default). Priests see Magic and Disease, Paladins Magic / Poison / Disease, Druids Curse and Poison, Shamans Poison and Disease, Mages Curse. Debuff icons are unchanged.",
               } },
             { version = "0.28.2", date = "2026-10-29",
-              changed = {
+              improved = {
                   "Raid Frames: 40-man now wraps into two rows of four groups (groups 1-4 on top, 5-8 below) instead of one very wide row.",
               } },
             { version = "0.28.1", date = "2026-10-29",
               added = {
                   "Raid Frames: the preview now shows a full made-up raid (up to 40 players) in the layout you picked, so you can compare 10, 20 and 40-man while solo. Press Preview again (or /cysraid test) to turn it off.",
               },
-              changed = {
+              improved = {
                   "Raid Frames moved to the Frames & Combat group in the settings window and the Modules list.",
               } },
             { version = "0.28.0", date = "2026-10-29",
