@@ -299,9 +299,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.40.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.41.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.41.0", date = "2026-10-30",
+              added = {
+                  "Level-Up Spells (new): when you level up or open your class trainer, a small box lists the spells worth buying now with the reason for each. It reads your spellbook, so spells you have are left out and anything you skipped stays on the list (marked 'from level N'). Optional picks are tagged. Guides so far, all Shaman: Earth Warden (Enhancement tank, from level 1), Dungeon DPS, Healer and Questing (from level 10). The box also lists what to skip at your level and why (for example Lightning Bolt ranks that are pull-only), and the settings page has a which-spell-to-use cheat sheet. Settings: /cui -> Level-Up Spells; move it with /cui layout; /cuilevel shows it, /cuilevel 30 previews level 30.",
+                  "Trainer scan: type /cuiscan at your class trainer to save its spells, levels and costs, and to check the guide's levels against the real ones.",
+                  "Class support list: the README, FEATURES.md and the new settings page show which classes and specs each module covers and what is still to add.",
+              },
+              improved = {
+                  "README: a Class support table and a 'Help test: healing numbers' note (/cuiheal works at full health).",
+              },
+            },
             { version = "0.40.0", date = "2026-10-30",
               added = {
                   "Totem bar (Shaman): each slot is now a button. Left-click drops the totem you picked; right-click a slot to pick a different one (only totems you know are listed).",

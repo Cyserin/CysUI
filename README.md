@@ -39,6 +39,9 @@ Running ElvUI too? Open the **Conflicts** page in `/cui`. Don't run two versions
 | `/cui debug` | Prints client version and feature checks (include this in bug reports) |
 | `/cui reload` | Reload the UI |
 | `/cfriends` | Friends window |
+| `/way 45 62 Name` | Drop a waypoint arrow (or Ctrl + left-click the world map) |
+| `/cuilevel` | Show the level-up spell box now (`/cuilevel 30` previews level 30) |
+| `/cuiscan` | At your class trainer: save its spell list and check the guide's levels |
 
 ## Screenshots
 
@@ -91,6 +94,23 @@ Running ElvUI too? Open the **Conflicts** page in `/cui`. Don't run two versions
 ![Spellbook and talents](Screenshots/readme/skins.png) ![Vendor](Screenshots/readme/vendor.png)
 
 ![Friends](Screenshots/readme/friends.png) ![Mail](Screenshots/readme/mail.png) ![Questie](Screenshots/readme/questie.png)
+
+## Class support
+
+Modules that depend on your class or spec. Anything not listed is on the list to add.
+
+| Module | Class / spec | Client | State |
+| --- | --- | --- | --- |
+| Level-Up Spells | Shaman: Earth Warden (Enhancement tank), Dungeon DPS, Healer, Questing | Era | in alpha, new in 0.41.0 |
+| Level-Up Spells | every other class | Era | to add |
+| Level-Up Spells | every class | WoW Forever | work in progress (no leveling guides out yet) |
+| Totem bar | Shaman | Era | in alpha |
+| Battle Shout alert | Warrior | Era | in alpha |
+| Raid debuffs, interrupt announcer, waypoints, upgrade scores | every class | Era | in alpha |
+
+## Help test: healing numbers
+
+The heal and mana previews can be checked in game, at full health too. Type `/cuiheal`, cast a few heals (different ranks, on yourself or others), type `/cuiheal` again, then `/reload`. The log lands in `WTF\Account\<name>\SavedVariables\CysUI.lua` under `healLog`; send that file (or the `healLog` part) in your report. No damage needed: the log records what the preview said next to what the heal really did.
 
 ## Settings are per feature
 

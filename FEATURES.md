@@ -31,9 +31,12 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Roll Tracker** *(layout)*: tracks /roll and pass results for loot and announces the winner; in raids only the leader, assistants and master looter announce.
 - **Raid Debuffs** *(layout)*: tracks the key debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements and more) and only shows the ones your group can apply.
 - **Kill Tracker**: learns your average XP per kill and shows how many more kills it takes to level.
+- **Level-Up Spells**: when you level up or open your trainer, a box lists the spells worth buying now and why; spells you skipped stay on the list. `/cuilevel` shows it, `/cuiscan` checks the guide against your trainer. Shaman guides so far (tank, dungeon DPS, healer, questing), see Class support below; it also lists what to skip and why.
+- **Interrupt announcer**: says "Interrupted <target>'s <spell>!" to your group (or just you) when you interrupt a cast. Any class.
+- **Waypoints**: a TomTom-style arrow with distance and time left. Ctrl + left-click the world map, `/way 45 62 Name`, or mark a Questie quest. *(layout)*
 - **Vendor**: Sell Junk button, optional auto-sell of grey items, auto-repair.
 - **Damage Meters**: a Cys skin for Details! (flat bars with gold edges).
-- **Class modules** (shown only for that class): **Totems** for Shaman (totem timers, range detection, weapon-imbue button) and **Warrior** (Battle Shout missing alert).
+- **Class modules** (shown only for that class): **Totems** for Shaman (a totem bar with timers, Drop All, loadouts, expiry alerts, action-bar macros and a weapon-imbue button) and **Warrior** (Battle Shout missing alert).
 
 ## Skins
 Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, skills, honor, spellbook, talents, macros, quest log and dialogs, gossip, loot, vendor, bank, mail, class trainer, trade, professions, enchanting, inspect, dressing room, battleground queue and scoreboard, world map, flight map, friends / Who / Guild, raid tab, LFG, guild and communities, options and key bindings, chat settings, AddOn list, pop-ups, right-click menus, dropdowns, pet stable, tabard and charters, clock and stopwatch. Also **Questie**'s tracker and the Details! meter, and the stock-looking widgets on other addons' pages inside the options window. Each skin has its own switch.
@@ -42,3 +45,15 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Memory light**: shows addon memory in KB or MB with a green / yellow / red status.
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.
+
+## Class support
+What each class-dependent module covers today (Classic Era). Guides and class modules are added as they are made.
+
+| Module | Supported | To add |
+| --- | --- | --- |
+| Level-Up Spells | Shaman: Earth Warden (tank), Dungeon DPS, Healer, Questing | every other class |
+| Totems | Shaman | |
+| Battle Shout alert | Warrior | |
+| Raid Debuffs, Interrupts, Waypoints, Upgrade | all classes | |
+
+WoW Forever: the level-up guides are a work in progress, because no leveling guides for Forever's classes exist yet.
