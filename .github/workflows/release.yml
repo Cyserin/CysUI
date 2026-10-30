@@ -1,7 +1,7 @@
 name: Release
 
 # Every time you push to main, this checks the version in CysUI.toc.
-# If that version has no release yet, it builds the zip and publishes it.
+# If that version has no release yet, it zips the addon and publishes it as an alpha release.
 on:
   push:
     branches: [main]
@@ -12,6 +12,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,22 +24,40 @@ jobs:
         run: |
           v=$(grep -m1 '^## Version:' CysUI.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          if git rev-parse "v$v" >/dev/null 2>&1; then
+          if gh release view "v$v" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Tag this version
+      - name: Build the zip
         if: steps.ver.outputs.exists == 'false'
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          git tag "v${{ steps.ver.outputs.version }}"
-          git push origin "v${{ steps.ver.outputs.version }}"
+          v="${{ steps.ver.outputs.version }}"
+          mkdir -p build/CysUI
+          rsync -a \
+            --exclude='.git' --exclude='.github' --exclude='.gitignore' \
+            --exclude='.gitattributes' --exclude='.pkgmeta' \
+            --exclude='Screenshots' --exclude='build' \
+            ./ build/CysUI/
+          (cd build && zip -rq "../CysUI-v$v.zip" CysUI)
+          ls -l "CysUI-v$v.zip"
 
-      - name: Package and publish
+      - name: Publish the release
         if: steps.ver.outputs.exists == 'false'
-        uses: BigWigsMods/packager@v2
-        env:
-          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          cat > notes.md <<'EOF'
+          Alpha test build. Download the file named **CysUI-v...zip** below (not "Source code").
+
+          Unzip it so the folder is named exactly `CysUI` and sits in
+          `World of Warcraft\_classic_era_\Interface\AddOns\`, then type `/cui` in game.
+
+          What changed is in the game: `/cui` -> What's New.
+          Bugs and ideas: use the Issues tab.
+          EOF
+          gh release create "v$v" "CysUI-v$v.zip" \
+            --target "$GITHUB_SHA" \
+            --title "Cys's UI v$v (alpha)" \
+            --prerelease \
+            --notes-file notes.md
