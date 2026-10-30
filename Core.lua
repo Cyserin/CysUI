@@ -308,7 +308,7 @@ if CysChangelog then
                   "Item tooltips: the CysUpgrade line has a gold label so it stands apart from the Armory's blue line.",
               },
               fixed = {
-                  "Macro window: the panel now wraps the Delete / New / Exit buttons instead of letting them hang off the bottom.",
+                  "Macro window: the panel now wraps the Delete / New / Exit buttons instead of letting them hang off the bottom, the macro list's scroll bar is flat, the macro text box has the Cys edge, and the macro / icon slots are flat boxes instead of Blizzard's stone slots.",
               },
             },
             { version = "0.39.4", date = "2026-10-30",

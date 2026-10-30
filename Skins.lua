@@ -308,6 +308,7 @@ local function SkinArrow(btn, glyph)
     btn:HookScript("OnLeave", function() fs:SetTextColor(T.text[1], T.text[2], T.text[3]) end)
 end
 
+local SkinMinimalScrollBar -- defined further down
 local function SkinScrollBar(sb)
     if sb.cysSkinned then return end
     sb.cysSkinned = true
@@ -757,8 +758,24 @@ local function SkinMacros()
     local f = Get("MacroFrame")
     if not f then return end
     Strip(f)
-    local panel = Panel(f, 10, 3, -32, -8) -- reaches down past the Delete / New / Exit row
+    local panel = Panel(f, 0, 3, 26, -8) -- reaches down past the Delete / New / Exit row
     SkinClose(Get("MacroFrameCloseButton"), panel)
+    -- the macro list's scroll bar, and the box around the macro text
+    local sel = f.MacroSelector
+    if sel and sel.ScrollBar then Safe(SkinMinimalScrollBar, sel.ScrollBar) end
+    local tb = Get("MacroFrameTextBackground")
+    if tb and not tb.cysBox then
+        tb.cysBox = true
+        if tb.NineSlice then tb.NineSlice:SetAlpha(0) end
+        Blank(tb)
+        Box(tb, T.line, 0, 0)
+    end
+    if sel and sel.ScrollBar then
+        for _, k in ipairs({ "Background", "Backplate" }) do
+            local part = sel.ScrollBar[k]
+            if part and part.SetAlpha then part:SetAlpha(0) end
+        end
+    end
     HookTabs()
     SkinTabs("MacroFrameTab", 2, nil, { 4, -3, -4, 3 })
     SkinTree(f, 4)
@@ -767,6 +784,53 @@ local function SkinMacros()
         Strip(pop)
         Panel(pop, 6, -6, -6, 6)
         SkinTree(pop, 3)
+    end
+
+    -- The icon slots (the macro list, the selected macro and the icon picker) keep the stone slot art.
+    -- The list is recycled by its scroll box, so look again now and then while the window is open.
+    local function SkinSlot(btn)
+        if not btn or btn.cysSlot or btn.cysOwn then return end
+        local okT, typ = pcall(btn.GetObjectType, btn)
+        if not okT or (typ ~= "Button" and typ ~= "CheckButton") then return end
+        local name = btn.GetName and btn:GetName()
+        local icon = btn.Icon or btn.icon or (name and _G[name .. "Icon"])
+        if not (icon and icon.SetTexCoord) then return end
+        btn.cysSlot = true
+        local hl = btn.GetHighlightTexture and btn:GetHighlightTexture()
+        local ck = btn.GetCheckedTexture and btn:GetCheckedTexture()
+        Blank(btn, function(r)
+            return r == icon or r == hl or r == ck or r == btn.SelectedTexture or r == btn.Selected
+        end)
+        icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        Box(btn, T.line, 0, 0)
+    end
+    local function Each(root, depth)
+        if not root then return end
+        for _, c in ipairs(Kids(root)) do
+            Safe(SkinSlot, c)
+            if depth > 1 then Each(c, depth - 1) end
+        end
+    end
+    local function SlotPass()
+        Each(f.MacroSelector, 5)
+        Safe(SkinSlot, Get("MacroFrameSelectedMacroButton"))
+        Each(Get("MacroPopupFrame"), 6)
+    end
+    SlotPass()
+    if not f.cysSlotHook then
+        f.cysSlotHook = true
+        local ticker
+        f:HookScript("OnShow", function()
+            SlotPass()
+            if ticker then ticker:Cancel() end
+            ticker = C_Timer.NewTicker(0.4, SlotPass)
+        end)
+        f:HookScript("OnHide", function()
+            if ticker then ticker:Cancel(); ticker = nil end
+        end)
+        if f:IsShown() then
+            ticker = C_Timer.NewTicker(0.4, SlotPass)
+        end
     end
 end
 
@@ -1132,7 +1196,7 @@ local function FadeKeyedArt(w)
 end
 
 -- Blizzard's slim scrollbars (Back / Track / Thumb / Forward): flat gold thumb on a dark track, ^ and v arrows
-local function SkinMinimalScrollBar(sb)
+function SkinMinimalScrollBar(sb)
     if not sb or sb.cysSkinned or not sb.Track then return end
     sb.cysSkinned = true
     local tr = sb.Track
@@ -1149,6 +1213,11 @@ local function SkinMinimalScrollBar(sb)
     end
     if sb.Back then SkinArrow(sb.Back, "^") end
     if sb.Forward then SkinArrow(sb.Forward, "v") end
+    -- the ornate end caps and backplate of the "trim" style bar (macro list and others)
+    for _, k in ipairs({ "Background", "Backplate" }) do
+        local part = sb[k]
+        if part and part.SetAlpha then part:SetAlpha(0) end
+    end
 end
 
 local function SkinDropdown(dd)
