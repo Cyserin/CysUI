@@ -27,8 +27,8 @@ local GROUPS = {
 
 -- Class pages live under CLASS: a General page (works for every class), then a heading for your own class
 -- (in its class color) with that class's pages under it. Only your own class is listed.
-local CLASS_GENERAL = { "Level-Up Spells" }
-local LABELS = { ["Level-Up Spells"] = "General" } -- sidebar text when it differs from the page title
+local CLASS_GENERAL = { "Level-Up Spells", "Heal Advisor" }
+local LABELS = {} -- sidebar text when it differs from the page title
 -- Classic still uses the old pink for Shamans; the game's newer clients use blue, so we do too.
 local CLASSES = {
     { "DRUID", "Druid", 1.00, 0.49, 0.04 },     { "HUNTER", "Hunter", 0.67, 0.83, 0.45 },
@@ -276,7 +276,7 @@ local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "grouploot", "rolls", "upgrade" } },
-    { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "warrior", "shoutremind" } },
+    { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "healadvisor", "warrior", "shoutremind" } },
 }
 
 CUI:RegisterPage("Modules", function(page)
@@ -492,7 +492,7 @@ local function CreateWindow()
         local list = Collect(g[2])
         if #list > 0 then sections[#sections + 1] = { name = g[1], key = g[1], level = 1, pages = list } end
     end
-    -- class section: General (works for every class), then every class in its class color (yours first)
+    -- class section: General (tools that work for every class), then every class in its class color (yours first)
     -- with the pages tagged for it. Classes with nothing yet say so, so the section doubles as an overview.
     local _, myClass = UnitClass("player")
     local general = Collect(CLASS_GENERAL)
@@ -504,7 +504,11 @@ local function CreateWindow()
             placed[i] = true
         end
     end
-    sections[#sections + 1] = { name = "Class", key = "Class", level = 1, pages = general }
+    sections[#sections + 1] = { name = "Class", key = "Class", level = 1, pages = {} }
+    if #general > 0 then
+        sections[#sections + 1] = { name = "General", key = "Class/General", level = 2, pages = general,
+            color = { r = 0.92, g = 0.92, b = 0.92 } }
+    end
     local ordered = {}
     for _, c in ipairs(CLASSES) do if c[1] == myClass then ordered[#ordered + 1] = c end end
     for _, c in ipairs(CLASSES) do if c[1] ~= myClass then ordered[#ordered + 1] = c end end

@@ -4,7 +4,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 
 ## Frames and combat
 - **Action bars** *(layout)*: bars 1-8, pet bar and stance bar, flat and resizable, using Blizzard's own buttons so keybinds and macros behave. Rarity and gold edges.
-- **Unit frames** *(layout)*: player, target, target-of-target, pet and party, with auras and combo points.
+- **Unit frames** *(layout)*: player (with a mana number on the mana bar), target, target-of-target, pet and party, with auras and combo points.
 - **Raid frames** *(layout)*: 10, 20 and 40-player layouts (auto-picked or forced), class colors, missing health, incoming heals, debuff icons with colored borders (only the ones you can dispel, optional), range fade, role icons, a preview mode.
 - **Nameplates**: class and reaction colors, "mob is on you" coloring, your debuffs, a small cast bar, a gold target frame.
 - **Cast bars** *(layout)*: for you and your target, with icon, spell name, time left and an interrupt flag.
@@ -31,6 +31,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Roll Tracker** *(layout)*: tracks /roll and pass results for loot and announces the winner; in raids only the leader, assistants and master looter announce.
 - **Raid Debuffs** *(layout)*: tracks the key debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements and more) and only shows the ones your group can apply.
 - **Kill Tracker**: learns your average XP per kill and shows how many more kills it takes to level.
+- **Heal Advisor** (Druid, Paladin, Priest, Shaman): `/cuirank` opens a window that reads your stats, healing talents and heal ranks and says which rank to use for small hits, general healing, heavy damage, emergencies and group healing (only spells you know). Scan saves your stats; a popup says when learning something changes the advice. Preview shows a sample healer and Copy report makes text to paste into a bug report.
 - **Tremor Alert** (Shaman): a Tremor Totem icon with mob - ability lines when a mob that fears, charms or sleeps is in the pack. Ships with a dungeon list and learns new NPC casters as you play (never players, never in battlegrounds or arenas).
 - **Level-Up Spells**: when you level up or open your trainer, a box lists the spells worth buying now and why; spells you skipped stay on the list. `/cuilevel` shows it (`/cuilevel 24 restoration` previews any guide), `/cuiscan` checks the guide against your trainer. Shaman guides so far (Earth Warden tank, Enhancement, Elemental, Restoration); it asks which guide to follow at level 10 and when you get a second talent spec, see Class support below; it also lists what to skip and why.
 - **Interrupt announcer**: says "Interrupted <target>'s <spell>!" to your group (or just you) when you interrupt a cast. Any class.
@@ -54,6 +55,7 @@ What each class-dependent module covers today (Classic Era). Guides and class mo
 | --- | --- | --- |
 | Level-Up Spells | Shaman: Earth Warden (tank), Enhancement, Elemental, Restoration | every other class |
 | Totems | Shaman | |
+| Heal Advisor | Shaman, Priest, Druid, Paladin (healing spells) | Paladin Judgement/Holy Shock extras |
 | Tremor Alert | Shaman | |
 | Battle Shout alert | Warrior | |
 | Raid Debuffs, Interrupts, Waypoints, Upgrade | all classes | |

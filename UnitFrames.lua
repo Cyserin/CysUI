@@ -299,6 +299,21 @@ local function UpdatePower(f)
     local r, g, b = PowerColor(unit)
     f.power:SetStatusBarColor(r, g, b)
 
+    -- number on the mana bar (player only; Settings > Unit Frames)
+    if f.powerText then
+        local mode = DB().manaText or "current"
+        local cur = UnitPower(unit)
+        if mode == "off" or mx <= 0 then
+            f.powerText:SetText("")
+        elseif mode == "both" then
+            f.powerText:SetText(cur .. " / " .. mx)
+        elseif mode == "percent" then
+            f.powerText:SetText(format("%d%%", floor(cur / mx * 100 + 0.5)))
+        else
+            f.powerText:SetText(tostring(cur))
+        end
+    end
+
     -- Cast cost preview (player only): a white segment at the end of the bar covering the mana the spell being cast will use
     if f.costTex then
         local cost = 0
@@ -417,7 +432,7 @@ local function CreateUnitFrame(def)
         f.power:SetStatusBarTexture(FLAT)
         f.power:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
         f.power:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
-        f.power:SetHeight(7)
+        f.power:SetHeight(def.powerH or 7)
         W.Texture(f.power, "BACKGROUND", { T.field[1], T.field[2], T.field[3], 1 }):SetAllPoints()
         f.costTex = f.power:CreateTexture(nil, "ARTWORK", nil, 2)
         f.costTex:SetTexture(FLAT)
@@ -462,6 +477,11 @@ local function CreateUnitFrame(def)
     f.healthText = overlay:CreateFontString(nil, "OVERLAY")
     f.healthText:SetFont(STANDARD_TEXT_FONT, def.fontSize or 11, "OUTLINE")
     f.healthText:SetPoint("RIGHT", f.health, "RIGHT", -5, 0)
+    if def.powerH and f.power then
+        f.powerText = overlay:CreateFontString(nil, "OVERLAY")
+        f.powerText:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+        f.powerText:SetPoint("RIGHT", f.power, "RIGHT", -4, 0)
+    end
     f.name = overlay:CreateFontString(nil, "OVERLAY")
     f.name:SetFont(STANDARD_TEXT_FONT, def.fontSize or 11, "OUTLINE")
     f.name:SetJustifyH("LEFT")
@@ -525,7 +545,7 @@ local function CreateUnitFrame(def)
 end
 
 local DEFS = {
-    player       = { unit = "player", name = "CysUIPlayerFrame", w = 230, h = 48, power = true,
+    player       = { unit = "player", name = "CysUIPlayerFrame", w = 230, h = 48, power = true, powerH = 11,
                      label = "Player Frame", point = "CENTER", x = -200, y = -170 },
     target       = { unit = "target", name = "CysUITargetFrame", w = 230, h = 48, power = true, auras = true, combo = true,
                      watch = true, label = "Target Frame", point = "CENTER", x = 200, y = -170 },
@@ -645,8 +665,16 @@ CUI:RegisterPage("Unit Frames", function(page)
         end, "Health text: ")
     textBtn:SetPoint("TOPLEFT", 4, -66)
 
-    W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -108)
-    local y = -138
+    local manaBtn = W.Dropdown(page, 230, { { "current", "current" }, { "both", "current / max" }, { "percent", "percent" }, { "off", "off" } },
+        function() return db.manaText or "current" end,
+        function(v)
+            db.manaText = v
+            for _, f in pairs(UF.frames) do if f.powerText and UnitExists(f.unit) then UF:Update(f) end end
+        end, "Mana number (player): ")
+    manaBtn:SetPoint("TOPLEFT", 4, -98)
+
+    W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -140)
+    local y = -170
     for _, row in ipairs({ { "player", "Player" }, { "target", "Target (with buffs, debuffs, combo points)" },
                            { "targettarget", "Target of target" }, { "pet", "Pet" }, { "party", "Party" } }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] end, function(on) db[row[1]] = on end)
@@ -665,53 +693,3 @@ CUI:RegisterPage("Unit Frames", function(page)
             "If anything looks wrong, untick Unit Frames under Modules and reload: the game's own frames come straight back.",
         })
 end)
---------------------------------------------------------------------------------
--- /cuiheal: records what the heal / mana-cost previews say next to what really happens, so they can be checked.
--- Turn it on, cast a few heals (different ranks, on yourself and others), turn it off, /reload.
--- The log is kept in CysUIDB.healLog (last 80 lines).
---------------------------------------------------------------------------------
-do
-    local active = false
-    local ev = CreateFrame("Frame")
-    local function Log(msg)
-        CysUIDB.healLog = CysUIDB.healLog or {}
-        local t = CysUIDB.healLog
-        t[#t + 1] = format("%.1f ", GetTime()) .. msg
-        while #t > 80 do table.remove(t, 1) end
-        if CysUI and CysUI.Print then CysUI:Print("|cFF999999heal log:|r " .. msg) end
-    end
-    ev:SetScript("OnEvent", function(_, event, ...)
-        if event == "UNIT_SPELLCAST_START" then
-            local name, _, _, _, _, _, _, _, spellID = UnitCastingInfo("player")
-            local tgt = UnitExists("target") and "target" or "player"
-            local pred = UnitGetIncomingHeals and UnitGetIncomingHeals(tgt)
-            local cost, ctype
-            if spellID and GetSpellPowerCost then
-                local ok, costs = pcall(GetSpellPowerCost, spellID)
-                if ok and type(costs) == "table" and costs[1] then cost, ctype = costs[1].cost, costs[1].type end
-            end
-            Log(format("CAST %s id=%s rank=%s | target=%s hp=%d/%d | predicted=%s | cost=%s (type %s) mana=%d",
-                tostring(name), tostring(spellID), tostring(GetSpellSubtext and spellID and GetSpellSubtext(spellID)),
-                tgt, UnitHealth(tgt), UnitHealthMax(tgt), tostring(pred), tostring(cost), tostring(ctype), UnitPower("player")))
-        elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-            local _, sub, _, srcGUID, _, _, _, _, destName, _, _, spellID, spellName, _, amount, overheal, _, crit =
-                CombatLogGetCurrentEventInfo()
-            if sub == "SPELL_HEAL" and srcGUID == UnitGUID("player") then
-                Log(format("HEAL %s id=%s on %s: amount=%s overheal=%s crit=%s", tostring(spellName), tostring(spellID),
-                    tostring(destName), tostring(amount), tostring(overheal), tostring(crit)))
-            end
-        end
-    end)
-    SLASH_CUIHEAL1 = "/cuiheal"
-    SlashCmdList["CUIHEAL"] = function()
-        active = not active
-        if active then
-            CysUIDB.healLog = {}
-            ev:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
-            ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-        else
-            ev:UnregisterAllEvents()
-        end
-        CysUI:Print("heal logging " .. (active and "ON: cast some heals, then type /cuiheal again to stop and /reload" or "OFF"))
-    end
-end

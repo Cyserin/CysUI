@@ -46,10 +46,11 @@ Running ElvUI too? Open the **Conflicts** page in `/cui`. Don't run two versions
 | `/cystotems` | Totem loadouts (`load`, `save`, `list`), Shaman |
 | `/cysraid` | Raid frames: `test`, or `role <name> tank/healer/dps/clear` |
 | `/cysmap` | Reset the world map position, or `scale 0.8` to resize it |
-| `/cuiheal` | Heal log for testing the healing numbers (see Help test) |
+| `/cuiheal` | Heal test: scans you, checks each heal rank against what it really heals (see Help test) |
 | `/way 45 62 Name` | Drop a waypoint arrow (or Ctrl + left-click the world map) |
 | `/cuilevel` | Show the level-up spell box now. `/cuilevel 30` previews level 30, `/cuilevel 24 restoration` previews another guide, `/cuilevel list` names them |
 | `/cuiscan` | At your class trainer: save its spell list and check the guide's levels |
+| `/cuirank` | Healers: open the Heal Advisor (which heal rank to use for what; `scan` takes a new scan, `preview` shows a sample, `report` makes a copyable report for bug reports) |
 | `/cuitremor` | Shaman: test the Tremor alert (`list` shows learned mobs, `clear` forgets them) |
 
 ## Screenshots
@@ -114,13 +115,21 @@ Modules that depend on your class or spec. Anything not listed is on the list to
 | Level-Up Spells | every other class | Era | to add |
 | Level-Up Spells | every class | WoW Forever | work in progress (no leveling guides out yet) |
 | Totem bar | Shaman | Era | in alpha |
+| Heal Advisor | Shaman (Healing Wave, Lesser Healing Wave, Chain Heal); Priest, Druid and Paladin heals (new, unchecked in game) | Era | in alpha, new in 0.41.0 |
 | Tremor Alert | Shaman (dungeon list Wailing Caverns to Scholomance, learns new NPCs) | Era | in alpha, new in 0.41.0 |
 | Battle Shout alert | Warrior | Era | in alpha |
 | Raid debuffs, interrupt announcer, waypoints, upgrade scores | every class | Era | in alpha |
 
 ## Help test: healing numbers
 
-The heal and mana previews can be checked in game, at full health too. Type `/cuiheal`, cast a few heals (different ranks, on yourself or others), type `/cuiheal` again, then `/reload`. The log lands in `WTF\Account\<name>\SavedVariables\CysUI.lua` under `healLog`; send that file (or the `healLog` part) in your report. No damage needed: the log records what the preview said next to what the heal really did.
+Healers (Druid, Paladin, Priest, Shaman) can help check the Heal Advisor's numbers:
+
+1. Equip the gear you normally heal in.
+2. Type `/cuiheal`. It scans your character by itself and opens a small Heal Test box.
+3. Cast each heal rank once on anyone, even yourself at full health. A critical heal does not count (it doubles the number); the box tells you to cast that rank again.
+4. When the box says **All ranks logged**, click **Copy report**, press Ctrl+A then Ctrl+C. In the `cysui-feedback` channel in Discord type `/bug`, pick your class under **area**, and paste the report into **text**. The report is split into parts that fit Discord's limit; click **Next part** and send each one the same way.
+
+Closing the box turns the test off. `/cuiheal off` turns it off and `/cuiheal clear` starts the list over.
 
 ## Settings are per feature
 
