@@ -13,7 +13,7 @@ local CUI = CysUI
 local W = CUI.W
 local T = W.T
 
-local DEFAULTS = { onLevel = true, onTrainer = true, guide = {} }
+local DEFAULTS = { onLevel = true, onTrainer = true, char = {}, asked = {} } -- char / asked: per character
 
 local function DB()
     CysUIDB = CysUIDB or {}
@@ -35,10 +35,19 @@ local function ClassGuides()
     return (CUI.LevelGuides and CUI.LevelGuides[cls]) or {}, cls
 end
 
+local function CharKey()
+    return (UnitName("player") or "?") .. "-" .. (GetRealmName and GetRealmName() or "?")
+end
+
+local function GuideLabel(g)
+    return g.name .. (g.role and (" (" .. g.role .. ")") or "")
+end
+
+-- the guide this character follows (chosen at level 10, changeable in settings); the first one until then
 local function CurrentGuide()
     local list, cls = ClassGuides()
     if #list == 0 then return nil, cls end
-    local want = DB().guide[cls]
+    local want = DB().char[CharKey()]
     for _, g in ipairs(list) do
         if g.key == want then return g, cls end
     end
@@ -343,6 +352,100 @@ local function Scan()
 end
 
 --------------------------------------------------------------------------------
+-- "Which are you leveling as?" - asked at level 10, and again at 40
+--------------------------------------------------------------------------------
+local chooser
+
+local function BuildChooser()
+    if chooser then return chooser end
+    chooser = CreateFrame("Frame", "CysLevelUpChoose", UIParent)
+    chooser:SetSize(340, 120)
+    chooser:SetPoint("CENTER", UIParent, "CENTER", 0, 140)
+    chooser:SetFrameStrata("DIALOG")
+    chooser:SetClampedToScreen(true)
+    chooser:SetMovable(true)
+    chooser:EnableMouse(true)
+    chooser:RegisterForDrag("LeftButton")
+    chooser:SetScript("OnDragStart", chooser.StartMoving)
+    chooser:SetScript("OnDragStop", chooser.StopMovingOrSizing)
+    W.Texture(chooser, "BACKGROUND", T.bg):SetAllPoints()
+    W.Border(chooser, 2, T.border, "BORDER")
+    local strip = W.Texture(chooser, "ARTWORK", T.header)
+    strip:SetPoint("TOPLEFT", 2, -2)
+    strip:SetPoint("TOPRIGHT", -2, -2)
+    strip:SetHeight(20)
+    local line = W.Texture(chooser, "ARTWORK", T.brand)
+    line:SetPoint("TOPLEFT", 2, -22)
+    line:SetPoint("TOPRIGHT", -2, -22)
+    line:SetHeight(2)
+    local head = W.Text(chooser, 11, T.accent)
+    head:SetPoint("TOPLEFT", 10, -7)
+    head:SetText("CYS'S SPELL SCOUT")
+    chooser.title = W.Text(chooser, 13, T.accent)
+    chooser.title:SetPoint("TOPLEFT", 10, -32)
+    chooser.text = W.Text(chooser, 11, T.desc)
+    chooser.text:SetPoint("TOPLEFT", 10, -52)
+    chooser.text:SetWidth(320)
+    chooser.text:SetJustifyV("TOP")
+    chooser.btns = {}
+    chooser:Hide()
+    return chooser
+end
+
+local function Choose(key)
+    DB().char[CharKey()] = key
+    if chooser then chooser:Hide() end
+    local g = CurrentGuide()
+    if g then CUI:Print("Spell Scout will follow: " .. GuideLabel(g) .. ". Change it any time under /cui -> Level-Up Spells.") end
+    Show(UnitLevel("player"), "level")
+end
+
+-- asks once per milestone (10, then 40) per character; returns true when the question is up
+local function MaybeAsk(level)
+    local list = ClassGuides()
+    if #list < 2 then return false end
+    local db = DB()
+    local key = CharKey()
+    local milestone = level >= 40 and 40 or (level >= 10 and 10 or 0)
+    if milestone == 0 or (db.asked[key] or 0) >= milestone then return false end
+    db.asked[key] = milestone
+    BuildChooser()
+    if milestone == 10 then
+        chooser.title:SetText("Which are you leveling as?")
+        chooser.text:SetText("Pick the guide Spell Scout follows for your spell recommendations. You can change it any time under /cui -> Level-Up Spells.")
+    else
+        chooser.title:SetText("Level 40: still on the same guide?")
+        chooser.text:SetText("If your plan changed (a new spec, or questing as a different one), pick the guide to follow from here.")
+    end
+    local y = -92
+    for i, g in ipairs(list) do
+        local b = chooser.btns[i]
+        if not b then
+            b = W.Button(chooser, 320, 24, "")
+            chooser.btns[i] = b
+        end
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", chooser, "TOPLEFT", 10, y)
+        b:SetLabel(GuideLabel(g))
+        b:SetScript("OnClick", function() Choose(g.key) end)
+        b:Show()
+        y = y - 28
+    end
+    for i = #list + 1, #chooser.btns do chooser.btns[i]:Hide() end
+    local skip = chooser.skip
+    if not skip then
+        skip = W.Button(chooser, 320, 20, "Ask me later (keep the current guide)")
+        chooser.skip = skip
+        skip:SetScript("OnClick", function() chooser:Hide(); Show(UnitLevel("player"), "level") end)
+    end
+    skip:ClearAllPoints()
+    skip:SetPoint("TOPLEFT", chooser, "TOPLEFT", 10, y - 2)
+    chooser:SetHeight(-y + 36)
+    chooser:Show()
+    return true
+end
+
+--------------------------------------------------------------------------------
 -- Events and commands
 --------------------------------------------------------------------------------
 local frame
@@ -353,6 +456,7 @@ local function Enable()
     Build() -- so the box shows up in layout mode
     frame = CreateFrame("Frame")
     frame:RegisterEvent("PLAYER_LEVEL_UP")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("PLAYER_REGEN_ENABLED")
     frame:RegisterEvent("TRAINER_SHOW")
     frame:RegisterEvent("TRAINER_CLOSED")
@@ -366,13 +470,28 @@ local function Enable()
             if InCombatLockdown() then return end
             if C_Timer and C_Timer.After then
                 C_Timer.After(1.5, function()
-                    if pendingLevel then Show(pendingLevel, "level"); pendingLevel = nil end
+                    if pendingLevel then
+                        local lv = pendingLevel
+                        pendingLevel = nil
+                        if not MaybeAsk(lv) then Show(lv, "level") end -- the question comes first; the box follows the answer
+                    end
                 end)
             else
                 Show(pendingLevel, "level"); pendingLevel = nil
             end
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            -- already past 10 (or 40) on a character that was never asked
+            if db.onLevel and C_Timer and C_Timer.After then
+                C_Timer.After(4, function()
+                    if not InCombatLockdown() then MaybeAsk(UnitLevel("player")) end
+                end)
+            end
         elseif event == "PLAYER_REGEN_ENABLED" then
-            if pendingLevel then Show(pendingLevel, "level"); pendingLevel = nil end
+            if pendingLevel then
+                local lv = pendingLevel
+                pendingLevel = nil
+                if not MaybeAsk(lv) then Show(lv, "level") end
+            end
         elseif event == "TRAINER_SHOW" then
             if db.onTrainer then Show(UnitLevel("player"), "trainer") end
         elseif event == "TRAINER_CLOSED" then
@@ -445,12 +564,12 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     local list, cls = ClassGuides()
     local gl = W.Text(page, 12, T.accent)
     gl:SetPoint("TOPLEFT", 4, y - 6)
-    gl:SetText("Guide for your class")
+    gl:SetText("Guide this character follows (click to change)")
     local gb = W.Button(page, 300, 22, "")
     gb:SetPoint("TOPLEFT", 4, y - 26)
     local function ShowGuide()
         local g = CurrentGuide()
-        gb:SetLabel(g and (g.name .. " (" .. g.role .. ")") or "No guide for your class yet")
+        gb:SetLabel(g and GuideLabel(g) or "No guide for your class yet")
     end
     ShowGuide()
     gb:SetScript("OnClick", function()
@@ -458,7 +577,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
         local cur = CurrentGuide()
         local idx = 1
         for i, g in ipairs(list) do if cur and g.key == cur.key then idx = i end end
-        db.guide[cls] = list[idx % #list + 1].key
+        db.char[CharKey()] = list[idx % #list + 1].key
         ShowGuide()
     end)
     y = y - 62
@@ -474,7 +593,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
         local gs = CUI.LevelGuides and CUI.LevelGuides[c]
         if gs then
             for _, g in ipairs(gs) do
-                lines[#lines + 1] = { CLASS_NAMES[c] .. " - " .. g.name, g.role .. " (" .. g.client .. ")" }
+                lines[#lines + 1] = { CLASS_NAMES[c] .. " - " .. g.name, GuideLabel(g) .. ", " .. g.client }
             end
         end
     end
@@ -496,7 +615,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     W.Notes(page, 4, y, width, "", {
         { "/cuilevel", "show the box now; /cuilevel 30 previews what you would buy at level 30" },
         { "/cuiscan", "at your class trainer: saves the trainer's spells and checks the guide's levels (helps fix the guides)" },
-        "The Enhancement, Elemental, Healer and Questing guides start at level 10; levels 1 to 8 are only in Earth Warden.",
+        "Enhancement, Elemental and Restoration start at level 10; levels 1 to 8 are only in Earth Warden. At level 10 (and again at 40) the first time you play each character, Spell Scout asks which guide to follow.",
         "Other classes and specs, and WoW Forever, are being added as guides become available.",
     })
 end)

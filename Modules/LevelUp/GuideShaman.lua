@@ -15,7 +15,7 @@ CUI.LevelGuides.SHAMAN = CUI.LevelGuides.SHAMAN or {}
 table.insert(CUI.LevelGuides.SHAMAN, {
     key = "earthwarden",
     name = "Earth Warden",
-    role = "Tank",
+    role = "Tank",  -- "Earth Warden" is a community name, not a spec, so it gets a (Tank) tag; the real specs do not
     spec = "Enhancement",
     client = "Era",
     spells = {
@@ -85,7 +85,7 @@ table.insert(CUI.LevelGuides.SHAMAN, {
 -- The full Shaman table: one row per trainer level, split by what you play.
 --   T = tank (Earth Warden above is the tank list)   D = dungeon DPS   H = healing   Q = questing
 --   all = worth buying whatever you play             skip = spells NOT worth the gold, and why
--- More guides (Enhancement DPS, Elemental DPS, Healer, Questing) are built from it below.
+-- More guides (Enhancement, Elemental, Restoration) are built from it below.
 --------------------------------------------------------------------------------
 local ROWS = {
     { 10, D = "Strength of Earth R1", Q = "Flametongue Weapon R1, Searing Totem R1, Flame Shock R1" },
@@ -143,10 +143,10 @@ local function Parse(list, level, out)
     end
 end
 
-local function Build(key, name, role, spec, tag)
+local function Build(key, name, role, spec, tags)
     local g = { key = key, name = name, role = role, spec = spec, client = "Era", spells = {}, skips = {} }
     for _, row in ipairs(ROWS) do
-        Parse(row[tag], row[1], g.spells)
+        for _, tag in ipairs(tags) do Parse(row[tag], row[1], g.spells) end
         Parse(row.all, row[1], g.spells)
         for _, s in ipairs(row.skip or {}) do
             local what, why = s:match("^(.-)|(.*)$")
@@ -154,7 +154,7 @@ local function Build(key, name, role, spec, tag)
             g.skips[#g.skips + 1] = { level = row[1], spell = sp or what, rank = tonumber(rk), why = why }
         end
     end
-    -- Windfury Weapon is tagged for both D and Q in two columns; keep each guide free of repeats
+    -- a spell tagged in more than one column (Windfury Weapon is D and Q) is listed once
     local seen, uniq = {}, {}
     for _, e in ipairs(g.spells) do
         local k = e.spell .. ":" .. (e.rank or 0)
@@ -164,21 +164,21 @@ local function Build(key, name, role, spec, tag)
     return g
 end
 
-table.insert(CUI.LevelGuides.SHAMAN, Build("enhancement", "Enhancement DPS", "Enhancement, dungeon DPS", "Enhancement", "D"))
+-- Enhancement and Elemental both level by questing and run dungeons, so they take the dungeon-DPS (D) and questing (Q) picks.
+table.insert(CUI.LevelGuides.SHAMAN, Build("enhancement", "Enhancement", nil, "Enhancement", { "D", "Q" }))
 
--- Elemental: only the shared DPS list exists so far, so this one is a draft. Windfury Weapon is a melee
--- spell and the table's skip notes assume an Enhancement pull, so both are left out until there is an Elemental list.
+-- Elemental: only the shared DPS list exists so far, so this one is a draft. The weapon imbues are melee spells
+-- and the table's skip notes assume an Enhancement pull, so all of those are left out until there is an Elemental list.
 do
-    local g = Build("elemental", "Elemental DPS (draft)", "Elemental, dungeon DPS", "Elemental", "D")
+    local g = Build("elemental", "Elemental (draft)", nil, "Elemental", { "D", "Q" })
     local keep = {}
     for _, e in ipairs(g.spells) do
-        if e.spell ~= "Windfury Weapon" then keep[#keep + 1] = e end
+        if e.spell ~= "Windfury Weapon" and e.spell ~= "Flametongue Weapon" then keep[#keep + 1] = e end
     end
     g.spells, g.skips, g.draft = keep, {}, true
     table.insert(CUI.LevelGuides.SHAMAN, g)
 end
-table.insert(CUI.LevelGuides.SHAMAN, Build("heal", "Healer", "Restoration", "Restoration", "H"))
-table.insert(CUI.LevelGuides.SHAMAN, Build("quest", "Questing", "Any spec", "any", "Q"))
+table.insert(CUI.LevelGuides.SHAMAN, Build("heal", "Restoration", nil, "Restoration", { "H" }))
 
 -- quick reference shown on the settings page: which spell to use for what
 CUI.LevelTips = CUI.LevelTips or {}
