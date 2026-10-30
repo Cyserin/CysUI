@@ -299,9 +299,23 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.5",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.40.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.40.0", date = "2026-10-30",
+              added = {
+                  "Totem bar (Shaman): each slot is now a button. Left-click drops the totem you picked; right-click a slot to pick a different one (only totems you know are listed).",
+                  "Drop all: one button that drops your picked totems in order, one per press (right-click it for options). Right-click a slot to leave that element out of Drop all.",
+                  "Timers: each slot shows the time left on the totem that is down.",
+                  "Alerts: a slot flashes (with a chat line and a sound) 10 seconds before a totem runs out, and tells you when one is destroyed. Both can be switched off in the Drop all menu.",
+                  "Loadouts: save your four picks under a name and switch in one click, or with /cystotems load <name> (works in a macro).",
+                  "Action-bar macros: switch on 'Keep action-bar macros in step' in the Drop all menu and CT_Earth, CT_Fire, CT_Water, CT_Air and CT_DropAll are made and kept up to date. Drag them onto your bars once; they follow your picks.",
+                  "Interrupt announcer (any class): says 'Interrupted <target>'s <spell>!' when one of your spells interrupts a cast. Pick the channel and the wording under /cui -> Interrupts.",
+              },
+              fixed = {
+                  "Totem action-bar macros now follow the totem you pick (the icon no longer stays on the old one), and the Drop all button shows your four picked totems instead of a blank square.",
+              },
+            },
             { version = "0.39.5", date = "2026-10-30",
               improved = {
                   "Armory: the Take off button asks for a second click before it strips your gear. The 'All' button is gone from the Alt flyout, so one slot can't turn into everything by accident.",
