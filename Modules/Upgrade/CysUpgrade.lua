@@ -1098,7 +1098,7 @@ end
 local function BuildUpgradeSettingsPage(page)
     local W = CysUI.W
     local T = W.T
-    local width = 500
+    local width = 484 -- the page scrollbar sits at the right edge, so stay clear of it
 
     -- themed text box
     local function Input(parent, w, h)

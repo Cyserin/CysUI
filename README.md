@@ -1,8 +1,26 @@
 # Cys's UI
 
-A light, flat, gold-and-dark replacement UI for **WoW Classic Era** — one addon instead of a stack of them. Built to take over from ElvUI without the weight: every piece is a module you can switch on or off, and everything can be moved and resized.
+A light, flat, gold-and-dark replacement UI for **WoW Classic Era**: one addon instead of a stack of them. It takes over from ElvUI without the weight. Every piece is a module you can switch on or off, and everything can be moved and resized.
 
-> **Status: public test.** Built and played on Classic Era (1.15.9). It is also being prepared for **WoW Forever** (interface 16001, launching Nov 4, 2026) — that side is untested until launch. Bug reports from both are very welcome (see [Reporting a bug](#reporting-a-bug)).
+> **Status: public test.** Built and played on Classic Era (1.15.9). It is also being prepared for **WoW Forever** (interface 16001, launching Nov 4, 2026); that side is untested until launch. Bug reports from both are very welcome (see [Reporting a bug](#reporting-a-bug)).
+
+![Cys's UI](Screenshots/readme/ui-overview.png)
+
+## What it can replace
+
+| If you use | Cys's UI has |
+| --- | --- |
+| **ElvUI** | Action bars, unit frames, raid frames, chat, tooltips, minimap, info bars, XP bar, bags, nameplates, cast bars, group-loot boxes and skins for the Blizzard windows |
+| **Plater / Platynator** | Flat nameplates: class and reaction colors, "mob is on you" coloring, your debuffs, a small cast bar and a gold target frame. It is not a scripting engine like Plater |
+| **Postal** | Tick mails in the inbox (shift-click for a range), then Open or Return the ticked ones. Blizzard's Open All stays |
+| **Pawn** | Scores gear with stat weights you choose, adds the score and "Upgrade / Downgrade / Side-grade" to item tooltips, and marks bag items that beat what you wear. Imports a [SixtyUpgrades](https://sixtyupgrades.com) CSV |
+| **Bagnon / AdiBags** | One categorized, searchable, sortable bag window, plus a matching bank |
+| **Titan Panel / bar addons** | An info bar with combat timer, guild and friends online, durability, bag slots, gold, FPS and latency, clock |
+| **Chatter / Prat** | Flat chat with a Copy button, class-colored names, timestamps |
+
+It plays well with **Details!**, **Questie**, **Postal**, **Plater** and **Platynator**, and has its own skins for Details! and Questie. `/cui` has a **Conflicts** page that lists what overlaps so you can turn one side off.
+
+The full list of what each module does is in **[FEATURES.md](FEATURES.md)**.
 
 ## Install
 
@@ -10,61 +28,87 @@ A light, flat, gold-and-dark replacement UI for **WoW Classic Era** — one addo
 2. Unzip it so the folder is named exactly **`CysUI`** and sits in `World of Warcraft\_classic_era_\Interface\AddOns\`.
 3. Start the game and type **`/cui`**.
 
-Running ElvUI too? Type `/cui` and open the **Conflicts** page — it lists what overlaps so you can turn one side off. Don't run both versions of the same piece (two action bars, two chat windows) at once.
+Running ElvUI too? Open the **Conflicts** page in `/cui`. Don't run two versions of the same piece (two action bars, two chat windows) at once.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `/cui` | Settings window — a page per module, every feature has a switch |
-| `/cui layout` | Layout mode — drag and resize every frame, snap to the grid |
+| `/cui` | Settings window: a page per module, every feature has a switch |
+| `/cui layout` | Layout mode: drag and resize every frame, snap to the grid |
 | `/cui debug` | Prints client version and feature checks (include this in bug reports) |
 | `/cui reload` | Reload the UI |
 | `/cfriends` | Friends window |
 
-## What's inside
+## Screenshots
 
-**Core UI**
-- Action bars 1–8, pet and stance bars (Blizzard's own buttons, so keybinds and macros behave)
-- Unit frames (player, target, target-of-target, pet, party), raid frames for 10/20/40, nameplates
-- Cast bars, player buffs/debuffs, group loot roll boxes
-- Chat with copy button, class-colored names and timestamps; tooltips with rarity borders and vendor prices
-- Minimap with zone bar and coordinates, a single button that gathers every other addon's minimap button
-- Info bar, micro menu, slim XP bar, pixel-perfect UI scale
-- Friends window (game + Battle.net friends, Who, Guild, Ignore)
+**In combat**
 
-**Cys's modules** (each can be turned off)
-- **Bags & Bank** — categorized, searchable, sortable, drag to recategorize
-- **Armory** — save gear sets, one-click swap; Alt-hover equipment flyout
-- **Upgrade** — scores gear with stat weights you choose and marks bag items that beat what you wear
-- **Skills** — weapon skill and profession tracker
-- **Mail** — tick mails, then Open or Return the ticked ones
-- **Roll Tracker** — tracks /roll and pass results and announces the winner
-- **Raid Debuffs** — key raid debuffs on your target, only the ones your group can apply
-- **Kill Tracker** — kills left to level
-- **Totems** (Shaman) and **Warrior** helpers — class modules, shown only for that class
-- **Damage Meters** — a Cys skin for [Details!](https://www.curseforge.com/wow/addons/details)
+![In combat](Screenshots/readme/ui-combat.png)
 
-**Skins** — the Blizzard windows you actually use get the same look: character, reputation, skills, honor, spellbook, talents, macros, quest log and dialogs, gossip, loot, vendor, bank, mail, trainer, trade, professions, inspect, dressing room, battleground queue and scoreboard, world map, flight map, options and key bindings, chat settings, AddOn list, pop-ups and menus. Also skins for **Questie**'s tracker, the Details! meter and others' stock-looking options pages.
+**Layout mode**: move and resize every frame
+
+![Layout mode](Screenshots/readme/layout-mode.png)
+
+**Bags** and **Armory** (gear sets next to the character window)
+
+![Bags](Screenshots/readme/bags.png) ![Character and Armory](Screenshots/readme/character.png)
+
+**Tooltips** with an item score, and **nameplates**
+
+![Tooltip](Screenshots/readme/tooltip.png) ![Upgrade tooltip](Screenshots/readme/tooltip-upgrade.png)
+
+![Nameplate](Screenshots/readme/nameplate.png)
+
+**Upgrade**: choose your stat weights, get an upgrade arrow on better gear
+
+![Upgrade settings](Screenshots/readme/upgrade.png) ![Stat weights](Screenshots/readme/upgrade-weights.png)
+
+**Minimap button tray**: addon buttons collected into one tidy flyout
+
+![Minimap button](Screenshots/readme/minimap-button.png)
+
+**Border color**: pick one for every frame edge (gold, class color, black, grey or shaman blue)
+
+<img src="Screenshots/readme/border-gold.png" width="49%"> <img src="Screenshots/readme/border-class.png" width="49%">
+<img src="Screenshots/readme/border-blue.png" width="49%"> <img src="Screenshots/readme/border-grey.png" width="49%">
+<img src="Screenshots/readme/border-black.png" width="49%">
+
+**Settings**: a switch for every module, with a memory light (green, yellow, red) and Export / Import / Debug tools
+
+![Settings](Screenshots/readme/settings.png)
+
+**Raid frames** for 10, 20 and 40 players
+
+![10-man](Screenshots/readme/10raid.png)
+![20-man](Screenshots/readme/20raid.png)
+![40-man](Screenshots/readme/40raid.png)
+
+**Blizzard windows with the same look**
+
+![Options window](Screenshots/readme/options.png)
+
+![Spellbook and talents](Screenshots/readme/skins.png) ![Vendor](Screenshots/readme/vendor.png)
+
+![Friends](Screenshots/readme/friends.png) ![Mail](Screenshots/readme/mail.png) ![Questie](Screenshots/readme/questie.png)
 
 ## Settings are per feature
 
-Nothing is all-or-nothing. `/cui` has a switch for each module and for each skin, so if one thing doesn't suit you (or clashes with another addon) turn just that off.
+Nothing is all-or-nothing. `/cui` has a switch for each module and for each skin, so if one thing doesn't suit you (or clashes with another addon) turn just that off. **Export settings** makes one line you can send to a friend, and **Import settings** loads theirs.
 
 ## Reporting a bug
 
-Open an [issue](../../issues) with:
+Open an [issue](../../issues/new/choose) and pick **Bug report**. It asks for:
 1. What you did and what you expected
 2. The red error text, if any (a BugSack/BugGrabber screenshot is perfect)
-3. The output of **`/cui debug`**
+3. The output of **Copy debug info** (`/cui` -> General -> Tools)
 4. Whether you're on Classic Era or WoW Forever
 
-Screenshots of anything that looks off are the fastest way to get it fixed.
+Suggestions go the same way, under **Suggestion**. Screenshots of anything that looks off are the fastest way to get it fixed.
 
 ## Notes
 
-- Saved variables: `CysUIDB` and one per module (`CysBagsDB`, `CysArmoryDB`, …). To start fresh, delete them from `WTF\Account\<name>\SavedVariables` with the game closed.
-- Optional companions it plays well with: Details!, Questie, Postal, Plater / Platynator.
+- Saved variables: `CysUIDB` and one per module (`CysBagsDB`, `CysArmoryDB`, ...). To start fresh, use **Reset everything** in `/cui`, or delete them from `WTF\Account\<name>\SavedVariables` with the game closed.
 - The Auction House module is not part of this release.
 
 ## Credits & license

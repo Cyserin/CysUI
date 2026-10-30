@@ -8,3 +8,7 @@ part*.lua
 *.zip
 .DS_Store
 Thumbs.db
+
+# screenshots: only the cleaned copies in Screenshots/readme/ go on GitHub
+Screenshots/*
+!Screenshots/readme/

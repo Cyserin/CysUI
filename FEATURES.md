@@ -1,0 +1,44 @@
+# What Cys's UI does
+
+Every item below has its own switch in `/cui`. Anything marked *(layout)* can be moved and resized in `/cui layout`.
+
+## Frames and combat
+- **Action bars** *(layout)*: bars 1-8, pet bar and stance bar, flat and resizable, using Blizzard's own buttons so keybinds and macros behave. Rarity and gold edges.
+- **Unit frames** *(layout)*: player, target, target-of-target, pet and party, with auras and combo points.
+- **Raid frames** *(layout)*: 10, 20 and 40-player layouts (auto-picked or forced), class colors, missing health, incoming heals, debuff icons with colored borders (only the ones you can dispel, optional), range fade, role icons, a preview mode.
+- **Nameplates**: class and reaction colors, "mob is on you" coloring, your debuffs, a small cast bar, a gold target frame.
+- **Cast bars** *(layout)*: for you and your target, with icon, spell name, time left and an interrupt flag.
+- **Player auras** *(layout)*: movable buff and debuff rows with gold borders; right-click to cancel.
+- **Group loot boxes** *(layout)*: skins Blizzard's Need / Greed roll boxes.
+
+## Interface
+- **Chat** *(layout)*: flat, gold-edged windows with a Copy button, class-colored names and timestamps.
+- **Tooltips** *(layout)*: flat gold-edged, rarity borders, class-colored names, vendor sell price, movable.
+- **Minimap** *(layout)*: square, zone bar, coordinates, mouse-wheel zoom. **Minimap Button** gathers every other addon's minimap button behind one Cys button.
+- **Info bar** *(layout)*: combat timer, guild and friends online, durability, bag slots, gold, FPS and latency, clock. Can be split across a main bar and a bar under the minimap.
+- **Micro menu** *(layout)*: a text menu for Character, Spells, Talents, Quests, Social, Guild, Bags, Menu.
+- **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
+- **UI scale**: pixel-perfect scale for your resolution.
+- **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`.
+- **Layout mode**: drag and resize everything, snap to a grid, reset one or all.
+
+## Cys's modules
+- **Bags** *(layout)*: one categorized window with a sidebar, search, sort, an "All slots" view, drag to recategorize. **Bank** does the same at any banker.
+- **Armory**: save gear as named sets and put them back on in one click; bind sets to a spec. **Equipment flyout**: hold Alt over a character slot to see bag items that fit it.
+- **Upgrade**: scores gear with stat weights you choose, shows the score and Upgrade / Downgrade on item tooltips, marks bag items that beat what you wear. SixtyUpgrades CSV import, weapon speed counts, profiles switch with your talent spec.
+- **Skills** *(layout)*: weapon skill and profession tracker for the gear you have equipped.
+- **Mail**: tick mails, shift-click for a range, Open or Return the ticked ones.
+- **Roll Tracker** *(layout)*: tracks /roll and pass results for loot and announces the winner; in raids only the leader, assistants and master looter announce.
+- **Raid Debuffs** *(layout)*: tracks the key debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements and more) and only shows the ones your group can apply.
+- **Kill Tracker**: learns your average XP per kill and shows how many more kills it takes to level.
+- **Vendor**: Sell Junk button, optional auto-sell of grey items, auto-repair.
+- **Damage Meters**: a Cys skin for Details! (flat bars with gold edges).
+- **Class modules** (shown only for that class): **Totems** for Shaman (totem timers, range detection, weapon-imbue button) and **Warrior** (Battle Shout missing alert).
+
+## Skins
+Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, skills, honor, spellbook, talents, macros, quest log and dialogs, gossip, loot, vendor, bank, mail, class trainer, trade, professions, enchanting, inspect, dressing room, battleground queue and scoreboard, world map, flight map, friends / Who / Guild, raid tab, LFG, guild and communities, options and key bindings, chat settings, AddOn list, pop-ups, right-click menus, dropdowns, pet stable, tabard and charters, clock and stopwatch. Also **Questie**'s tracker and the Details! meter, and the stock-looking widgets on other addons' pages inside the options window. Each skin has its own switch.
+
+## Tools (`/cui` -> General)
+- **Memory light**: shows addon memory in KB or MB with a green / yellow / red status.
+- **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
+- **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.

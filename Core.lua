@@ -298,9 +298,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.1",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.2",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.39.2", date = "2026-10-29",
+              changed = {
+                  "Upgrade page: the Guide button and the weight rows no longer sit under the scrollbar.",
+              },
+            },
             { version = "0.39.1", date = "2026-10-29",
               changed = {
                   "General page: the memory legend wraps onto two lines instead of being cut off.",
