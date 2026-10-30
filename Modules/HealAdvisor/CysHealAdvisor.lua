@@ -898,10 +898,17 @@ function CUI.HealAdvisorReport()
                     if ok and type(d) == "string" then raw = d:gsub("[\r\n]+", " "):sub(1, 45) end
                 end
                 local lv = GetSpellLevelLearned and GetSpellLevelLearned(r.id) or "?"
+                local castTxt = ""
+                if GetSpellInfo then
+                    local okI, _, _, _, castMs = pcall(GetSpellInfo, r.id)
+                    if okI and type(castMs) == "number" then
+                        castTxt = string.format(" cast game %.1f adv %s", castMs / 1000, Fmt1(r.cast))
+                    end
+                end
                 local t = ht.ranks[r.id]
-                local test = ""
+                local test = castTxt
                 if t then
-                    test = string.format(" | amount %s, overheal %s%s%s", tostring(t.real), tostring(t.over or 0), t.pred and (", game preview " .. t.pred) or "", t.clean and "" or " (critical, not clean)")
+                    test = castTxt .. string.format(" | amount %s, overheal %s%s", tostring(t.real), tostring(t.over or 0), t.clean and "" or " (critical, not clean)")
                 end
                 add(string.format("- %s rank %s id %s lvl %s heal %s cost %s%s | %s", name, r.rank, tostring(r.id), tostring(lv), Fmt(r.heal), Fmt(r.cost), test, raw))
             end
