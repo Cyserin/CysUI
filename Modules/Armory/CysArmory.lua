@@ -885,11 +885,24 @@ local function CreatePanel()
 
     local offBtn = CreateFlatButton(header, 58, 18, "Take off")
     offBtn:SetPoint("LEFT", header, "LEFT", 104, 0)
-    offBtn:SetScript("OnClick", function() CysArmory:UnequipAll(IsShiftKeyDown()) end)
+    -- two clicks, so a stray click can't strip your gear
+    offBtn:SetScript("OnClick", function(self)
+        if self.armed then
+            self.armed = false
+            self.label:SetText("Take off")
+            CysArmory:UnequipAll(IsShiftKeyDown())
+        else
+            self.armed = true
+            self.label:SetText("Sure?")
+            C_Timer.After(3, function()
+                if self.armed then self.armed = false; self.label:SetText("Take off") end
+            end)
+        end
+    end)
     offBtn:HookScript("OnEnter", function(s)
         GameTooltip:SetOwner(s, "ANCHOR_TOP")
-        GameTooltip:SetText("Take off your gear", 1, 1, 1)
-        GameTooltip:AddLine("Moves everything that can lose durability into your bags. Hold Shift to take off rings, trinkets and the rest too.", 0.8, 0.8, 0.8, true)
+        GameTooltip:SetText("Take off all your gear", 1, 1, 1)
+        GameTooltip:AddLine("Click twice to confirm. Moves everything that can lose durability into your bags (good for a death run). Hold Shift on the second click to take off rings, trinkets and the rest too.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     offBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)

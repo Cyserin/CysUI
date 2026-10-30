@@ -299,9 +299,18 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.4",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.39.5",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.39.5", date = "2026-10-30",
+              improved = {
+                  "Armory: the Take off button asks for a second click before it strips your gear. The 'All' button is gone from the Alt flyout, so one slot can't turn into everything by accident.",
+                  "Item tooltips: the CysUpgrade line has a gold label so it stands apart from the Armory's blue line.",
+              },
+              fixed = {
+                  "Macro window: the panel now wraps the Delete / New / Exit buttons instead of letting them hang off the bottom.",
+              },
+            },
             { version = "0.39.4", date = "2026-10-30",
               added = {
                   "Take off gear: Alt-hover a slot on the character window for 'Take off' (this slot) and 'All' (everything that can lose durability; Shift also takes rings, trinkets and the rest). Handy for death runs. The Armory panel has Take off and Put back buttons, and /armory unequip, /armory putback.",

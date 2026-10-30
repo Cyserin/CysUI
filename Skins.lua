@@ -757,7 +757,7 @@ local function SkinMacros()
     local f = Get("MacroFrame")
     if not f then return end
     Strip(f)
-    local panel = Panel(f, 10, 3, -32, 24)
+    local panel = Panel(f, 10, 3, -32, -8) -- reaches down past the Delete / New / Exit row
     SkinClose(Get("MacroFrameCloseButton"), panel)
     HookTabs()
     SkinTabs("MacroFrameTab", 2, nil, { 4, -3, -4, 3 })

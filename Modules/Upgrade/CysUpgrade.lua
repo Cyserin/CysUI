@@ -440,11 +440,11 @@ local function OnTooltipItem(tooltip)
 
     tooltip:AddLine(" ")
     if netDiff > SIDEGRADE then
-        tooltip:AddLine(string.format("CysUpgrade Score [%s]: %s EP |cff20ff20(+%s Upgrade)|r", profName, Whole(itemScore), Whole(netDiff)), 0, 1, 1)
+        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP |cff20ff20(+%s Upgrade)|r", profName, Whole(itemScore), Whole(netDiff)), 1, 1, 1)
     elseif netDiff < -SIDEGRADE then
-        tooltip:AddLine(string.format("CysUpgrade Score [%s]: %s EP |cffff2020(-%s Downgrade)|r", profName, Whole(itemScore), Whole(netDiff)), 0, 1, 1)
+        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP |cffff2020(-%s Downgrade)|r", profName, Whole(itemScore), Whole(netDiff)), 1, 1, 1)
     else
-        tooltip:AddLine(string.format("CysUpgrade Score [%s]: %s EP |cffffd100(Side-grade)|r", profName, Whole(itemScore)), 0, 1, 1)
+        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP |cffffd100(Side-grade)|r", profName, Whole(itemScore)), 1, 1, 1)
     end
 
     if not equippedLink then

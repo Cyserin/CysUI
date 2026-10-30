@@ -296,14 +296,8 @@ local function CreateFlyoutFrame()
         end)
         return b
     end
-    f.offAll = SmallButton("All", 28, "Take off all gear",
-        "Moves everything that can lose durability into your bags (good for a death run). Shift-click also takes off rings, trinkets and the rest. Cys's Armory's Put back button wears it again.")
-    f.offAll:SetPoint("TOPRIGHT", -PAD, -5)
-    f.offAll:SetScript("OnClick", function()
-        if CysArmory and CysArmory.UnequipAll then CysArmory:UnequipAll(IsShiftKeyDown()) end
-    end)
     f.offOne = SmallButton("Take off", 48, "Take this off", "Moves the item in this slot into your bags.")
-    f.offOne:SetPoint("RIGHT", f.offAll, "LEFT", -4, 0)
+    f.offOne:SetPoint("TOPRIGHT", -PAD, -5)
     f.offOne:SetScript("OnClick", function()
         if CysArmory and CysArmory.UnequipSlot and f.invSlot then CysArmory:UnequipSlot(f.invSlot) end
     end)
@@ -347,14 +341,13 @@ local function Populate(f, invSlot, info)
 
     f.title:SetFormattedText("|cFFFFD100%s|r |cFF777777(%d)|r", _G[info[1]] or info[1], n)
     local canOff = CysArmory and CysArmory.UnequipSlot and true or false
-    f.offAll:SetShown(canOff)
     f.offOne:SetShown(canOff and GetInventoryItemLink("player", invSlot) ~= nil)
-    local minW = canOff and 190 or 130
+    local minW = canOff and 150 or 130
     for i = 1, #f.buttons do f.buttons[i]:Hide() end
 
     if n == 0 then
         f.empty:Show()
-        f:SetSize(max(190, minW), HEADER_H + 40)
+        f:SetSize(max(150, minW), HEADER_H + 40)
         return
     end
     f.empty:Hide()
