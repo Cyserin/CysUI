@@ -1,0 +1,43 @@
+name: Release
+
+# Every time you push to main, this checks the version in CysUI.toc.
+# If that version has no release yet, it builds the zip and publishes it.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from CysUI.toc
+        id: ver
+        run: |
+          v=$(grep -m1 '^## Version:' CysUI.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$v" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag this version
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git tag "v${{ steps.ver.outputs.version }}"
+          git push origin "v${{ steps.ver.outputs.version }}"
+
+      - name: Package and publish
+        if: steps.ver.outputs.exists == 'false'
+        uses: BigWigsMods/packager@v2
+        env:
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
