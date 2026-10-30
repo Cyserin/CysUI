@@ -113,4 +113,4 @@ Suggestions go the same way, under **Suggestion**. Screenshots of anything that 
 
 ## Credits & license
 
-Made by **Randon** (Cys). Released under the [MIT license](LICENSE).
+Made by **Cyserin** (Cys). Released under the [MIT license](LICENSE).
