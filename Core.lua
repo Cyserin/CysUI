@@ -319,9 +319,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.50.1",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.50.2",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.50.2", date = "2026-10-31",
+              improved = {
+                  "Combat Log Player tab: the damage / healing switch and the player picker are now drop-down lists instead of cycle buttons.",
+                  "Combat Log bars are flat solid color strips instead of the rounded Blizzard status bar texture.",
+              },
+              fixed = {
+                  "Combat Log: totems with a rank number in their name (Searing Totem II, Stoneskin Totem III and so on) are now credited to the Shaman who dropped them, with their uptime and damage, instead of showing up as their own player.",
+                  "Combat Log: long text on the Class tab and the empty tab messages no longer wrap onto two lines.",
+              },
+            },
             { version = "0.50.1", date = "2026-10-31",
               improved = {
                   "Combat Log window: the close button is now a flat dark square that turns red when the mouse is over it, and the paging buttons are flat translucent dark with a thin border.",

@@ -165,6 +165,8 @@ local AREA_TAUNTS = { ["Challenging Shout"] = true, ["Challenging Roar"] = true 
 
 local debuffs, pbuffs, totems, totByOwner = {}, {}, {}, {}   -- open timers, see AuraEvent / Totem handling
 
+-- "Searing Totem II" -> "Searing Totem": totem and aura names carry their rank
+local function Base(n) return (n:gsub("%s+[IVX]+$", "")) end
 local function Overlap(a1, a2, b1, b2) return max(0, min(a2, b2) - max(a1, b1)) end
 local function Credit(map, guid, name, secs)
     if secs <= 0 then return end
@@ -246,7 +248,7 @@ local function Actor(guid, name, spell)
     local owner = petOwner[guid]
     if owner then return owner, "Pet: " .. spell end
     local tot = totems[guid]
-    if tot then return tot.owner, "Totem: " .. spell end
+    if tot then return tot.owner, tot.name .. ": " .. spell end
     -- an unowned guardian or totem: listed under its own name
     if run and not run.players[guid] then
         run.players[guid] = NewPlayer(guid, name or "?", nil)
@@ -611,6 +613,7 @@ end
 
 local function AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, spell, spellId)
     local removed = sub == "SPELL_AURA_REMOVED"
+    if not BOSS_DEBUFFS[spell] and not PLAYER_BUFFS[spell] then spell = Base(spell) end
     if sub == "SPELL_AURA_APPLIED" and dPlayer and spellId and MECH_AURAS[spellId] then
         local label = MECH_AURAS[spellId]
         Each(dGUID, function(mp)
@@ -777,11 +780,12 @@ local function OnCombatLog()
 
     -- totems standing (Tremor, Windfury, ...) ------------------------------------
     if sub == "SPELL_SUMMON" then
-        local life = dName and TOTEM_LIFE[dName]
+        local tname = dName and Base(dName)
+        local life = tname and TOTEM_LIFE[tname]
         if sGroup and life and sGUID:find("^Player") and dGUID then
-            local k = sGUID .. dName
+            local k = sGUID .. tname
             if totByOwner[k] then CloseTotem(totByOwner[k], now) end
-            totems[dGUID] = { owner = sGUID, name = dName, since = now, life = life }
+            totems[dGUID] = { owner = sGUID, name = tname, since = now, life = life }
             totByOwner[k] = dGUID
         end
         return
@@ -1065,9 +1069,10 @@ local function SetRow(row, cols, ratio, r, g, b, tip)
         local fs = row.cols[i]
         if cols[i] ~= nil then fs:SetText(cols[i]); fs:Show() else fs:Hide() end
     end
-    row.bar:SetVertexColor(r or 0.5, g or 0.5, b or 0.5, 0.55)
+    row.bar:SetColorTexture(r or 0.5, g or 0.5, b or 0.5, 0.55)
     row.bar:SetWidth(max(1, (win.rowW or 600) * min(1, ratio or 0)))
     row.bar:SetShown((ratio or 0) > 0)
+    if #cols == 1 then row.cols[1]:SetWidth((win.rowW or 600) - 16); row.cols[1]:SetJustifyH("LEFT") end
     row.tip = tip
 end
 
@@ -1078,7 +1083,7 @@ local function ColumnsFor(tab)
     elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "Share", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
     elseif tab == "Deaths" then return { { "Time", 8, 55, "LEFT" }, { "Player", 68, 120, "LEFT" }, { "Killing blow", 195, 220, "LEFT" }, { "Overkill", 420, 65, "RIGHT" }, { "Taken", 490, 70, "RIGHT" }, { "Healed", 565, 70, "RIGHT" } }
     elseif tab == "Mistakes" then return { { "Player Name", 8, 170, "LEFT" }, { "Avoidable Dmg", 180, 95, "RIGHT" }, { "Total Hits", 280, 60, "RIGHT" }, { "Share of Taken", 345, 90, "RIGHT" }, { "Mechanics Hit", 440, 100, "RIGHT" } }
-    elseif tab == "Class" then return { { "Player Name", 8, 150, "LEFT" }, { "Ability", 165, 230, "LEFT" }, { "Total", 400, 90, "RIGHT" }, { "Detail", 495, 170, "RIGHT" } }
+    elseif tab == "Class" then return { { "Player Name", 8, 150, "LEFT" }, { "Ability", 165, 200, "LEFT" }, { "Total", 370, 80, "RIGHT" }, { "Detail", 455, 210, "RIGHT" } }
     elseif tab == "Uptimes" then return { { "Aura / Totem", 8, 380, "LEFT" }, { "Uptime", 395, 70, "RIGHT" }, { "Seconds", 470, 70, "RIGHT" } }
     else return { { "Player Name", 8, 170, "LEFT" }, { "Interrupts", 180, 75, "RIGHT" }, { "Dispels", 260, 60, "RIGHT" }, { "Taunts", 325, 55, "RIGHT" }, { "Landed", 385, 60, "RIGHT" }, { "Missed", 450, 60, "RIGHT" }, { "Deaths", 515, 55, "RIGHT" } } end
 end
@@ -1136,9 +1141,8 @@ local function Redraw()
         else b:Hide() end
     end
     for _, t in ipairs(tabBtns) do t:SetPrimary(t.tab == view.tab) end
-    win.modeBtn:SetShown(view.tab == "Player" and r ~= nil)
-    win.prevBtn:SetShown(view.tab == "Player" and r ~= nil)
-    win.nextBtn:SetShown(view.tab == "Player" and r ~= nil)
+    win.modeDD:SetShown(view.tab == "Player" and r ~= nil)
+    win.playerDD:SetShown(view.tab == "Player" and r ~= nil)
     if not r then
         for _, b in ipairs(segBtns) do b:Hide() end
         for _, row in ipairs(rowFrames) do row:Hide() end
@@ -1285,7 +1289,7 @@ local function Redraw()
             end
             local sp = p.spells or {}
             if (p.blocks or 0) > 0 then
-                Row("Attacks blocked (shield)", tostring(p.blocks), string.format("of %d melee swings, %s blocked", p.swingsIn or 0, Fmt(p.blockedDmg)), p.blocks)
+                Row("Attacks blocked (shield)", tostring(p.blocks), string.format("of %d swings, %s blocked", p.swingsIn or 0, Fmt(p.blockedDmg)), p.blocks)
             end
             local br = sp["Bloodrage"]
             if br and br.casts > 0 then Row("Bloodrage casts", tostring(br.casts), string.format("%.1f per min", br.casts / (dur / 60)), br.casts) end
@@ -1298,15 +1302,23 @@ local function Redraw()
                 local pct = melee and melee.damage > 0 and (p.rockDamage / melee.damage * 100) or 0
                 Row("Melee damage with Rockbiter", Fmt(p.rockDamage), string.format("%.0f%% of melee, %s", pct, Clock((p.uptime or {})["Rockbiter Weapon"] or 0)), p.rockDamage)
             end
+            local function Plural(n, word) return n .. " " .. word .. (n == 1 and "" or "s") end
+            local function TotemDamage(prefix)
+                local sum, found = 0, false
+                for nm, sv in pairs(sp) do
+                    if nm:find("^" .. prefix .. ": ") then sum = sum + sv.damage; found = true end
+                end
+                return sum, found
+            end
             local st = sp["Searing Totem"]
-            local sb = sp["Totem: Searing Bolt"]
-            if (st and st.casts > 0) or sb then
-                Row("Searing Totem", st and (st.casts .. " casts") or "-", sb and (Fmt(sb.damage) .. " damage") or "no damage seen", sb and sb.damage or 0)
+            local sd, sFound = TotemDamage("Searing Totem")
+            if (st and st.casts > 0) or sFound then
+                Row("Searing Totem", st and Plural(st.casts, "cast") or "-", sFound and (Fmt(sd) .. " damage") or "no damage seen", sd)
             end
             local fn = sp["Fire Nova Totem"]
-            local fd = sp["Totem: Fire Nova"]
-            if (fn and fn.casts > 0) or fd then
-                Row("Fire Nova Totem", fn and (fn.casts .. " casts") or "-", fd and (Fmt(fd.damage) .. " damage") or "no damage seen", fd and fd.damage or 0)
+            local fd, fFound = TotemDamage("Fire Nova Totem")
+            if (fn and fn.casts > 0) or fFound then
+                Row("Fire Nova Totem", fn and Plural(fn.casts, "cast") or "-", fFound and (Fmt(fd) .. " damage") or "no damage seen", fd)
             end
         end
         local topBy = {}
@@ -1377,29 +1389,73 @@ local function Redraw()
     end
     FillRows(entries)
 
-    win.modeBtn:SetShown(tab == "Player")
-    win.prevBtn:SetShown(tab == "Player")
-    win.nextBtn:SetShown(tab == "Player")
-    win.modeBtn:SetLabel(view.mode == "healing" and "Showing healing" or "Showing damage")
+    if tab == "Player" then win.modeDD:Refresh(); win.playerDD:Refresh() end
 end
 CL.Refresh = Redraw
 function CL.Tick() Redraw() end
 
-local function CyclePlayer(dir)
-    local list = RunList()
-    local r = list[view.run]
-    if not r then return end
-    local players = Segment(r)
-    local l = Sorted(players, view.mode == "healing" and "healing" or "damage")
-    for i, p in ipairs(l) do
-        if p.guid == view.player then
-            local n = l[(i - 1 + dir) % #l + 1]
-            view.player = n.guid
-            Redraw()
-            return
+-- a drop-down whose choices are worked out when it opens (the list of players changes with the run)
+local function DynamicDropdown(parent, width, getOptions, get, set, emptyLabel)
+    local b = W.Button(parent, width, 22, "")
+    b.arrow = W.Text(b, 10, T.accent, "RIGHT"); b.arrow:SetPoint("RIGHT", -8, 0); b.arrow:SetText("v")
+    local LIST_ROWS = 14
+    local list = CreateFrame("Frame", nil, UIParent)
+    list:SetFrameStrata("FULLSCREEN_DIALOG"); list:SetFrameLevel(50); list:SetClampedToScreen(true)
+    list:SetSize(width, LIST_ROWS * 22 + 6)
+    list:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
+    W.Texture(list, "BACKGROUND", { 0.085, 0.09, 0.10, 1 }):SetAllPoints()
+    W.Border(list, 1, PAL.border, "BORDER")
+    list:Hide()
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent); catcher:SetFrameStrata("FULLSCREEN_DIALOG"); catcher:SetFrameLevel(40); catcher:Hide()
+    catcher:SetScript("OnClick", function() list:Hide() end)
+    list:SetScript("OnShow", function() catcher:Show() end)
+    list:SetScript("OnHide", function() catcher:Hide() end)
+    local opts, offset, rows = {}, 0, {}
+    local function Fill()
+        local shown = min(LIST_ROWS, max(1, #opts))
+        list:SetHeight(shown * 22 + 6)
+        offset = max(0, min(offset, max(0, #opts - LIST_ROWS)))
+        local cur = get()
+        for i = 1, LIST_ROWS do
+            local o = opts[offset + i]
+            local row = rows[i]
+            if o then
+                row:SetLabel((o[1] == cur and "|cFFFFD100> |r" or "   ") .. o[2]); row.value = o[1]; row:Show()
+            else row:Hide() end
         end
     end
-    if l[1] then view.player = l[1].guid; Redraw() end
+    for i = 1, LIST_ROWS do
+        local row = W.Button(list, width - 8, 20, "")
+        row:SetPoint("TOPLEFT", 4, -3 - (i - 1) * 22)
+        row:SetScript("OnClick", function(self) list:Hide(); set(self.value); b:Refresh() end)
+        row:Hide()
+        rows[i] = row
+    end
+    list:EnableMouseWheel(true)
+    list:SetScript("OnMouseWheel", function(_, d) offset = offset - d; Fill() end)
+    function b:Refresh()
+        local cur, label = get(), emptyLabel or ""
+        for _, o in ipairs(getOptions()) do if o[1] == cur then label = o[2] end end
+        self:SetLabel(label)
+    end
+    b:SetScript("OnClick", function()
+        if list:IsShown() then list:Hide() return end
+        opts = getOptions(); offset = 0; Fill(); list:Show()
+    end)
+    b:HookScript("OnHide", function() list:Hide() end)
+    return b
+end
+
+local function PlayerOptions()
+    local r = RunList()[view.run]
+    local out = {}
+    if not r then return out end
+    local players = Segment(r)
+    for _, p in ipairs(Sorted(players, view.mode == "healing" and "healing" or "damage")) do
+        out[#out + 1] = { p.guid, p.name }
+    end
+    return out
 end
 
 local function SaveWindow()
@@ -1501,15 +1557,13 @@ local function BuildWindow()
         t:SetScript("OnClick", function() view.tab = name; view.offset = 0; Redraw() end)
         tabBtns[i] = t
     end
-    win.modeBtn = W.Button(win, 130, 20, "Showing damage")
-    win.modeBtn:SetPoint("TOPLEFT", SIDE + 16, -88)
-    win.modeBtn:SetScript("OnClick", function() view.mode = view.mode == "damage" and "healing" or "damage"; view.offset = 0; Redraw() end)
-    win.prevBtn = W.Button(win, 70, 20, "< Prev"); win.prevBtn:SetPoint("LEFT", win.modeBtn, "RIGHT", 8, 0)
-    win.prevBtn:SetScript("OnClick", function() CyclePlayer(-1) end)
-    win.nextBtn = W.Button(win, 70, 20, "Next >"); win.nextBtn:SetPoint("LEFT", win.prevBtn, "RIGHT", 6, 0)
-    win.nextBtn:SetScript("OnClick", function() CyclePlayer(1) end)
-    -- flat, translucent dark buttons with a one-pixel border
-    for _, fb in ipairs({ win.modeBtn, win.prevBtn, win.nextBtn }) do
+    win.modeDD = W.Dropdown(win, 150, { { "damage", "Damage" }, { "healing", "Healing" } },
+        function() return view.mode end, function(v) view.mode = v; view.offset = 0; view.player = nil; Redraw() end, "Showing: ")
+    win.modeDD:SetPoint("TOPLEFT", SIDE + 16, -88)
+    win.playerDD = DynamicDropdown(win, 190, PlayerOptions, function() return view.player end,
+        function(v) view.player = v; view.offset = 0; Redraw() end, "Choose a player")
+    win.playerDD:SetPoint("LEFT", win.modeDD, "RIGHT", 10, 0)
+    for _, fb in ipairs({ win.modeDD, win.playerDD }) do
         fb.bg:SetColorTexture(0.1, 0.105, 0.12, 0.7)
         W.SetBorder(fb.edges, PAL.border)
         fb:SetScript("OnLeave", function(self) W.SetBorder(self.edges, PAL.border) end)
@@ -1533,13 +1587,14 @@ local function BuildWindow()
         row:SetPoint("TOPRIGHT", -14, -138 - (i - 1) * ROWH)
         if i % 2 == 0 then local st = W.Texture(row, "BACKGROUND", PAL.stripe); st:SetAllPoints() end
         row.bar = row:CreateTexture(nil, "BACKGROUND", nil, 1)
-        row.bar:SetTexture(BAR_TEX)
-        row.bar:SetPoint("TOPLEFT"); row.bar:SetPoint("BOTTOMLEFT")
+        row.bar:SetColorTexture(0.5, 0.5, 0.5, 0.55)
+        row.bar:SetPoint("TOPLEFT", 0, -1); row.bar:SetPoint("BOTTOMLEFT", 0, 1)
         row.hl = W.Texture(row, "HIGHLIGHT", PAL.hover); row.hl:SetAllPoints()
         row.cols = {}
         for c = 1, 7 do
             local fs = W.Text(row, 12, T.text)
             fs:SetPoint("LEFT", 8, 0)
+            fs:SetWordWrap(false)
             row.cols[c] = fs
         end
         row:SetScript("OnClick", function(self) if self.onClick then self.onClick() end end)
