@@ -79,10 +79,12 @@ jobs:
 
       # CurseForge and Wago. Skipped until at least one of the two secrets is saved in the repo.
       # (The packager reads the project IDs from the toc and CHANGELOG.md from the repo.)
-      - name: Fetch the new release tag
-        if: steps.ver.outputs.exists == 'false' && (env.CF_API_KEY != '' || env.WAGO_API_TOKEN != '')
-        run: git fetch --tags --force
-
+      # It must NOT see the new git tag: on a branch push it stops with "Found future tag" if a tag
+      # points at the commit. So the tag is not fetched, the build counts as an alpha, and the
+      # file name and label are set here from the version in the toc.
+      # (To publish beta or normal releases later, this step has to change; ask before switching.)
       - name: Upload to CurseForge and Wago
         if: steps.ver.outputs.exists == 'false' && (env.CF_API_KEY != '' || env.WAGO_API_TOKEN != '')
         uses: BigWigsMods/packager@v2
+        with:
+          args: -n "{package-name}-v${{ steps.ver.outputs.version }}{alpha}:v${{ steps.ver.outputs.version }}{alpha}"
