@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CysUI - Changelog & Features</title>
+    <style>
+        :root {
+            --bg-primary: #121212;
+            --bg-secondary: #1a1a1e;
+            --bg-card: #202025;
+            --bg-hover: #26262d;
+            --gold: #c79c6e;
+            --gold-hover: #dfb282;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2e2e38;
+            --accent-green: #3fb950;
+            --accent-blue: #58a6ff;
+            --accent-purple: #bc8cff;
+            --accent-orange: #f0883e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-top: 3px solid var(--gold);
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+
+        .logo-area h1 {
+            color: var(--gold);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .logo-area p {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            background: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .btn-gold {
+            background: var(--gold);
+            color: var(--bg-primary);
+            border-color: var(--gold);
+        }
+
+        .btn-gold:hover {
+            background: var(--gold-hover);
+            color: var(--bg-primary);
+        }
+
+        .search-bar {
+            position: relative;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .search-bar input {
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px 16px 12px 40px;
+            color: var(--text-main);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-bar input:focus {
+            border-color: var(--gold);
+        }
+
+        .search-bar svg {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            fill: var(--text-muted);
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-btn {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .filter-btn.active {
+            background: var(--bg-card);
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        .release-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .release-card:hover {
+            border-color: rgba(199, 156, 110, 0.4);
+        }
+
+        .release-header {
+            padding: 16px 20px;
+            background: var(--bg-card);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .release-title-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .version-badge {
+            background: rgba(199, 156, 110, 0.15);
+            color: var(--gold);
+            border: 1px solid rgba(199, 156, 110, 0.3);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 13px;
+            font-family: monospace;
+        }
+
+        .release-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .release-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .copy-discord-btn {
+            background: #5865F2;
+            color: #ffffff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: opacity 0.2s;
+        }
+
+        .copy-discord-btn:hover {
+            opacity: 0.9;
+        }
+
+        .chevron {
+            fill: var(--text-muted);
+            width: 16px;
+            height: 16px;
+            transition: transform 0.2s;
+        }
+
+        .release-card.expanded .chevron {
+            transform: rotate(180deg);
+        }
+
+        .release-body {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            display: none;
+        }
+
+        .release-card.expanded .release-body {
+            display: block;
+        }
+
+        .change-item {
+            margin-bottom: 14px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .change-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .change-title {
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .change-desc {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .tag-feature { color: var(--accent-blue); }
+        .tag-fix { color: var(--accent-green); }
+        .tag-system { color: var(--accent-purple); }
+
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+            width: 100%;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <div class="logo-area">
+                    <h1>CysUI Changelog</h1>
+                    <p>World of Warcraft Classic Era Addon Suite • v0.43.0 → v0.52.0-alpha</p>
+                </div>
+                <div class="header-actions">
+                    <a href="https://github.com/Cyserin/CysUI/issues" target="_blank" class="btn">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+                        Report Issues
+                    </a>
+                </div>
+            </div>
+            
+            <div class="search-bar">
+                <svg viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
+                <input type="text" id="searchInput" placeholder="Search features, spells, commands (/cancelaura, /cuilog), or modules...">
+            </div>
+        </header>
+
+        <div class="controls-row">
+            <span id="resultsCount">Showing all releases</span>
+            <div class="filter-buttons">
+                <button class="filter-btn active" onclick="expandAll()">Expand All</button>
+                <button class="filter-btn" onclick="collapseAll()">Collapse All</button>
+            </div>
+        </div>
+
+        <div id="changelogContainer"></div>
+        <div id="noResults" class="no-results">No matching changelog entries found.</div>
+
+        <footer>
+            CysUI Addon Suite for World of Warcraft Classic Era.<br>
+            Designed for clean interface aesthetics, lightweight performance, and seamless everyday gameplay.
+        </footer>
+    </div>
+
+    <script>
+        const releases = [
+            {
+                version: "v0.52.0-alpha & v0.51.0-alpha",
+                title: "Player Auras & Right-Click Cancel Fixes",
+                date: "Recent Update",
+                changes: [
+                    { type: "fix", title: "Secure Right-Click Cancellation", desc: "Replaced aura icon click handlers with secure macro attributes (type2 / macrotext2) executing /cancelaura. Right-clicking buffs now cancels them safely without combat taint or visibility loss." },
+                    { type: "system", title: "TOC & Module Restoration", desc: "Re-registered PlayerAuras.lua in CysUI.toc and fixed frame initialization to guarantee aura rendering and timer updating across all game sessions." }
+                ]
+            },
+            {
+                version: "v0.50.1-alpha",
+                title: "Nameplate & Tooltip Difficulty Scaling",
+                date: "Build Update",
+                changes: [
+                    { type: "feature", title: "Dynamic Level Colors", desc: "Restyled unit levels on both tooltips and nameplates to dynamically color-code by level gap relative to the player (Red for +5/Bosses, Orange for +3/4, Yellow for -2 to +2, Green for low level, Grey for trivial)." },
+                    { type: "fix", title: "Corpse Level Parsing", desc: "Updated tooltip string scanning to parse level numbers directly out of line strings (e.g., 'Level 17 Corpse') when UnitLevel() returns 0 or -1 for dead units." },
+                    { type: "feature", title: "Nameplate Layout Polish", desc: "Isolated level text coloring so mob names retain their standard reaction/class colors while only the numeric level text updates dynamically." }
+                ]
+            },
+            {
+                version: "v0.48.0-alpha",
+                title: "Combat Log Phase 2 (Mistakes, Uptimes & Utility)",
+                date: "Combat Log Update",
+                changes: [
+                    { type: "feature", title: "Avoidable Damage Tracking", desc: "Added per-player avoidable damage monitoring (editable via /cuilog avoid)." },
+                    { type: "feature", title: "Debuff & Buff Uptimes", desc: "Track boss debuffs (Sunder, Faerie Fire, Recklessness, Demo Shout, Thunder Clap) and utility uptimes (Shield Block, Stoneskin, Windfury, and totems)." },
+                    { type: "feature", title: "Detailed Interrupts & Taunts", desc: "Enhanced logs to show what abilities interrupts and dispels hit, alongside tracked taunts landed and missed." },
+                    { type: "fix", title: "Boss Kill Logging Fix", desc: "Fixed boss kills being incorrectly logged as wipes caused by filtered-out boss death events." }
+                ]
+            },
+            {
+                version: "v0.47.0-alpha",
+                title: "Persistent Run Viewer Combat Log",
+                date: "Combat Log Release",
+                changes: [
+                    { type: "feature", title: "Run-Based Recording", desc: "Combat Log (Cys's logs) now records each dungeon or raid as a single run—capturing bosses, trash, per-player damage/healing/taken/casts/crits/interrupts/dispels, and per-ability tables." },
+                    { type: "system", title: "Persistence & Deaths", desc: "Retains the last 3 to 10 runs with a detailed 10-event death recap per death." },
+                    { type: "feature", title: "Boss Detection", desc: "Upgraded boss detection using integrated BigWigs/LittleWigs data covering all Classic raids plus Deadmines, Dire Maul, Stratholme, and Zul'Farrak." },
+                    { type: "system", title: "Commands & Control", desc: "Use /cuilog to open the viewer, or /cuilog start|end|boss|clear for manual control." }
+                ]
+            },
+            {
+                version: "v0.46.0-alpha",
+                title: "Group Utility, Buff Trackers & CysUpgrade Enhancements",
+                date: "Feature Update",
+                changes: [
+                    { type: "feature", title: "Missing Buffs Icons", desc: "Added visual trackers for essential party/raid buffs (Fortitude, Mark of the Wild, Arcane Intellect, Divine Spirit)." },
+                    { type: "feature", title: "Roll Counts", desc: "Added Need/Greed/Pass roll counts directly onto group loot boxes." },
+                    { type: "feature", title: "Party Distance & Fade", desc: "Added party range fading and a rough distance indicator on targeted players." },
+                    { type: "feature", title: "Tremor Alert Refinement", desc: "Tremor Alerts now trigger strictly in combat for mobs actively fighting your group." },
+                    { type: "system", title: "CysUpgrade Enhancements", desc: "CysUpgrade now scores base items, shows the enchant you would lose, and identifies the best armor kit." }
+                ]
+            },
+            {
+                version: "v0.44.0-alpha",
+                title: "Stat Compare, Armory Sync & Tremor Totem Alerts",
+                date: "Feature Update",
+                changes: [
+                    { type: "feature", title: "Stat Compare Enhancements", desc: "CysUpgrade displays +EP, percentage changes, and explicit status labels (Big Upgrade / Upgrade / Sidegrade / Downgrade)." },
+                    { type: "feature", title: "Armory Set Sync", desc: "CysUpgrade compares incoming loot against the specific item in the Armory set linked to your active profile." },
+                    { type: "feature", title: "Group Loot Sizing", desc: "Adjusted group loot frames so boxes cleanly fit item icons, action buttons, and full item names." },
+                    { type: "feature", title: "Tremor Totem Alerts", desc: "Added alert messages when Tremor Totem breaks a Fear, Charm, or Sleep effect, along with group detection when another Shaman already has Tremor down." }
+                ]
+            },
+            {
+                version: "v0.43.4-alpha",
+                title: "Shaman Class Colors & Loot Box Polish",
+                date: "Minor Update",
+                changes: [
+                    { type: "feature", title: "Shaman Class Color Toggle", desc: "Option to set Shaman class colors to custom blue instead of standard Classic Era pink across UI frames, chat names, and unit frames." },
+                    { type: "fix", title: "Loot Box Sizing", desc: "Refined group loot popup boxes to fit icons, buttons, and names dynamically." }
+                ]
+            },
+            {
+                version: "v0.43.2-alpha",
+                title: "Rested XP Bar Integration",
+                date: "Minor Update",
+                changes: [
+                    { type: "feature", title: "Rested XP Bar", desc: "Updated the XP bar so rested XP displays as a full-height blue segment starting directly after current XP (rested XP is consumed first)." }
+                ]
+            },
+            {
+                version: "v0.43.1-alpha & v0.43.0",
+                title: "First-Run Welcome Window & Automated Packaging",
+                date: "Initial Release Suite",
+                changes: [
+                    { type: "feature", title: "First-Run Welcome Window", desc: "Added a first-run setup window to match game action bars, hide Blizzard's default XP bar, select custom border colors, and point to /cui (use /cui welcome to show it again)." },
+                    { type: "system", title: "Settings Window Flow", desc: "After finishing layout mode, clicking Done now automatically reopens the settings window if it was previously open." },
+                    { type: "system", title: "Automated Packaging", desc: "Configured GitHub release workflow for automated CurseForge and Wago.io uploads with proper release tag fetching and X-Wago-ID tracking." }
+                ]
+            }
+        ];
+
+        function renderReleases(filter = "") {
+            const container = document.getElementById('changelogContainer');
+            const noResults = document.getElementById('noResults');
+            container.innerHTML = "";
+            
+            const query = filter.toLowerCase();
+            let matchCount = 0;
+
+            releases.forEach((rel, index) => {
+                const matchesVersion = rel.version.toLowerCase().includes(query);
+                const matchesTitle = rel.title.toLowerCase().includes(query);
+                const matchingChanges = rel.changes.filter(c => 
+                    c.title.toLowerCase().includes(query) || c.desc.toLowerCase().includes(query)
+                );
+
+                if (!query || matchesVersion || matchesTitle || matchingChanges.length > 0) {
+                    matchCount++;
+                    const card = document.createElement('div');
+                    card.className = `release-card ${index === 0 || query ? 'expanded' : ''}`;
+                    
+                    let changesHtml = '';
+                    const changesToDisplay = query && !matchesVersion && !matchesTitle ? matchingChanges : rel.changes;
+                    
+                    changesToDisplay.forEach(change => {
+                        changesHtml += `
+                            <div class="change-item">
+                                <div class="change-title">
+                                    <span class="tag-${change.type}">•</span> ${change.title}
+                                </div>
+                                <div class="change-desc">${change.desc}</div>
+                            </div>
+                        `;
+                    });
+
+                    card.innerHTML = `
+                        <div class="release-header" onclick="toggleCard(this)">
+                            <div class="release-title-area">
+                                <span class="version-badge">${rel.version}</span>
+                                <span class="release-title">${rel.title}</span>
+                            </div>
+                            <div class="release-actions" onclick="event.stopPropagation()">
+                                <button class="copy-discord-btn" onclick="copyDiscordMarkdown('${rel.version}', '${rel.title}', this)">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    Copy Discord
+                                </button>
+                                <svg class="chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+                            </div>
+                        </div>
+                        <div class="release-body">
+                            ${changesHtml}
+                        </div>
+                    `;
+                    container.appendChild(card);
+                }
+            });
+
+            if (matchCount === 0) {
+                noResults.style.display = 'block';
+                document.getElementById('resultsCount').innerText = 'No matching releases found';
+            } else {
+                noResults.style.display = 'none';
+                document.getElementById('resultsCount').innerText = query ? `Found matches in ${matchCount} releases` : `Showing all ${releases.length} releases`;
+            }
+        }
+
+        function toggleCard(headerEl) {
+            headerEl.parentElement.classList.toggle('expanded');
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.release-card').forEach(c => c.classList.add('expanded'));
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.release-card').forEach(c => c.classList.remove('expanded'));
+        }
+
+        function copyDiscordMarkdown(version, title, btn) {
+            const rel = releases.find(r => r.version === version);
+            let text = `🏷️ **${rel.version} — ${rel.title}**\n`;
+            rel.changes.forEach(c => {
+                text += `• **${c.title}:** ${c.desc}\n`;
+            });
+
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✓ Copied!';
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+            });
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            renderReleases(e.target.value);
+        });
+
+        renderReleases();
+    </script>
+</body>
+</html>
