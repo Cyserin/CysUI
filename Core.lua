@@ -303,9 +303,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.1",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.43.1", date = "2026-10-31",
+              improved = {
+                  "Updates: Cys's UI is now also being published on CurseForge and Wago, so their addon apps can update it. These are alpha builds, so the apps only offer them to people who switch the addon to the alpha channel.",
+              },
+            },
             { version = "0.43.0", date = "2026-10-30",
               added = {
                   "Welcome window: shown once on first load. Step 1 matches the action bars to the game and hides Blizzard's XP bar, step 2 picks the border color, and the last step points to the settings. /cui welcome shows it again.",
