@@ -14,7 +14,7 @@ local win
 
 local function Build()
     local f = CreateFrame("Frame", "CysUIWelcomeFrame", UIParent)
-    f:SetSize(460, 330)
+    f:SetSize(460, 372)
     f:SetPoint("CENTER", 0, 40)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetToplevel(true)
@@ -180,6 +180,7 @@ local function Build()
         .. "|cFFFFD100/cui layout|r moves and resizes any frame.\n"
         .. "The Class section has tools for your class, like Level-Up Spells and the Heal Advisor.\n"
         .. "The Upgrade page scores gear with stat weights; SixtyUpgrades has ready-made weights you can paste into its Import / Export box.\n"
+        .. "Questie: Cys's UI only gives Questie's quest tracker the dark gold-edged look. Moving and using it works exactly as it did before.\n"
         .. "/cui welcome shows this window again.")
     local open = W.Button(p3, 180, 26, "Open the settings", true)
     open:SetPoint("BOTTOMLEFT", 4, 4)

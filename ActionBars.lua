@@ -43,6 +43,8 @@ local DEFAULTS = {
     shortKeys = true,      -- S1 instead of s-1, WU instead of Mouse Wheel Up
     hideNames = true,      -- hide macro names on the buttons
     cooldownNumbers = true,
+    rangeColor = true,     -- the icon turns red when the target is out of range
+    manaColor = true,      -- the icon turns blue when you don't have the mana / rage / energy
     showEmpty = true,      -- draw a dark slot behind every button, even empty ones
     goldBorders = true,    -- Cys gold edge on every slot (off = a quiet dark edge)
     blockEditMode = true,  -- Blizzard's HUD Edit Mode is switched off (it puts the old bars back); use /cui layout
@@ -477,6 +479,49 @@ function AB:SweepArt()
     for _, parent in ipairs({ _G.MainMenuBar, _G.MainMenuBarArtFrame }) do SweepFrame(parent, 0) end
 end
 
+-- Out of range = red, not enough mana = blue. Looks at every bar button a few times a second and only
+-- touches the icon colour when it has something to say, so the game's own greying-out still works.
+local function ButtonAction(b)
+    local a
+    if ActionButton_CalculateAction then
+        local ok, v = pcall(ActionButton_CalculateAction, b)
+        if ok then a = v end
+    end
+    return a or b.action
+end
+
+function AB:UpdateRangeColors()
+    local db = DB()
+    for _, bar in pairs(self.bars) do
+        for _, b in ipairs(bar.buttons or {}) do
+            if b:IsVisible() then
+                local icon = Part(b, "Icon")
+                local action = icon and ButtonAction(b)
+                if icon and action and HasAction(action) then
+                    local out = db.rangeColor and IsActionInRange and IsActionInRange(action)
+                    local usable, noMana = IsUsableAction(action)
+                    if out == 0 or out == false then
+                        icon:SetVertexColor(0.85, 0.2, 0.2); b.cysTint = true
+                    elseif db.manaColor and noMana then
+                        icon:SetVertexColor(0.3, 0.35, 1); b.cysTint = true
+                    elseif b.cysTint then
+                        if usable then icon:SetVertexColor(1, 1, 1) else icon:SetVertexColor(0.4, 0.4, 0.4) end
+                        b.cysTint = nil
+                    end
+                end
+            end
+        end
+    end
+end
+
+function AB:StartRangeColors()
+    if self.rangeTicker then return end
+    self.rangeTicker = C_Timer.NewTicker(0.15, function()
+        local db = DB()
+        if db.rangeColor or db.manaColor then pcall(AB.UpdateRangeColors, AB) end
+    end)
+end
+
 function AB:ApplyCooldownNumbers()
     pcall(SetCVar, "countdownForCooldowns", DB().cooldownNumbers and "1" or "0")
 end
@@ -618,6 +663,7 @@ function AB.Enable()
     end
     if db.hideBagButtons then AB:HideBagButtons() end
     AB:ApplyCooldownNumbers()
+    AB:StartRangeColors()
 
     -- Blizzard re-applies its own button art and key text when a button updates
     if ActionButton_Update then
@@ -794,6 +840,8 @@ CUI:RegisterPage("Action Bars", function(page)
     Check("Turn off Blizzard's Edit Mode (use /cui layout instead)", "blockEditMode")
     Check("Hide macro names", "hideNames", function() AB:ApplyNames() end)
     Check("Show cooldown numbers", "cooldownNumbers", function() AB:ApplyCooldownNumbers() end)
+    Check("Red icon when my target is out of range", "rangeColor")
+    Check("Blue icon when I don't have enough mana, rage or energy", "manaColor")
     Check("Hide Blizzard's gryphons and bar art (needs a /reload)", "art")
 
     local move = W.Button(page, 240, 22, "Move the bars (layout mode)")

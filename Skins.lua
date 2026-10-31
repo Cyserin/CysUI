@@ -2358,6 +2358,20 @@ local function SkinDressUp()
     FlatButton(Get("DressUpFrameCancelButton"))
 end
 
+-- The game's own quest tracker (the list on the right): a dark panel behind it. Questie hides this one and
+-- has its own skin below, so with Questie this does nothing. Moving the tracker works as it always did.
+local function SkinQuestWatch()
+    local qw = _G.QuestWatchFrame
+    if not qw or qw.cysPanel then return end
+    local bd = Own(CreateFrame("Frame", nil, qw))
+    bd:SetPoint("TOPLEFT", qw, "TOPLEFT", -6, 6)
+    bd:SetPoint("BOTTOMRIGHT", qw, "BOTTOMRIGHT", 6, -6)
+    bd:SetFrameLevel(max(qw:GetFrameLevel() - 1, 0))
+    W.Texture(bd, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.7 }):SetAllPoints()
+    W.Border(bd, 1, T.border, "BORDER")
+    qw.cysPanel = bd
+end
+
 -- Questie's quest tracker: a dark panel with the gold edge
 local function SkinQuestie()
     local function Try(ticker)
@@ -3127,6 +3141,7 @@ Skins.list = {
     { key = "battleground", label = "Battleground queue and scoreboard", apply = SkinBattleground },
     { key = "dressup",   label = "Dressing room", apply = SkinDressUp },
     { key = "questie",   label = "Questie quest tracker", apply = SkinQuestie, addon = "Questie" },
+    { key = "questwatch", label = "The game's own quest tracker", apply = SkinQuestWatch },
     { key = "options",   label = "Game options and key bindings", apply = SkinOptions },
     { key = "chatconfig", label = "Chat settings window", apply = SkinChatConfig },
     { key = "taxi",      label = "Flight map", apply = SkinTaxi },

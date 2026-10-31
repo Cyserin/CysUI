@@ -319,9 +319,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.51.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.52.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.52.0", date = "2026-10-31",
+              added = {
+                  "Threat Bar: a flat bar showing your threat on your target. Colors flip for tanks (green when you hold it, red when you are about to lose it). Falls back to a Safe / Gaining / Close / Tanking status when the game gives no percent. Move and resize it in layout mode.",
+                  "Action bars: icons turn red when your target is out of range and blue when you lack the mana, rage or energy. Both can be switched off on the Action Bars page.",
+                  "Skins: the game's own quest tracker gets a dark panel with the border color (it has its own switch on the Skins page).",
+              },
+              improved = {
+                  "Welcome window: says that Cys's UI only skins Questie's tracker and moving it works as before.",
+              },
+            },
             { version = "0.51.0", date = "2026-10-31",
               added = {
                   "Combat Numbers: floating numbers on your own frames. Damage you take, healing you receive and Miss / Dodge / Parry / Block / Resist show on the player frame; your damage, your pet's damage, your heals and your own misses show on the target frame. Crits pop in bigger.",

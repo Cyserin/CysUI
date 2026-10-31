@@ -20,7 +20,7 @@ local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a
 local GROUPS = {
     { nil,               { "General", "Modules", "Conflicts" } },
     { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends" } },
-    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters", "Combat Numbers" } },
+    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters", "Combat Numbers", "Threat Bar" } },
     { "Loot & Items",    { "Vendor", "Loot", "Roll Tracker", "Upgrade" } },
     { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
 }
@@ -273,7 +273,7 @@ end
 
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
-    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "combattext" } },
+    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "combattext", "threat" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "grouploot", "rolls", "upgrade" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "healadvisor", "warrior", "shoutremind" } },
