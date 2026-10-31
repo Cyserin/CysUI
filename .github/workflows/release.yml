@@ -57,53 +57,48 @@ jobs:
           ls -l "CysUI-v$v.zip"
 
       - name: Inject Version Stamp and Publish
-      if: steps.ver.outputs.exists == 'false'
-      run: |
-        VERSION="${{ steps.ver.outputs.tag }}"
-        if [ -z "$VERSION" ]; then
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.ver.outputs.tag }}"
+          if [ -z "$VERSION" ]; then
           VERSION=$(git rev-parse --short HEAD)
-        fi
+          fi
         
-        # Automatically replaces __VERSION__ in your index.html
-        sed -i "s/__VERSION__/$VERSION/g" index.html
+          # Automatically replaces __VERSION__ in your index.html
+          sed -i "s/__VERSION__/$VERSION/g" index.html
         
-        # Configure git identity for automated commit
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Configure git identity for automated commit
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        # Commit and push the updated index.html back to main so GitHub Pages builds it
-        git add index.html
-        git commit -m "chore: auto-stamp version $VERSION [skip ci]" || echo "No changes to commit"
-        git push
+          # Commit and push the updated index.html back to main so GitHub Pages builds it
+          git add index.html
+          git commit -m "chore: auto-stamp version $VERSION [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main
         
-        v="${{ steps.ver.outputs.version }}"
-        tag="${{ steps.ver.outputs.tag }}"
-        label="${{ RELEASE_CHANNEL:-release }}"
+          v="${{ steps.ver.outputs.version }}"
+          tag="${{ steps.ver.outputs.tag }}"
+          label="${RELEASE_CHANNEL:-release}"
         
-        cat > notes.md <<'NOTES'
-        Test build. Download the file named **CysUI-v...zip** below (not "Source code").
+          cat << 'EOF' > notes.md
+          Test build. Download the file named **CysUI-v...zip** below (not "Source code").
 
-        Unzip it so the folder is named exactly `CysUI` and sits in
-        `World of Warcraft\_classic_era_\Interface\AddOns\`, then type `/cui` in game.
+          Unzip it so the folder is named exactly `CysUI` and sits in
+          `World of Warcraft\\_classic_era_\\Interface\\AddOns\\`, then type `/cui` in game.
 
-        What changed is in the game: `/cui` -> What's New.
-        Bugs and ideas: use the Issues tab.
-        NOTES
+          What changed is in the game: /cui - What's New.
+          Bugs and ideas: use the Issues tab.
+          EOF
 
-        gh release create "$tag" "CysUI-v$v.zip" \
+          gh release create "$tag" "CysUI-v$v.zip" \
           --target "$GITHUB_SHA" \
           --title "Cys's UI v$v ($label)" \
           --latest \
           --notes-file notes.md
 
-      # CurseForge and Wago. Skipped until at least one of the two secrets is saved in the repo.
-      # (The packager reads the project IDs from the toc and CHANGELOG.md from the repo.)
-      # It must NOT see the new git tag: on a branch push it stops with "Found future tag" if a tag
-      # points at the commit. So the tag is not fetched, the build counts as an alpha, and the
-      # file name and label are set here from the version in the toc.
-      # (To publish beta or normal releases later, this step has to change; ask before switching.)
+      # CurseForge and Wago step below:
       - name: Upload to CurseForge and Wago
         if: steps.ver.outputs.exists == 'false' && (env.CF_API_KEY != '' || env.WAGO_API_TOKEN != '')
         uses: BigWigsMods/packager@v2
         with:
-          args: -n "{package-name}-v${{ steps.ver.outputs.version }}{alpha}:v${{ steps.ver.outputs.version }}{alpha}"
+         args: -n "{package-name}-v${{ steps.ver.outputs.version }}{alpha}:v${{ steps.ver.outputs.version }}{alpha}"
