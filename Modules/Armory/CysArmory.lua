@@ -564,6 +564,19 @@ function CysArmory:GetEquippedSetProfile()
     end
 end
 
+-- the set linked to an Upgrade profile (the worn one if several are linked), plus its name
+function CysArmory:GetSetForProfile(profile)
+    if type(profile) ~= "string" or profile == "" then return nil end
+    local best, bestName
+    for name, set in pairs(GetDB()) do
+        if type(set) == "table" and set.profile == profile then
+            if IsSetEquipped(set) then return set, name end
+            if not bestName or name < bestName then best, bestName = set, name end
+        end
+    end
+    return best, bestName
+end
+
 function CysArmory:SetProfile(setName, profile)
     local db = GetDB()
     local name = FindSetName(db, setName)

@@ -319,16 +319,22 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.4",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.44.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.44.0", date = "2026-10-31",
+              improved = {
+                  "CysUpgrade labels: the score now reads like +0.3 EP (+7%) Sidegrade. Big upgrade is 25% or more, Upgrade is 10% or more (and at least 1 EP), Downgrade is 10% or more worse (and at least 1 EP), anything else is a Sidegrade, and an empty slot is an Upgrade.",
+                  "CysUpgrade now compares against the item in the Armory set linked to your active profile (for example the Tank set's belt) instead of whatever you are wearing, so switching sets no longer changes a label. With no set linked it still compares with what you wear. The bag arrow shows for Upgrade and Big upgrade.",
+              },
+            },
             { version = "0.43.4", date = "2026-10-31",
               added = {
                   "Tremor Alert: a green message (with a sound) now shows when your Tremor Totem breaks a fear, charm or sleep on someone in your group. It has its own checkbox on the Tremor Alert page.",
               },
               improved = {
                   "Tremor Alert: when another Shaman in your group drops a Tremor Totem, the alert now reads Tremor Totem is down with their name, instead of asking you to drop one.",
-                  "Group loot boxes: icon, roll buttons and item name now fit inside the box, with a default size of 270 x 46. Boxes saved too small or too tall are reset to that default once; the size sliders now stop at 200 x 40 so they cannot be squeezed unreadably small.",
+                  "Group loot boxes: icon, roll buttons and item name now fit inside the box and line up (Need, Greed and Pass were each sitting a little higher than the last), Blizzard's corner art and button frames are hidden so a real roll looks like the Preview, and the default size is 270 x 46. Boxes saved too small or too tall are reset to that default once; the size sliders now stop at 200 x 40 so they cannot be squeezed unreadably small.",
               },
             },
             { version = "0.43.3", date = "2026-10-31",

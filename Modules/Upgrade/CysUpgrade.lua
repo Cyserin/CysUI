@@ -361,6 +361,67 @@ local equippedEP = equippedLink and CysUpgrade:GetItemEP(equippedLink, profileWe
 return slotID, equippedLink, equippedEP
 end
 end
+
+-- What a new item is judged against: the item in the Armory set linked to the active profile (so switching
+-- sets never changes a label), or the worn item when no set is linked. Returns slot, link, EP, set name.
+local function GetBaseline(itemLink, weights)
+    local slot, eqLink, eqEP = GetTargetSlotAndEquipped(itemLink, weights)
+    if not slot then return nil end
+    local prof = CysUpgrade.activeProfileName or ""
+    local setData, setName
+    if prof ~= "" and CysArmory and CysArmory.GetSetForProfile then
+        local ok, d, n = pcall(CysArmory.GetSetForProfile, CysArmory, prof)
+        if ok then setData, setName = d, n end
+    end
+    if not setData then return slot, eqLink, eqEP, nil end
+
+    local function SetSlotLink(sl)
+        local str = setData[sl]
+        if not str then return nil end
+        local worn = GetInventoryItemLink("player", sl)
+        if worn and tonumber(string.match(worn, "item:(%d+)") or "") == tonumber(string.match(str, "item:(%d+)") or "") then
+            return worn   -- the worn copy carries its enchants
+        end
+        return str
+    end
+
+    local equipLoc = select(9, GetItemInfo(itemLink))
+    local cand = SLOT_MAP[equipLoc]
+    local activeProf = string.lower(prof)
+    local isTank = string.find(activeProf, "tank") ~= nil or string.find(activeProf, "mitigation") ~= nil
+    if equipLoc == "INVTYPE_2HWEAPON" then
+        local l1, l2 = SetSlotLink(16), SetSlotLink(17)
+        if not l1 and not l2 then return 16, nil, 0, setName end
+        local e1 = l1 and CysUpgrade:GetItemEP(l1, weights) or 0
+        local e2 = l2 and CysUpgrade:GetItemEP(l2, weights) or 0
+        return 16, l1 or l2, e1 + e2, setName
+    end
+    local slots = type(cand) == "table" and cand or { cand }
+    if isTank and equipLoc == "INVTYPE_WEAPON" then slots = { 16 } end
+    local bestSlot, bestLink, bestEP
+    for _, sl in ipairs(slots) do
+        local l = SetSlotLink(sl)
+        if not l then return sl, nil, 0, setName end   -- empty in the set
+        local e = CysUpgrade:GetItemEP(l, weights)
+        if not bestEP or e < bestEP then bestSlot, bestLink, bestEP = sl, l, e end
+    end
+    return bestSlot, bestLink, bestEP, setName
+end
+
+-- Big upgrade / Upgrade / Sidegrade / Downgrade from the EP gained over the baseline
+local function UpgradeLabel(newEP, baseLink, baseEP)
+    if not baseLink then return "Upgrade", newEP, nil end
+    local diff = newEP - baseEP
+    local pct = baseEP > 0 and (diff / baseEP) or (diff > 0 and math.huge or 0)
+    local label
+    if pct >= 0.25 and diff >= 1 then label = "Big upgrade"
+    elseif pct >= 0.10 and diff >= 1 then label = "Upgrade"
+    elseif pct <= -0.10 and diff <= -1 then label = "Downgrade"
+    else label = "Sidegrade" end
+    return label, diff, (baseEP > 0 and pct or nil)
+end
+local LABEL_COLOR = { ["Big upgrade"] = "ff40ffff", ["Upgrade"] = "ff20ff20", ["Sidegrade"] = "ffffd100", ["Downgrade"] = "ffff2020" }
+
 CheckAutoProfileSwitch = function(event)
 local charKey = (UnitName("player") or "Unknown") .. " - " .. (GetRealmName() or "Unknown")
 if not CysUIDB or not CysUIDB.upgrade or not CysUIDB.upgrade.charProfiles or not CysUIDB.upgrade.charProfiles[charKey] then return end
@@ -434,26 +495,29 @@ local function OnTooltipItem(tooltip)
     local itemScore = CysUpgrade:GetItemEP(itemLink, weights)
     if itemScore <= 0 then return end
 
-    local _, equippedLink = GetTargetSlotAndEquipped(itemLink, weights)
-    local netDiff = itemScore
-    if equippedLink then netDiff = itemScore - CysUpgrade:GetItemEP(equippedLink, weights) end
-
-    tooltip:AddLine(" ")
-    if netDiff > SIDEGRADE then
-        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP |cff20ff20(+%s Upgrade)|r", profName, Whole(itemScore), Whole(netDiff)), 1, 1, 1)
-    elseif netDiff < -SIDEGRADE then
-        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP |cffff2020(-%s Downgrade)|r", profName, Whole(itemScore), Whole(netDiff)), 1, 1, 1)
-    else
-        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP |cffffd100(Side-grade)|r", profName, Whole(itemScore)), 1, 1, 1)
+    local baseSlot, equippedLink, baseEP, setName = GetBaseline(itemLink, weights)
+    if not baseSlot then
+        tooltip:AddLine(" ")
+        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP", profName, Whole(itemScore)), 1, 1, 1)
+        return
     end
+    local label, diff, pct = UpgradeLabel(itemScore, equippedLink, baseEP or 0)
+    local detail
+    if not equippedLink then
+        detail = ""
+    else
+        detail = string.format("  %+.1f EP%s", diff, pct and string.format(" (%+.0f%%)", pct * 100) or "")
+    end
+    tooltip:AddLine(" ")
+    tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP%s |c%s%s|r", profName, Whole(itemScore), detail, LABEL_COLOR[label], label), 1, 1, 1)
 
     if not equippedLink then
-        tooltip:AddLine("Replaces: nothing (empty slot)", 0.2, 1, 0.2)
+        tooltip:AddLine(setName and string.format("Replaces: nothing (empty slot in your %s set)", setName) or "Replaces: nothing (empty slot)", 0.2, 1, 0.2)
         return
     end
 
     local eqName = GetItemInfo(equippedLink)
-    if eqName then tooltip:AddLine(string.format("Replaces: %s", eqName), 0.8, 0.8, 0.8) end
+    if eqName then tooltip:AddLine(string.format("Replaces: %s%s", eqName, setName and (" (your " .. setName .. " set)") or ""), 0.8, 0.8, 0.8) end
 
     -- only the stats that really differ
     local newStats, eqStats = GetDetailedItemStats(itemLink), GetDetailedItemStats(equippedLink)
@@ -926,10 +990,10 @@ if itemLink and IsItemValidForClass(itemLink) then
 UpdateWeightsFromRows()
 local itemScore = CysUpgrade:GetItemEP(itemLink, CysUpgrade.weights)
 if itemScore > 0 then
-local _, eqLink = GetTargetSlotAndEquipped(itemLink, CysUpgrade.weights)
-local eqScore = eqLink and CysUpgrade:GetItemEP(eqLink, CysUpgrade.weights) or 0
-if itemScore > eqScore + 0.05 then
-showUpgrade = true
+local bSlot, eqLink, eqScore = GetBaseline(itemLink, CysUpgrade.weights)
+if bSlot then
+local lbl = UpgradeLabel(itemScore, eqLink, eqScore or 0)
+showUpgrade = (lbl == "Upgrade" or lbl == "Big upgrade")
 end
 end
 end
@@ -952,10 +1016,10 @@ if itemLink and IsItemValidForClass(itemLink) then
 UpdateWeightsFromRows()
 local itemScore = CysUpgrade:GetItemEP(itemLink, CysUpgrade.weights)
 if itemScore > 0 then
-local _, eqLink = GetTargetSlotAndEquipped(itemLink, CysUpgrade.weights)
-local eqScore = eqLink and CysUpgrade:GetItemEP(eqLink, CysUpgrade.weights) or 0
-if itemScore > eqScore + 0.05 then
-showUpgrade = true
+local bSlot, eqLink, eqScore = GetBaseline(itemLink, CysUpgrade.weights)
+if bSlot then
+local lbl = UpgradeLabel(itemScore, eqLink, eqScore or 0)
+showUpgrade = (lbl == "Upgrade" or lbl == "Big upgrade")
 end
 end
 end

@@ -48,7 +48,7 @@ local function LayoutRollFrame(frame)
     local icon = Part(frame, "Icon") or (iconFrame and iconFrame.Icon)
     if iconFrame then
         iconFrame:ClearAllPoints()
-        iconFrame:SetPoint("LEFT", frame, "LEFT", 6, 3)
+        iconFrame:SetPoint("LEFT", frame, "LEFT", 6, 4)
         iconFrame:SetSize(isz, isz)
         local border = Part(iconFrame, "Border") or Part(frame, "IconFrameBorder")
         if border and border.SetAlpha then border:SetAlpha(0) end
@@ -68,7 +68,25 @@ local function LayoutRollFrame(frame)
         if b and b.SetPoint and (b:IsShown() or key == "PassButton") then
             b:ClearAllPoints()
             b:SetSize(bsize, bsize)
-            b:SetPoint("RIGHT", anchor, anchorPoint, gap, 3)
+            b:SetPoint("RIGHT", anchor, anchorPoint, gap, leftmost and 0 or 4)
+            if not b.cysArt then
+                b.cysArt = true
+                local art = ({ PassButton = "Pass", GreedButton = "Coin", NeedButton = "Dice", DisenchantButton = "DE" })[key]
+                if art then
+                    local base = "Interface\\Buttons\\UI-GroupLoot-" .. art
+                    b:SetNormalTexture(base .. "-Up")
+                    b:SetPushedTexture(base .. "-Down")
+                    b:SetHighlightTexture(base .. "-Highlight")
+                end
+                for _, r in ipairs({ b:GetRegions() }) do
+                    if r:GetObjectType() == "Texture" and r ~= b:GetNormalTexture() and r ~= b:GetPushedTexture() and r ~= b:GetHighlightTexture() then r:SetAlpha(0) end
+                end
+            end
+            -- Blizzard offsets each button's art differently, which is what made them sit at different heights
+            for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetDisabledTexture" }) do
+                local tex = b[getter] and b[getter](b)
+                if tex then tex:ClearAllPoints(); tex:SetAllPoints(b) end
+            end
             anchor, anchorPoint, gap = b, "LEFT", -4
             leftmost = b
         end
@@ -79,6 +97,9 @@ local function LayoutRollFrame(frame)
         name:ClearAllPoints()
         if iconFrame then
             name:SetPoint("LEFT", iconFrame, "RIGHT", 8, 0)
+            name:SetPoint("TOP", iconFrame, "TOP", 0, 0)
+            name:SetPoint("BOTTOM", iconFrame, "BOTTOM", 0, 0)
+            name:SetJustifyV("MIDDLE")
         else
             name:SetPoint("LEFT", frame, "LEFT", isz + 14, 3)
         end
@@ -130,6 +151,20 @@ local function SkinGroupLootFrame(frame)
         end
     end
 
+    if frame.SetBackdrop then pcall(frame.SetBackdrop, frame, nil) end
+    -- Blizzard's own corner ornaments and frame art
+    for _, key in ipairs({ "Border", "NineSlice", "BorderFrame" }) do
+        local piece = frame[key]
+        if piece and piece.SetAlpha then piece:SetAlpha(0) end
+    end
+    for _, child in ipairs({ frame:GetChildren() }) do
+        if child ~= frame.Timer and child ~= frame.IconFrame and child:GetObjectType() == "Frame" and not child:IsObjectType("Button") then
+            for _, r in ipairs({ child:GetRegions() }) do
+                if r:GetObjectType() == "Texture" and r ~= frame.Icon then r:SetAlpha(0) end
+            end
+        end
+    end
+
     -- Create CysUI Panel Background & Gold Border
     local panel = CreateFrame("Frame", nil, frame)
     panel:SetAllPoints(frame)
@@ -143,7 +178,12 @@ local function SkinGroupLootFrame(frame)
         timer:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
         timer:SetStatusBarColor(T.accent[1], T.accent[2], T.accent[3], 0.8)
         if timer.Background then timer.Background:SetAlpha(0) end
-        W.Border(timer, 1, T.border, "BORDER")
+        for _, r in ipairs({ timer:GetRegions() }) do
+            if r:GetObjectType() == "Texture" and r ~= timer:GetStatusBarTexture() then r:SetAlpha(0) end
+        end
+        local bgm = timer:CreateTexture(nil, "BACKGROUND")
+        bgm:SetAllPoints(); bgm:SetColorTexture(1, 1, 1, 0.08)
+        if timer.Spark then timer.Spark:SetAlpha(0) end
     end
 
     -- Style Item Icon
