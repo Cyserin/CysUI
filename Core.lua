@@ -303,9 +303,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.1",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.2",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.43.2", date = "2026-10-31",
+              fixed = {
+                  "XP bar: rested XP now shows as a full-height blue segment starting right after your XP and drawn over the quest segment (rested is used up first), instead of a thin line along the bottom edge.",
+              },
+            },
             { version = "0.43.1", date = "2026-10-31",
               improved = {
                   "Updates: Cys's UI is now also being published on CurseForge and Wago, so their addon apps can update it. These are alpha builds, so the apps only offer them to people who switch the addon to the alpha channel.",
