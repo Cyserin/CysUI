@@ -56,26 +56,45 @@ jobs:
           (cd build && zip -rq "../CysUI-v$v.zip" CysUI)
           ls -l "CysUI-v$v.zip"
 
-      - name: Publish the release
-        if: steps.ver.outputs.exists == 'false'
-        run: |
-          v="${{ steps.ver.outputs.version }}"
-          tag="${{ steps.ver.outputs.tag }}"
-          label="${RELEASE_CHANNEL:-release}"
-          cat > notes.md <<'NOTES'
-          Test build. Download the file named **CysUI-v...zip** below (not "Source code").
+      - name: Inject Version Stamp and Publish
+      if: steps.ver.outputs.exists == 'false'
+      run: |
+        VERSION="${{ steps.ver.outputs.tag }}"
+        if [ -z "$VERSION" ]; then
+          VERSION=$(git rev-parse --short HEAD)
+        fi
+        
+        # Automatically replaces __VERSION__ in your index.html
+        sed -i "s/__VERSION__/$VERSION/g" index.html
+        
+        # Configure git identity for automated commit
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Commit and push the updated index.html back to main so GitHub Pages builds it
+        git add index.html
+        git commit -m "chore: auto-stamp version $VERSION [skip ci]" || echo "No changes to commit"
+        git push
+        
+        v="${{ steps.ver.outputs.version }}"
+        tag="${{ steps.ver.outputs.tag }}"
+        label="${{ RELEASE_CHANNEL:-release }}"
+        
+        cat > notes.md <<'NOTES'
+        Test build. Download the file named **CysUI-v...zip** below (not "Source code").
 
-          Unzip it so the folder is named exactly `CysUI` and sits in
-          `World of Warcraft\_classic_era_\Interface\AddOns\`, then type `/cui` in game.
+        Unzip it so the folder is named exactly `CysUI` and sits in
+        `World of Warcraft\_classic_era_\Interface\AddOns\`, then type `/cui` in game.
 
-          What changed is in the game: `/cui` -> What's New.
-          Bugs and ideas: use the Issues tab.
-          NOTES
-          gh release create "$tag" "CysUI-v$v.zip" \
-            --target "$GITHUB_SHA" \
-            --title "Cys's UI v$v ($label)" \
-            --latest \
-            --notes-file notes.md
+        What changed is in the game: `/cui` -> What's New.
+        Bugs and ideas: use the Issues tab.
+        NOTES
+
+        gh release create "$tag" "CysUI-v$v.zip" \
+          --target "$GITHUB_SHA" \
+          --title "Cys's UI v$v ($label)" \
+          --latest \
+          --notes-file notes.md
 
       # CurseForge and Wago. Skipped until at least one of the two secrets is saved in the repo.
       # (The packager reads the project IDs from the toc and CHANGELOG.md from the repo.)
