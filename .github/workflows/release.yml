@@ -59,16 +59,16 @@ jobs:
 
       - name: Stamp version in index.html
         run: |
-          VERSION="${{ steps.ver.outputs.version }}"
-          if [ -z "$VERSION" ]; then VERSION="${{ steps.ver.outputs.tag }}"; fi
-          sed -i "s/__VERSION__/$VERSION/g" index.html
-    
+         VERSION="${{ steps.ver.outputs.version }}"
+         if [ -z "$VERSION" ]; then VERSION="${{ steps.ver.outputs.tag }}"; fi
+         sed -i "s/__VERSION__/$VERSION/g" index.html || true
+        
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html
           git commit -m "chore: auto-stamp version $VERSION [skip ci]" || echo "No changes to commit"
-          git pull origin main --rebase
-          Zgit push origin HEAD:main
+          git pull origin main --rebase || true
+          git push origin HEAD:main || true
         
           v="${{ steps.ver.outputs.version }}"
           tag="${{ steps.ver.outputs.tag }}"
