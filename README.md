@@ -115,7 +115,7 @@ Modules that depend on your class or spec. Anything not listed is on the list to
 | Level-Up Spells | every other class | Era | to add |
 | Level-Up Spells | every class | WoW Forever | work in progress (no leveling guides out yet) |
 | Totem bar | Shaman | Era | in alpha |
-| Heal Advisor | Shaman (Healing Wave, Lesser Healing Wave, Chain Heal); Priest, Druid and Paladin heals (new, unchecked in game) | Era | in alpha, new in 0.41.0 |
+| Heal Advisor | Shaman (Healing Wave, Lesser Healing Wave, Chain Heal); Priest, Druid and Paladin heals (Priest and Paladin numbers checked in game at low levels; Druid still to check) | Era | in alpha, new in 0.42.0 |
 | Tremor Alert | Shaman (dungeon list Wailing Caverns to Scholomance, learns new NPCs) | Era | in alpha, new in 0.41.0 |
 | Battle Shout alert | Warrior | Era | in alpha |
 | Raid debuffs, interrupt announcer, waypoints, upgrade scores | every class | Era | in alpha |
