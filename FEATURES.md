@@ -30,6 +30,9 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Mail**: tick mails, shift-click for a range, Open or Return the ticked ones.
 - **Roll Tracker** *(layout)*: tracks /roll and pass results for loot and announces the winner; in raids only the leader, assistants and master looter announce.
 - **Raid Debuffs** *(layout)*: tracks the key debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements and more) and only shows the ones your group can apply.
+- **Combat Log (Cys's logs)**: `/cuilog` opens a window with every fight your group was in: damage, healing, damage taken (hover for spells), deaths with a recap, interrupts and dispels. The last fights are kept between sessions.
+- **Taunt Alert**: tells you when someone else or a pet taunts a mob you were tanking, and when your own taunt is resisted.
+- **Missing Buffs**: icons for Fortitude, Mark of the Wild, Arcane Intellect and Divine Spirit when your group lacks them, only for classes that need them. Out of combat only.
 - **Kill Tracker**: learns your average XP per kill and shows how many more kills it takes to level.
 - **Heal Advisor** (Druid, Paladin, Priest, Shaman): `/cuirank` opens a window that reads your stats, healing talents and heal ranks and says which rank to use for small hits, general healing, heavy damage, emergencies and group healing (only spells you know). Scan saves your stats; a popup says when learning something changes the advice. Preview shows a sample healer and Copy report makes text to paste into a bug report.
 - **Tremor Alert** (Shaman): a Tremor Totem icon with mob - ability lines when a mob that fears, charms or sleeps is in the pack. Ships with a dungeon list and learns new NPC casters as you play (never players, never in battlegrounds or arenas).
@@ -58,6 +61,6 @@ What each class-dependent module covers today (Classic Era). Guides and class mo
 | Heal Advisor | Shaman, Priest, Druid, Paladin (healing spells) | Paladin Judgement/Holy Shock extras |
 | Tremor Alert | Shaman | |
 | Battle Shout alert | Warrior | |
-| Raid Debuffs, Interrupts, Waypoints, Upgrade | all classes | |
+| Raid Debuffs, Interrupts, Waypoints, Upgrade, Combat Log, Taunt Alert, Missing Buffs | all classes | |
 
 WoW Forever: the level-up guides are a work in progress, because no leveling guides for Forever's classes exist yet.

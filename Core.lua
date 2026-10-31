@@ -83,7 +83,7 @@ local DEFAULTS = {
                 targetLine = true, anchorCursor = false, cursorLift = 20, cursorShift = 160, scale = 100,
                 showIDs = false, hideUnitInCombat = false },
     minimap = { zoneText = true, coords = true, wheelZoom = true },
-    unitframes = { player = true, target = true, targettarget = true, pet = true, party = true,
+    unitframes = { rangeFade = true, targetRange = true, player = true, target = true, targettarget = true, pet = true, party = true,
                    classColors = true, healthText = "both" },
     castbar = { player = true, target = true, icon = true, time = true },
     update = { enabled = true, notified = "0.0.0" },
@@ -319,9 +319,42 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.44.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.46.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.46.0", date = "2026-10-31",
+              added = {
+                  "Combat Log (Cys's logs): open it with /cuilog or from /cui. Every fight your group is in is summed up: damage, healing and damage taken per player (hover a bar for the spells), deaths with the last hits before each one, interrupts and dispels. The last 15 fights are kept between sessions, and you get a one-line recap when you die.",
+                  "Taunt Alert: a message across the screen when another tank, a Hunter pet or a Druid taunts a mob you were tanking, and when your own taunt is resisted.",
+                  "Missing Buffs: icons for Fortitude, Mark of the Wild, Arcane Intellect and Divine Spirit when your group is missing them, only for classes that need them. If you can cast the buff the number is how many people lack it; if someone else can cast it and you lack it you see a !. Out of combat only.",
+                  "Group loot boxes: small numbers on the Need, Greed and Pass buttons show how many people chose each, and hovering shows who.",
+                  "Unit Frames: party members who are out of range fade, and a player you target shows a rough distance (10 / 28 / 28+ yd).",
+              },
+              improved = {
+                  "Tremor Alert now only shows in combat, and only for mobs that are fighting you or someone in your group, so mobs with a nameplate that you are not fighting no longer trigger it. There is a checkbox if you want the old behavior.",
+              },
+            },
+            { version = "0.45.0", date = "2026-10-31",
+              added = {
+                  "CysUpgrade: a line under the score says what a swap would take off, for example You would lose: Reinforced Armor +8 (+0.8 EP). Reapply on the new item?",
+                  "CysUpgrade: an armor kit suggestion on chest, legs, gloves and boots, the best kit for your level with its EP (Light through Rugged). With Auctionator installed it also shows the kit price and EP per gold; otherwise it says if available.",
+                  "CysUpgrade: a Both with the kit line compares the new item and what you wear with the same best kit on each, so a kit cannot make one side look better than it is. On an item you are wearing, a note says how much armor a better kit would add.",
+              },
+              improved = {
+                  "CysUpgrade now scores items without enchants and armor kits (base against base), so your kit no longer hides a real upgrade. The enchant shows on its own line instead. The With the same enchant line is gone.",
+              },
+            },
+            { version = "0.44.1", date = "2026-10-31",
+              fixed = {
+                  "CysUpgrade now counts enchants and armor kits on the item you are comparing against (for example Reinforced Armor +8 on your gloves), so swapping to a new item shows the real armor you would lose.",
+              },
+              improved = {
+                  "CysUpgrade: a Sidegrade now says which way it leans, Sidegrade (slightly better), (slightly worse) or (about equal), so a small loss does not read like a reason to swap.",
+              },
+              added = {
+                  "CysUpgrade shows a second line, With the same enchant, with the label the new item would get if you put the same enchant or armor kit on it.",
+              },
+            },
             { version = "0.44.0", date = "2026-10-31",
               improved = {
                   "CysUpgrade labels: the score now reads like +0.3 EP (+7%) Sidegrade. Big upgrade is 25% or more, Upgrade is 10% or more (and at least 1 EP), Downgrade is 10% or more worse (and at least 1 EP), anything else is a Sidegrade, and an empty slot is an Upgrade.",

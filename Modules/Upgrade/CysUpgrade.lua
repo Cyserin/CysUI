@@ -33,6 +33,8 @@ end
 -- numbers are read from the item's own tooltip text instead, which always shows what the item really
 -- has. GetItemStats only fills in anything the tooltip reading did not recognise.
 local statCache = {}
+local enchNameCache = {}   -- itemLink -> list of enchant / armor kit names as the tooltip shows them
+local enchCache = {}   -- itemLink -> { statKey = value } for the part that comes from enchants and armor kits
 
 local PRIMARY = {
     strength = "ITEM_MOD_STRENGTH", agility = "ITEM_MOD_AGILITY", stamina = "ITEM_MOD_STAMINA",
@@ -67,6 +69,7 @@ local EQUIP_LINES = {
 local function GetDetailedItemStats(itemLink)
     if not itemLink then return {} end
     if statCache[itemLink] then return statCache[itemLink] end
+    local ench, enames = {}, {}
 
     cysScanner:ClearLines()
     cysScanner:SetHyperlink(itemLink)
@@ -90,6 +93,23 @@ local function GetDetailedItemStats(itemLink)
             if line.GetTextColor then r, g = line:GetTextColor() end
             local isGreen = (r or 1) < 0.5 and (g or 1) > 0.8 -- enchants and "Equip:" lines are green
             local plain = string.lower((string.gsub(string.gsub(leftText, "|c%x%x%x%x%x%x%x%x", ""), "|r", "")))
+
+            -- enchants and armor kits (green lines): "Reinforced Armor +8", "+3 Agility", "+10 Fire Resistance"
+            if isGreen and i > 1 then
+                local function AddE(key, v)
+                    v = tonumber(v)
+                    if key and v then
+                        Add(key, v); ench[key] = (ench[key] or 0) + v
+                        enames[#enames + 1] = strtrim((string.gsub(string.gsub(leftText, "|c%x%x%x%x%x%x%x%x", ""), "|r", "")))
+                    end
+                end
+                local kit = string.match(plain, "^[%a ]-armor %+(%d+)$")
+                if kit then AddE("RESISTANCE0_NAME", kit) end
+                local en, ew = string.match(plain, "^%+(%d+) (%a+)$")
+                if en and PRIMARY[ew] then AddE(PRIMARY[ew], en) end
+                local rn2, sch = string.match(plain, "^%+(%d+) (%a+) resistance$")
+                if rn2 and RESISTS[sch] then AddE("RESISTANCE" .. RESISTS[sch] .. "_NAME", rn2) end
+            end
 
             -- base and suffix stats: "+3 Intellect", "-5 Stamina", "39 Armor", "+10 Fire Resistance"
             if not isGreen then
@@ -171,8 +191,33 @@ local function GetDetailedItemStats(itemLink)
     end
 
     -- only keep it once the game has really loaded the item (an empty first read would stick otherwise)
-    if numLines > 1 then statCache[itemLink] = stats end
+    if numLines > 1 then statCache[itemLink] = stats; enchCache[itemLink] = ench; enchNameCache[itemLink] = enames end
     return stats
+end
+
+-- the part of an item's stats that comes from its enchant or armor kit
+local function GetEnchantStats(itemLink)
+    GetDetailedItemStats(itemLink)
+    return enchCache[itemLink] or {}
+end
+
+local function GetEnchantNames(itemLink)
+    GetDetailedItemStats(itemLink)
+    return enchNameCache[itemLink] or {}
+end
+
+-- the item's stats without its enchant or armor kit: items are compared base against base
+local function GetBaseStats(itemLink)
+    local stats = GetDetailedItemStats(itemLink)
+    local ench = GetEnchantStats(itemLink)
+    if next(ench) == nil then return stats end
+    local out = {}
+    for k, v in pairs(stats) do out[k] = v end
+    for k, v in pairs(ench) do
+        local left = (out[k] or 0) - v
+        out[k] = left > 0 and left or nil
+    end
+    return out
 end
 
 UpdateWeightsFromRows = function()
@@ -234,7 +279,7 @@ function CysUpgrade:GetItemEP(itemLink, customWeights)
     if not itemLink then return 0 end
     if not IsItemValidForClass(itemLink) then return 0 end
 
-    local stats = GetDetailedItemStats(itemLink)
+    local stats = GetBaseStats(itemLink)
     UpdateWeightsFromRows()
     local rawWeights = (type(customWeights) == "table") and customWeights or CysUpgrade.weights
     local weights = {}
@@ -420,6 +465,13 @@ local function UpgradeLabel(newEP, baseLink, baseEP)
     else label = "Sidegrade" end
     return label, diff, (baseEP > 0 and pct or nil)
 end
+-- a Sidegrade says which way it leans, so a small loss does not read like a reason to swap
+local function LabelText(label, diff)
+    if label ~= "Sidegrade" then return label end
+    if diff > 0.05 then return "Sidegrade (slightly better)" end
+    if diff < -0.05 then return "Sidegrade (slightly worse)" end
+    return "Sidegrade (about equal)"
+end
 local LABEL_COLOR = { ["Big upgrade"] = "ff40ffff", ["Upgrade"] = "ff20ff20", ["Sidegrade"] = "ffffd100", ["Downgrade"] = "ffff2020" }
 
 CheckAutoProfileSwitch = function(event)
@@ -478,6 +530,73 @@ local function Whole(v)
     if r == 0 then return string.format("%.1f", math.abs(v)) end
     return tostring(r)
 end
+
+-- Classic Era armor kits (stats from the Warcraft wiki; prices come from Auctionator when it is installed)
+local ARMOR_KITS = {
+    { name = "Light Armor Kit",  itemID = 2304,  armor = 8,  level = 0 },
+    { name = "Medium Armor Kit", itemID = 2313,  armor = 16, level = 5 },
+    { name = "Heavy Armor Kit",  itemID = 4265,  armor = 24, level = 20 },
+    { name = "Thick Armor Kit",  itemID = 8173,  armor = 32, level = 30 },
+    { name = "Rugged Armor Kit", itemID = 15564, armor = 40, level = 40 },
+}
+local KIT_SLOTS = { INVTYPE_CHEST = true, INVTYPE_ROBE = true, INVTYPE_LEGS = true, INVTYPE_HAND = true, INVTYPE_FEET = true }
+
+local function KitPrice(kit)
+    -- only trust the id if the game agrees on the name
+    if GetItemInfo(kit.itemID) ~= kit.name then return nil end
+    local api = Auctionator and Auctionator.API and Auctionator.API.v1
+    if not (api and api.GetAuctionPriceByItemID) then return nil end
+    local ok, price = pcall(api.GetAuctionPriceByItemID, "CysUI", kit.itemID)
+    if ok and type(price) == "number" and price > 0 then return price end
+end
+
+function CysUpgrade.AddKitSuggestion(tooltip, itemLink, weights, equippedLink, itemScore, baseEP)
+    local armorWeight = weights["RESISTANCE0_NAME"] or 0
+    if armorWeight <= 0 then return end
+    local equipLoc = select(9, GetItemInfo(itemLink))
+    if not KIT_SLOTS[equipLoc or ""] then return end
+    if next(GetEnchantStats(itemLink)) ~= nil then return end
+    local best
+    for _, kit in ipairs(ARMOR_KITS) do
+        if UnitLevel("player") >= kit.level then best = kit end
+    end
+    if not best then return end
+    local ep = best.armor * armorWeight
+    local price = KitPrice(best)
+    if price then
+        local gold = price / 10000
+        tooltip:AddLine(string.format("Best armor kit: %s +%d Armor (+%.1f EP, %.1fg, %.1f EP per gold)", best.name, best.armor, ep, gold, gold > 0 and ep / gold or 0), 0.6, 0.8, 1)
+    else
+        tooltip:AddLine(string.format("Best armor kit: %s +%d Armor (+%.1f EP, if available)", best.name, best.armor, ep), 0.6, 0.8, 1)
+    end
+    -- both items with the same best kit (a new kit replaces the old one), so a kit cannot flatter either side
+    if equippedLink and itemScore then
+        local label, diff, pct = UpgradeLabel(itemScore + ep, equippedLink, (baseEP or 0) + ep)
+        tooltip:AddLine(string.format("Both with the %s: %+.1f EP%s |c%s%s|r", best.name, diff,
+            pct and string.format(" (%+.0f%%)", pct * 100) or "", LABEL_COLOR[label], LabelText(label, diff or 0)), 0.8, 0.8, 0.8)
+    end
+end
+
+-- on an item you are wearing: would a better armor kit add armor?
+function CysUpgrade.AddWornKitNote(tooltip, itemLink, weights)
+    local armorWeight = weights["RESISTANCE0_NAME"] or 0
+    if armorWeight <= 0 then return end
+    local equipLoc = select(9, GetItemInfo(itemLink))
+    if not KIT_SLOTS[equipLoc or ""] then return end
+    local best
+    for _, kit in ipairs(ARMOR_KITS) do
+        if UnitLevel("player") >= kit.level then best = kit end
+    end
+    if not best then return end
+    local have = GetEnchantStats(itemLink)["RESISTANCE0_NAME"] or 0
+    local gain = best.armor - have
+    if gain <= 0 then return end
+    local ep = gain * armorWeight
+    local price = KitPrice(best)
+    local cost = price and string.format(", %.1fg", price / 10000) or ", if available"
+    tooltip:AddLine(string.format("%s would add +%d armor here (+%.1f EP%s)", best.name, gain, ep, cost), 0.6, 0.8, 1)
+end
+
 local SIDEGRADE = 0.05 -- a score difference smaller than this counts as the same
 
 -- adds the score, what it replaces and exactly what changes to an item tooltip
@@ -495,6 +614,17 @@ local function OnTooltipItem(tooltip)
     local itemScore = CysUpgrade:GetItemEP(itemLink, weights)
     if itemScore <= 0 then return end
 
+    local isWorn = false
+    for sl = 1, 19 do
+        if GetInventoryItemLink("player", sl) == itemLink then isWorn = true; break end
+    end
+    if isWorn then
+        tooltip:AddLine(" ")
+        tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP", profName, Whole(itemScore)), 1, 1, 1)
+        CysUpgrade.AddWornKitNote(tooltip, itemLink, weights)
+        return
+    end
+
     local baseSlot, equippedLink, baseEP, setName = GetBaseline(itemLink, weights)
     if not baseSlot then
         tooltip:AddLine(" ")
@@ -509,7 +639,19 @@ local function OnTooltipItem(tooltip)
         detail = string.format("  %+.1f EP%s", diff, pct and string.format(" (%+.0f%%)", pct * 100) or "")
     end
     tooltip:AddLine(" ")
-    tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP%s |c%s%s|r", profName, Whole(itemScore), detail, LABEL_COLOR[label], label), 1, 1, 1)
+    tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP%s |c%s%s|r", profName, Whole(itemScore), detail, LABEL_COLOR[label], LabelText(label, diff or 0)), 1, 1, 1)
+
+    -- items are scored without enchants and armor kits; say what the swap would take off, and what a kit could add
+    if equippedLink then
+        local ench = GetEnchantStats(equippedLink)
+        if next(ench) ~= nil then
+            local enchEP = 0
+            for k, v in pairs(ench) do enchEP = enchEP + v * (weights[k] or 0) end
+            tooltip:AddLine(string.format("You'd lose: %s (%+.1f EP). Reapply on the new item?",
+                table.concat(GetEnchantNames(equippedLink), ", "), enchEP), 1, 0.6, 0.2)
+        end
+    end
+    CysUpgrade.AddKitSuggestion(tooltip, itemLink, weights, equippedLink, itemScore, baseEP)
 
     if not equippedLink then
         tooltip:AddLine(setName and string.format("Replaces: nothing (empty slot in your %s set)", setName) or "Replaces: nothing (empty slot)", 0.2, 1, 0.2)
@@ -520,7 +662,7 @@ local function OnTooltipItem(tooltip)
     if eqName then tooltip:AddLine(string.format("Replaces: %s%s", eqName, setName and (" (your " .. setName .. " set)") or ""), 0.8, 0.8, 0.8) end
 
     -- only the stats that really differ
-    local newStats, eqStats = GetDetailedItemStats(itemLink), GetDetailedItemStats(equippedLink)
+    local newStats, eqStats = GetBaseStats(itemLink), GetBaseStats(equippedLink)
     local keys, changes = {}, {}
     for k in pairs(newStats) do keys[k] = true end
     for k in pairs(eqStats) do keys[k] = true end

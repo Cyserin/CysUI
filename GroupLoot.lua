@@ -27,6 +27,7 @@ local function DB()
         if g.customHeight < 40 or g.customHeight >= 56 then g.customHeight = 46 end
     end
     if CysUIDB.grouploot.qualityColors == nil then CysUIDB.grouploot.qualityColors = true end
+    if CysUIDB.grouploot.rollCounts == nil then CysUIDB.grouploot.rollCounts = true end
     return CysUIDB.grouploot
 end
 
@@ -139,6 +140,118 @@ local function ApplyDimensions()
     end
 end
 
+
+
+--------------------------------------------------------------------------------
+-- How many people rolled Need / Greed / Pass: counted from the roll lines in chat
+--------------------------------------------------------------------------------
+local rolls = {}   -- rollID -> { need = {names}, greed = {names}, de = {names}, pass = {names} }
+
+local function PatternOf(global)
+    if type(global) ~= "string" then return nil end
+    local p = string.gsub(global, "([%^%$%(%)%.%[%]%*%+%-%?%%])", "%%%1")
+    p = string.gsub(p, "%%%%s", "(.+)")
+    return "^" .. p .. "$"
+end
+
+local ROLL_KINDS
+local function BuildKinds()
+    if ROLL_KINDS then return end
+    ROLL_KINDS = {}
+    local function Add(kind, other, self)
+        local po, ps = PatternOf(other), PatternOf(self)
+        if po then ROLL_KINDS[#ROLL_KINDS + 1] = { kind = kind, pat = po } end
+        if ps then ROLL_KINDS[#ROLL_KINDS + 1] = { kind = kind, pat = ps, self = true } end
+    end
+    Add("need", LOOT_ROLL_NEED, LOOT_ROLL_NEED_SELF)
+    Add("greed", LOOT_ROLL_GREED, LOOT_ROLL_GREED_SELF)
+    Add("de", LOOT_ROLL_DISENCHANT, LOOT_ROLL_DISENCHANT_SELF)
+    Add("pass", LOOT_ROLL_PASSED, LOOT_ROLL_PASSED_SELF)
+end
+
+local function RollIDForItem(link)
+    local id = link and string.match(link, "item:(%d+)")
+    if not id then return nil end
+    for i = 1, 4 do
+        local f = _G["GroupLootFrame" .. i]
+        if f and f.rollID and GetLootRollItemLink then
+            local l = GetLootRollItemLink(f.rollID)
+            if l and string.match(l, "item:(%d+)") == id then return f.rollID, f end
+        end
+    end
+end
+
+local function CountText(kind, rollID)
+    local r = rolls[rollID]
+    local n = r and r[kind] and #r[kind] or 0
+    return n
+end
+
+local function PaintCounts(frame)
+    if not frame or not frame.rollID then return end
+    local on = DB().rollCounts
+    for _, pair in ipairs({ { "NeedButton", "need" }, { "GreedButton", "greed" }, { "DisenchantButton", "de" }, { "PassButton", "pass" } }) do
+        local b = Part(frame, pair[1])
+        if b then
+            if not b.cysCount then
+                local fs = b:CreateFontString(nil, "OVERLAY")
+                fs:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+                fs:SetPoint("TOPRIGHT", b, "TOPRIGHT", 4, 5)
+                fs:SetTextColor(1, 0.82, 0)
+                b.cysCount = fs
+                b:HookScript("OnEnter", function(self)
+                    local f = self:GetParent()
+                    local r = f and f.rollID and rolls[f.rollID]
+                    local list = r and r[pair[2]]
+                    if list and #list > 0 and DB().rollCounts and GameTooltip:IsShown() then
+                        GameTooltip:AddLine(table.concat(list, ", "), 1, 1, 1, true)
+                        GameTooltip:Show()
+                    end
+                end)
+            end
+            local n = CountText(pair[2], frame.rollID)
+            b.cysCount:SetText((on and n > 0) and n or "")
+        end
+    end
+end
+GL.PaintCounts = PaintCounts
+
+local function OnChatLoot(_, event, msg)
+    BuildKinds()
+    for _, k in ipairs(ROLL_KINDS) do
+        local a, b = string.match(msg, k.pat)
+        if a then
+            local name, link
+            if k.self then name, link = UnitName("player"), a else name, link = a, b end
+            local rollID, frame = RollIDForItem(link)
+            if rollID then
+                rolls[rollID] = rolls[rollID] or {}
+                local r = rolls[rollID]
+                r[k.kind] = r[k.kind] or {}
+                table.insert(r[k.kind], name)
+                PaintCounts(frame)
+            end
+            return
+        end
+    end
+end
+
+local rollEvents = CreateFrame("Frame")
+rollEvents:RegisterEvent("CHAT_MSG_LOOT")
+rollEvents:RegisterEvent("START_LOOT_ROLL")
+rollEvents:SetScript("OnEvent", function(self, event, a1)
+    if event == "START_LOOT_ROLL" then
+        rolls[a1] = nil
+        C_Timer.After(0.2, function()
+            for i = 1, 4 do
+                local f = _G["GroupLootFrame" .. i]
+                if f and f.rollID == a1 then PaintCounts(f) end
+            end
+        end)
+    elseif DB().enable then
+        OnChatLoot(self, event, a1)
+    end
+end)
 
 local function SkinGroupLootFrame(frame)
     if not frame or frame.cysSkinned then return end
@@ -460,5 +573,8 @@ CUI:RegisterPage("Loot", function(page)
     local sc = W.Stepper(page, "Scale", function() return floor(db.scale * 100 + 0.5) end,
         function(v) db.scale = v / 100; ApplyDimensions() end, 60, 150, 5, "%")
     sc:SetPoint("TOPLEFT", 4, -378)
-    page.contentHeight = 420
+    local rc = W.Checkbox(page, "Show how many people rolled Need and Greed on the buttons", function() return db.rollCounts end,
+        function(on) db.rollCounts = on; for i = 1, 4 do GL.PaintCounts(_G["GroupLootFrame" .. i]) end end)
+    rc:SetPoint("TOPLEFT", 4, -412)
+    page.contentHeight = 450
 end)

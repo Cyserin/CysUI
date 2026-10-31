@@ -22,7 +22,7 @@ local GROUPS = {
     { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends" } },
     { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters" } },
     { "Loot & Items",    { "Vendor", "Loot", "Roll Tracker", "Upgrade" } },
-    { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs" } },
+    { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
 }
 
 -- Class pages live under CLASS: a General page (works for every class), then a heading for your own class

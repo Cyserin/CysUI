@@ -15,7 +15,7 @@ local W = CUI.W
 local T = W.T
 local D = CUI.Tremor or { ByNPC = {} }
 
-local DEFAULTS = { confirm = true, learn = true, needSpell = true, unverified = true, learned = {} }
+local DEFAULTS = { combatOnly = true, confirm = true, learn = true, needSpell = true, unverified = true, learned = {} }
 
 local function DB()
     CysUIDB = CysUIDB or {}
@@ -304,6 +304,14 @@ local function Check(unit, found)
     if not UnitExists(unit) or UnitIsPlayer(unit) or UnitIsDead(unit) then return end
     if UnitPlayerControlled and UnitPlayerControlled(unit) then return end -- pets, mind-controlled mobs
     if not UnitCanAttack("player", unit) then return end
+    if DB().combatOnly then
+        -- only a mob that is fighting us or someone in the group counts (not one that merely has a nameplate)
+        if not UnitAffectingCombat(unit) then return end
+        local tgt = unit .. "target"
+        local onGroup = UnitExists(tgt) and (UnitIsUnit(tgt, "player") or UnitInParty(tgt) or UnitInRaid(tgt)
+            or (UnitPlayerControlled and UnitPlayerControlled(tgt) and not UnitCanAttack("player", tgt)))
+        if not onGroup and not (UnitThreatSituation and UnitThreatSituation("player", unit)) then return end
+    end
     local guid = UnitGUID(unit)
     if not guid or not guid:find("^Creature") then return end
     local name = UnitName(unit)
@@ -314,6 +322,11 @@ local UNITS = { "target", "mouseover", "focus", "party1target", "party2target", 
 
 local function Scan()
     local found = {}
+    if DB().combatOnly and not UnitAffectingCombat("player") then
+        active = found
+        Refresh()
+        return
+    end
     for _, u in ipairs(UNITS) do Check(u, found) end
     for i = 1, 40 do
         local u = "nameplate" .. i
@@ -482,6 +495,7 @@ CUI:RegisterPage("Tremor Alert", function(page)
         c:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
+    Check("Only in combat, and only for mobs fighting my group", "combatOnly")
     Check("Show a message when Tremor breaks a fear, charm or sleep", "confirm")
     Check("Only show once I know Tremor Totem", "needSpell")
     Check("Learn new mobs that fear, charm or sleep my group", "learn")

@@ -634,6 +634,42 @@ function UF.Enable()
         local ok, err = pcall(BuildParty)
         if not ok then CUI:Print("|cFFFF9F43Unit Frames: party skipped (" .. tostring(err) .. ")|r") end
     end
+    UF.StartRangeCheck()
+end
+
+-- party members out of range fade; a player you target shows a rough distance
+function UF.StartRangeCheck()
+    if UF.rangeTicker then return end
+    UF.rangeTicker = C_Timer.NewTicker(0.4, function()
+        local db = DB()
+        for unit, f in pairs(UF.frames) do
+            if f.IsShown and f:IsShown() then
+                local alpha = 1
+                if db.rangeFade ~= false and unit:find("^party") and UnitExists(unit) and UnitInRange then
+                    local inRange, checked = UnitInRange(unit)
+                    if checked and not inRange then alpha = 0.45 end
+                end
+                if f.cysRangeAlpha ~= alpha then f.cysRangeAlpha = alpha; f:SetAlpha(alpha) end
+            end
+        end
+        local tf = UF.frames.target
+        if tf and tf:IsShown() then
+            if not tf.rangeText then
+                tf.rangeText = tf.healthText:GetParent():CreateFontString(nil, "OVERLAY")
+                tf.rangeText:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+                tf.rangeText:SetPoint("BOTTOMRIGHT", tf, "BOTTOMRIGHT", -5, 3)
+                tf.rangeText:SetTextColor(0.75, 0.75, 0.75)
+            end
+            local txt = ""
+            if db.targetRange ~= false and UnitExists("target") and UnitIsPlayer("target") and not UnitIsUnit("target", "player")
+                and not UnitIsDead("target") and CheckInteractDistance then
+                if CheckInteractDistance("target", 3) then txt = "10 yd"
+                elseif CheckInteractDistance("target", 1) then txt = "28 yd"
+                else txt = "28+ yd" end
+            end
+            tf.rangeText:SetText(txt)
+        end
+    end)
 end
 
 CUI:RegisterModule({
@@ -673,6 +709,13 @@ CUI:RegisterPage("Unit Frames", function(page)
         end, "Mana number (player): ")
     manaBtn:SetPoint("TOPLEFT", 4, -98)
 
+    local rfade = W.Checkbox(page, "Fade party members who are out of range", function() return db.rangeFade ~= false end,
+        function(on) db.rangeFade = on end)
+    rfade:SetPoint("TOPLEFT", 4, -156)
+    local rtext = W.Checkbox(page, "Show a rough distance on a player you target (10 / 28 / 28+ yd)", function() return db.targetRange ~= false end,
+        function(on) db.targetRange = on end)
+    rtext:SetPoint("TOPLEFT", 4, -182)
+
     local blue = W.Checkbox(page, "Blue Shamans instead of pink (everywhere; turning off needs a /reload)",
         function() return CysUIDB.blueShaman end,
         function(on)
@@ -686,8 +729,8 @@ CUI:RegisterPage("Unit Frames", function(page)
         end)
     blue:SetPoint("TOPLEFT", 4, -130)
 
-    W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -170)
-    local y = -200
+    W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -222)
+    local y = -252
     for _, row in ipairs({ { "player", "Player" }, { "target", "Target (with buffs, debuffs, combo points)" },
                            { "targettarget", "Target of target" }, { "pet", "Pet" }, { "party", "Party" } }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] end, function(on) db[row[1]] = on end)
