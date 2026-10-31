@@ -319,9 +319,20 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.46.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.47.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.47.0", date = "2026-10-31",
+              added = {
+                  "Combat Log rebuilt as a run viewer: every dungeon or raid you enter is recorded as one run, from walking in to walking out (running back after a death does not split it). Open it with /cuilog.",
+                  "Each run keeps bosses (every kill and wipe on its own), trash, and every player's damage, healing, damage taken, casts, crits, interrupts and dispels, with a per-ability table (total, casts, per minute, average, crit %).",
+                  "Deaths list with the killing blow, overkill, damage taken and healing received; hover a death to see the last 10 events that hit that player, including buffs lost and debuffs gained.",
+                  "The last 3 to 10 runs are saved between sessions (your choice). Commands: /cuilog start, /cuilog end, /cuilog boss (marks your target as a boss), /cuilog clear. Optional checkbox turns on the game's own combat log during a run.",
+              },
+              improved = {
+                  "The old list of the last 15 fights is gone; the log is now organised by run instead.",
+              },
+            },
             { version = "0.46.0", date = "2026-10-31",
               added = {
                   "Combat Log (Cys's logs): open it with /cuilog or from /cui. Every fight your group is in is summed up: damage, healing and damage taken per player (hover a bar for the spells), deaths with the last hits before each one, interrupts and dispels. The last 15 fights are kept between sessions, and you get a one-line recap when you die.",

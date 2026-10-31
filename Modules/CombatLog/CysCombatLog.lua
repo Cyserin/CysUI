@@ -1,15 +1,24 @@
 --------------------------------------------------------------------------------
--- Cys's logs - a combat log you can open in game
+-- Cys's logs - full dungeon / raid runs, kept between sessions
 --
--- Records every fight your group is in (damage, healing, damage taken, deaths with a recap, interrupts,
--- dispels) and shows it in a window: /cuilog, or Combat Log in /cui. It is a summary of each fight, not a
--- full event log, so it stays small. The last fights are kept between sessions.
+-- One RUN is everything that happens from walking into a group instance until you leave it (walking out to
+-- run back after a death does not end it; it ends after 15 minutes outside, or when you enter another
+-- instance). A run holds:
+--   bosses[]  one entry per boss attempt (kill or wipe), each with its own per-player tables
+--   trash     everything that was not a boss, summed up (pulls, time, per-player tables)
+--   players   every group member for the whole run: damage, healing, damage taken, casts, hits, crits,
+--             per-ability tables, who they took damage from
+--   deaths[]  every player death with the last 10 events that hit that player (damage, heals, aura changes)
+-- The newest runs are kept in SavedVariables (3 to 10 of them, your choice). Open it with /cuilog.
 --------------------------------------------------------------------------------
 local CUI = CysUI
 local W = CUI.W
 local T = W.T
 
-local DEFAULTS = { record = true, keep = 15 }
+local band = bit.band
+local max, min, floor = math.max, math.min, math.floor
+
+local DEFAULTS = { record = true, keepRuns = 5, autoLog = false }
 local function DB()
     CysUIDB = CysUIDB or {}
     CysUIDB.combatLog = CysUIDB.combatLog or {}
@@ -17,446 +26,1073 @@ local function DB()
     for k, v in pairs(DEFAULTS) do
         if db[k] == nil then db[k] = v end
     end
-    db.fights = db.fights or {}
+    db.runs = db.runs or {}
+    db.learned = db.learned or {}      -- boss npc id -> name (learned from your game, or /cuilog boss)
+    db.fights = nil                    -- the old 15-fight list is gone
+    db.keep = nil
     return db
 end
 
-local band = bit.band
-local TOP_SPELLS = 6
-local IDLE_END = 6       -- seconds without group activity ends a fight
-local classCache = {}
-local cur, lastEvent
-local ring = {}          -- player guid -> recent events (for the death recap)
+local IDLE_END = 6          -- seconds with nothing happening end a pull
+local RESUME_GRACE = 900    -- seconds outside the instance before a run is closed
+local RING = 10             -- events kept per player for the death recap
 
-local function ClassOf(guid)
+--------------------------------------------------------------------------------
+-- Known bosses (npc id -> name). A seed list: the rest is found through encounter events, skull-level units
+-- in raids, or /cuilog boss on a target (saved and remembered).
+--------------------------------------------------------------------------------
+local BOSS_IDS = {
+    -- Molten Core, Onyxia
+    [12118] = "Lucifron", [11982] = "Magmadar", [12259] = "Gehennas", [12057] = "Garr", [12264] = "Shazzrah",
+    [12056] = "Baron Geddon", [12098] = "Sulfuron Harbinger", [11988] = "Golemagg the Incinerator",
+    [12018] = "Majordomo Executus", [11502] = "Ragnaros", [10184] = "Onyxia",
+    -- Blackwing Lair
+    [12435] = "Razorgore the Untamed", [13020] = "Vaelastrasz the Corrupt", [12017] = "Broodlord Lashlayer",
+    [11983] = "Firemaw", [14601] = "Ebonroc", [11981] = "Flamegore", [14020] = "Chromaggus", [11583] = "Nefarian",
+    -- Zul'Gurub
+    [14517] = "High Priestess Jeklik", [14507] = "High Priest Venoxis", [14510] = "High Priestess Mar'li",
+    [11382] = "Bloodlord Mandokir", [15082] = "Gri'lek", [15083] = "Hazza'rah", [15084] = "Renataki",
+    [15085] = "Wushoolay", [15114] = "Gahz'ranka", [14509] = "High Priest Thekal", [14515] = "High Priestess Arlokk",
+    [11380] = "Jin'do the Hexxer", [14834] = "Hakkar",
+    -- a few dungeons
+    [11517] = "Oggleflint", [11518] = "Jergosh the Invoker", [11519] = "Bazzalan", [11520] = "Taragaman the Hungerer",
+    [644] = "Rhahk'Zor", [643] = "Sneed's Shredder", [1763] = "Gilnid", [646] = "Mr. Smite",
+    [647] = "Captain Greenskin", [639] = "Edwin VanCleef",
+}
+
+--------------------------------------------------------------------------------
+-- State
+--------------------------------------------------------------------------------
+local run            -- the active run (also saved in SavedVariables as db.active)
+local pull           -- the pull being recorded (not saved)
+local ringBy = {}    -- player guid -> ring of the last events that hit them
+local petOwner = {}  -- pet guid -> owner player guid
+local classBy = {}   -- player guid -> class token
+local bossCache = {} -- creature guid -> boss info | false
+local CL = {}
+CUI.CombatLog = CL
+
+local function NpcID(guid)
+    local id = select(6, strsplit("-", guid))
+    return tonumber(id)
+end
+
+local function BossInfo(guid)
     if not guid then return nil end
-    local c = classCache[guid]
-    if c == nil then
-        c = false
-        if guid:find("^Player") and GetPlayerInfoByGUID then
-            local _, token = GetPlayerInfoByGUID(guid)
-            c = token or false
-        end
-        classCache[guid] = c
+    local c = bossCache[guid]
+    if c ~= nil then return c or nil end
+    c = false
+    if guid:find("^Creature") or guid:find("^Vehicle") then
+        local id = NpcID(guid)
+        local db = DB()
+        if id and (BOSS_IDS[id] or db.learned[id]) then c = { id = id, name = BOSS_IDS[id] or db.learned[id] } end
     end
+    bossCache[guid] = c
     return c or nil
 end
 
-local function Group(flags) return flags and band(flags, 0x7) ~= 0 end
+--------------------------------------------------------------------------------
+-- Players and their tables
+--------------------------------------------------------------------------------
+local NUM_FIELDS = { "damage", "healing", "overheal", "taken", "casts", "hits", "crits", "healHits", "healCrits",
+                     "deaths", "interrupts", "dispels" }
 
-local function Add(tbl, name, class, amt, spell)
-    local e = tbl[name]
-    if not e then e = { t = 0, c = class, s = {} }; tbl[name] = e end
-    e.t = e.t + amt
-    if spell then e.s[spell] = (e.s[spell] or 0) + amt end
+local function NewPlayer(guid, name, class)
+    return { guid = guid, name = name, class = class, damage = 0, healing = 0, overheal = 0, taken = 0, casts = 0,
+             hits = 0, crits = 0, healHits = 0, healCrits = 0, deaths = 0, interrupts = 0, dispels = 0,
+             spells = {}, takenFrom = {} }
 end
 
-local function NewFight()
-    return { t0 = GetTime(), at = time(), zone = GetZoneText() or "", dmg = {}, heal = {}, taken = {}, enemy = {},
-             deaths = {}, ints = {}, disp = {} }
+-- p for an actor in a players table (created from what the run already knows about them)
+local function GetP(tbl, key)
+    local p = tbl[key]
+    if not p then
+        local base = run and run.players[key]
+        p = NewPlayer(key, base and base.name or "?", base and base.class or classBy[key])
+        tbl[key] = p
+    end
+    return p
 end
 
-local function Push(guid, kind, amt, src, spell)
-    local r = ring[guid]
-    if not r then r = {}; ring[guid] = r end
-    r[#r + 1] = { t = GetTime(), kind = kind, amt = amt, src = src, spell = spell }
-    if #r > 12 then table.remove(r, 1) end
+local function Spell(p, name)
+    local s = p.spells[name]
+    if not s then
+        s = { damage = 0, healing = 0, overheal = 0, casts = 0, hits = 0, crits = 0, max = 0 }
+        p.spells[name] = s
+    end
+    return s
 end
 
-local function Recap(guid)
-    local r, out, now = ring[guid], {}, GetTime()
+-- who gets the credit: the player, or the owner of a pet (spell shows as "Pet: ...")
+local function Actor(guid, name, spell)
+    if guid:find("^Player") then return guid, spell end
+    local owner = petOwner[guid]
+    if owner then return owner, "Pet: " .. spell end
+    -- an unowned guardian or totem: listed under its own name
+    if run and not run.players[guid] then
+        run.players[guid] = NewPlayer(guid, name or "?", nil)
+        run.players[guid].isPet = true
+    end
+    return guid, spell
+end
+
+local function EnsurePlayer(guid, name, class)
+    if not run or not guid then return end
+    local p = run.players[guid]
+    if not p then
+        run.players[guid] = NewPlayer(guid, name, class)
+    else
+        p.name = name or p.name
+        p.class = class or p.class
+    end
+end
+
+local function RefreshRoster()
+    wipe(petOwner)
+    local function Add(unit)
+        if not UnitExists(unit) then return end
+        local guid = UnitGUID(unit)
+        if not guid then return end
+        local _, class = UnitClass(unit)
+        classBy[guid] = class
+        EnsurePlayer(guid, UnitName(unit), class)
+        local pg = UnitGUID(unit == "player" and "pet" or (unit .. "pet"))
+        if pg then petOwner[pg] = guid end
+    end
+    Add("player")
+    if IsInRaid and IsInRaid() then
+        for i = 1, GetNumGroupMembers() do Add("raid" .. i) end
+    elseif IsInGroup and IsInGroup() then
+        for i = 1, GetNumSubgroupMembers() do Add("party" .. i) end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Recording into a players table
+--------------------------------------------------------------------------------
+local function AddDamage(tbl, key, spell, amount, crit)
+    local p = GetP(tbl, key)
+    p.damage = p.damage + amount
+    p.hits = p.hits + 1
+    local s = Spell(p, spell)
+    s.damage = s.damage + amount
+    s.hits = s.hits + 1
+    if crit then p.crits = p.crits + 1; s.crits = s.crits + 1 end
+    if amount > s.max then s.max = amount end
+end
+
+local function AddHeal(tbl, key, spell, eff, over, crit)
+    local p = GetP(tbl, key)
+    p.healing = p.healing + eff
+    p.overheal = p.overheal + over
+    p.healHits = p.healHits + 1
+    local s = Spell(p, spell)
+    s.healing = s.healing + eff
+    s.overheal = s.overheal + over
+    s.hits = s.hits + 1
+    if crit then p.healCrits = p.healCrits + 1; s.crits = s.crits + 1 end
+    if eff > s.max then s.max = eff end
+end
+
+local function AddTaken(tbl, key, from, amount)
+    local p = GetP(tbl, key)
+    p.taken = p.taken + amount
+    p.takenFrom[from] = (p.takenFrom[from] or 0) + amount
+end
+
+local function AddCast(tbl, key, spell)
+    local p = GetP(tbl, key)
+    p.casts = p.casts + 1
+    local s = Spell(p, spell)
+    s.casts = s.casts + 1
+end
+
+local function AddCount(tbl, key, field)
+    local p = GetP(tbl, key)
+    p[field] = p[field] + 1
+end
+
+-- sum one players table into another
+local function MergePlayers(dst, src)
+    for key, p in pairs(src) do
+        local d = dst[key]
+        if not d then
+            d = NewPlayer(key, p.name, p.class)
+            d.isPet = p.isPet
+            dst[key] = d
+        end
+        for _, f in ipairs(NUM_FIELDS) do d[f] = d[f] + (p[f] or 0) end
+        for name, s in pairs(p.spells) do
+            local ds = d.spells[name]
+            if not ds then
+                ds = { damage = 0, healing = 0, overheal = 0, casts = 0, hits = 0, crits = 0, max = 0 }
+                d.spells[name] = ds
+            end
+            ds.damage = ds.damage + s.damage
+            ds.healing = ds.healing + s.healing
+            ds.overheal = ds.overheal + s.overheal
+            ds.casts = ds.casts + s.casts
+            ds.hits = ds.hits + s.hits
+            ds.crits = ds.crits + s.crits
+            if s.max > ds.max then ds.max = s.max end
+        end
+        for from, amt in pairs(p.takenFrom) do d.takenFrom[from] = (d.takenFrom[from] or 0) + amt end
+    end
+end
+CL.MergePlayers = MergePlayers
+
+-- keep saved data small: drop abilities that did next to nothing, keep the biggest damage sources
+local function Prune(players)
+    for _, p in pairs(players) do
+        local total = p.damage + p.healing
+        for name, s in pairs(p.spells) do
+            if s.casts == 0 and (s.damage + s.healing) < total * 0.001 then p.spells[name] = nil end
+        end
+        local list = {}
+        for from, amt in pairs(p.takenFrom) do list[#list + 1] = { from, amt } end
+        if #list > 14 then
+            table.sort(list, function(a, b) return a[2] > b[2] end)
+            for i = 15, #list do p.takenFrom[list[i][1]] = nil end
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Death recap: a ring of the last events that hit each player
+--------------------------------------------------------------------------------
+local function Push(guid, kind, amt, src, spell, extra)
+    local r = ringBy[guid]
+    if not r then r = { i = 0, n = 0 }; ringBy[guid] = r end
+    r.i = r.i % RING + 1
+    if r.n < RING then r.n = r.n + 1 end
+    local e = r[r.i]
+    if not e then e = {}; r[r.i] = e end
+    e.t, e.k, e.amt, e.src, e.spell, e.extra = GetTime(), kind, amt, src, spell, extra
+end
+
+local function Freeze(guid)
+    local r, out = ringBy[guid], {}
     if not r then return out end
-    for _, e in ipairs(r) do
-        if now - e.t <= 15 then
-            if e.kind == "d" then
-                out[#out + 1] = string.format("-%d  %s: %s  (%.1fs ago)", e.amt, e.src or "?", e.spell or "?", now - e.t)
+    local now = GetTime()
+    local start = r.n < RING and 1 or (r.i % RING + 1)
+    for n = 0, r.n - 1 do
+        local e = r[(start - 1 + n) % RING + 1]
+        out[#out + 1] = { ago = now - e.t, k = e.k, amt = e.amt, src = e.src, spell = e.spell, extra = e.extra }
+    end
+    return out
+end
+
+local function RecordDeath(guid, name)
+    local ev = Freeze(guid)
+    local taken, healed, killer, kspell, over = 0, 0, nil, nil, nil
+    for _, e in ipairs(ev) do
+        if e.k == "d" then taken = taken + (e.amt or 0); killer, kspell, over = e.src, e.spell, e.extra
+        elseif e.k == "h" then healed = healed + (e.amt or 0) end
+    end
+    local d = { guid = guid, name = name, class = classBy[guid], t = time() - run.startTime, pullId = pull and pull.id,
+                killer = killer, spell = kspell, overkill = over, taken = taken, healed = healed, events = ev }
+    run.deaths[#run.deaths + 1] = d
+    AddCount(run.players, guid, "deaths")
+    if pull then AddCount(pull.players, guid, "deaths") end
+    ringBy[guid] = nil
+    if guid == UnitGUID("player") then
+        CUI:Print("You died" .. (killer and (" - last hit: " .. tostring(killer) .. "'s " .. tostring(kspell)) or "") .. ". Open /cuilog for the full recap.")
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Pulls: boss attempts and trash
+--------------------------------------------------------------------------------
+local function StartPull()
+    run.pullCounter = (run.pullCounter or 0) + 1
+    pull = { id = run.pullCounter, startTime = time(), t0 = GetTime(), last = GetTime(), players = {}, enemies = {},
+             bossGUIDs = {}, boss = nil, killed = false }
+    RefreshRoster()
+end
+
+local function MarkBoss(info, guid)
+    if not pull then return end
+    if not pull.boss then pull.boss = info end
+    if guid then pull.bossGUIDs[guid] = true end
+end
+
+local function FinishPull()
+    if not pull or not run then pull = nil; return end
+    local p = pull
+    pull = nil
+    local dur = max(1, p.last - p.t0)
+    local any = false
+    for _, pl in pairs(p.players) do
+        if pl.damage > 0 or pl.taken > 0 or pl.healing > 0 then any = true; break end
+    end
+    if not any then return end
+    run.combatTime = (run.combatTime or 0) + dur
+    if p.boss then
+        local attempt = 1
+        for _, b in ipairs(run.bosses) do if b.name == p.boss.name then attempt = attempt + 1 end end
+        Prune(p.players)
+        run.bosses[#run.bosses + 1] = { name = p.boss.name, id = p.boss.id, attempt = attempt, pullId = p.id,
+            startTime = p.startTime, endTime = time(), dur = dur, result = p.killed and "kill" or "wipe",
+            players = p.players, enemies = p.enemies }
+    else
+        local tr = run.trash
+        tr.pulls = tr.pulls + 1
+        tr.time = tr.time + dur
+        MergePlayers(tr.players, p.players)
+        for name, amt in pairs(p.enemies) do tr.enemies[name] = (tr.enemies[name] or 0) + amt end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Runs
+--------------------------------------------------------------------------------
+local function NewRun(zone, mapID, manual)
+    return { zoneName = zone, mapID = mapID, startTime = time(), endTime = nil, manual = manual or nil,
+             bosses = {}, trash = { pulls = 0, time = 0, players = {}, enemies = {} }, players = {}, deaths = {},
+             combatTime = 0, pullCounter = 0 }
+end
+
+local loggingByUs = false
+local function StartRun(zone, mapID, manual)
+    local db = DB()
+    pull = nil
+    wipe(ringBy); wipe(bossCache)
+    run = NewRun(zone, mapID, manual)
+    db.active = run
+    RefreshRoster()
+    if db.autoLog and LoggingCombat and not LoggingCombat() then
+        LoggingCombat(true); loggingByUs = true
+        CUI:Print("Cys's logs: started a run in " .. zone .. " (the game's own combat log is on too).")
+    else
+        CUI:Print("Cys's logs: started a run in " .. zone .. ". /cuilog to view it.")
+    end
+    if CL.Refresh then CL.Refresh() end
+end
+
+local function FinalizeRun()
+    if not run then return end
+    FinishPull()
+    local db = DB()
+    run.endTime = time()
+    run.dur = run.endTime - run.startTime
+    Prune(run.players)
+    Prune(run.trash.players)
+    local nBoss = #run.bosses
+    local r = run
+    run = nil
+    db.active = nil
+    wipe(ringBy)
+    if loggingByUs and LoggingCombat then LoggingCombat(false); loggingByUs = false end
+    -- a run with nothing in it is not worth keeping
+    if (r.combatTime or 0) < 5 then return end
+    table.insert(db.runs, 1, r)
+    while #db.runs > (db.keepRuns or 5) do table.remove(db.runs) end
+    CUI:Print(string.format("Cys's logs: saved %s (%d boss attempt%s, %d trash pull%s, %d death%s).", r.zoneName,
+        nBoss, nBoss == 1 and "" or "s", r.trash.pulls, r.trash.pulls == 1 and "" or "s", #r.deaths, #r.deaths == 1 and "" or "s"))
+    if CL.Refresh then CL.Refresh() end
+end
+
+local expireTimer
+local function CheckExpire()
+    local db = DB()
+    local a = db.active
+    if not a or a.manual or not a.leftAt then return end
+    if time() - a.leftAt >= RESUME_GRACE then
+        run = a
+        FinalizeRun()
+    end
+end
+
+-- entering or leaving a group instance (ZONE_CHANGED_NEW_AREA / PLAYER_ENTERING_WORLD)
+local function CheckZone()
+    local db = DB()
+    if not db.record then return end
+    local name, itype, _, _, _, _, _, mapID = GetInstanceInfo()
+    local inGroupInstance = IsInInstance() and (itype == "party" or itype == "raid")
+    local a = db.active
+    if a and a.manual then run = a; return end
+    if inGroupInstance then
+        if a and a.mapID == mapID then
+            a.leftAt = nil                      -- back in (reload, or ran back after dying)
+            if not run then run = a; RefreshRoster() end
+        else
+            if a then run = a; FinalizeRun() end
+            StartRun(name, mapID)
+        end
+    else
+        if a then
+            if not run then run = a end
+            if not a.leftAt then
+                a.leftAt = time()
+                FinishPull()
+                if C_Timer then C_Timer.After(RESUME_GRACE + 5, CheckExpire) end
             else
-                out[#out + 1] = string.format("+%d  %s: %s  (%.1fs ago)", e.amt, e.src or "?", e.spell or "?", now - e.t)
+                CheckExpire()
             end
         end
     end
-    return out
 end
 
-local function Touch()
-    lastEvent = GetTime()
-    if not cur then cur = NewFight() end
-end
+--------------------------------------------------------------------------------
+-- Combat log
+--------------------------------------------------------------------------------
+local HANDLED = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
+    DAMAGE_SHIELD = true, SPELL_HEAL = true, SPELL_PERIODIC_HEAL = true, SPELL_CAST_SUCCESS = true,
+    SPELL_INTERRUPT = true, SPELL_DISPEL = true, SPELL_AURA_REMOVED = true, SPELL_AURA_APPLIED = true, UNIT_DIED = true }
 
 local function OnCombatLog()
-    local db = DB()
-    if not db.record then return end
-    local _, sub, _, sGUID, sName, sFlags, _, dGUID, dName, dFlags, _, a12, a13, _, a15, a16 = CombatLogGetCurrentEventInfo()
-    local sGroup, dGroup = Group(sFlags), Group(dFlags)
+    if not run or run.leftAt then return end
+    local _, sub, _, sGUID, sName, sFlags, _, dGUID, dName, dFlags, _, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21 =
+        CombatLogGetCurrentEventInfo()
+    if not HANDLED[sub] then return end
+    local sGroup = sFlags and band(sFlags, 0x7) ~= 0
+    local dGroup = dFlags and band(dFlags, 0x7) ~= 0
     if not sGroup and not dGroup then return end
 
-    local amount, spell
-    if sub == "SWING_DAMAGE" then amount, spell = a12, "Melee"
+    local now = GetTime()
+    local dPlayer = dGroup and dGUID and dGUID:find("^Player")
+
+    -- damage ---------------------------------------------------------------
+    local amount, spell, crit, over
+    if sub == "SWING_DAMAGE" then amount, spell, over, crit = a12, "Melee", a13, a18
     elseif sub == "RANGE_DAMAGE" or sub == "SPELL_DAMAGE" or sub == "SPELL_PERIODIC_DAMAGE" or sub == "DAMAGE_SHIELD" then
-        amount, spell = a15, a13
+        amount, spell, over, crit = a15, a13, a16, a21
     end
-    if amount and amount > 0 then
-        Touch()
+    if amount then
+        if amount <= 0 then return end
+        if not pull then StartPull() end
+        pull.last = now
+        local bi = (not sGroup and BossInfo(sGUID)) or (not dGroup and BossInfo(dGUID))
+        if bi then MarkBoss(bi, (not sGroup) and sGUID or dGUID) end
         if sGroup and not dGroup then
-            Add(cur.dmg, sName or "?", ClassOf(sGUID), amount, spell)
-            cur.enemy[dName or "?"] = (cur.enemy[dName or "?"] or 0) + amount
+            local key, sp = Actor(sGUID, sName, spell or "?")
+            AddDamage(run.players, key, sp, amount, crit)
+            AddDamage(pull.players, key, sp, amount, crit)
+            local en = dName or "?"
+            pull.enemies[en] = (pull.enemies[en] or 0) + amount
         end
-        if dGroup then
-            Add(cur.taken, dName or "?", ClassOf(dGUID), amount, (sName or "?") .. ": " .. tostring(spell))
-            if dGUID and dGUID:find("^Player") then Push(dGUID, "d", amount, sName, spell) end
+        if dPlayer then
+            local from = tostring(sName or "?") .. ": " .. tostring(spell or "?")
+            AddTaken(run.players, dGUID, from, amount)
+            AddTaken(pull.players, dGUID, from, amount)
+            Push(dGUID, "d", amount, sName, spell, (over and over > 0) and over or nil)
         end
         return
     end
 
+    -- healing --------------------------------------------------------------
     if sub == "SPELL_HEAL" or sub == "SPELL_PERIODIC_HEAL" then
-        local eff = (a15 or 0) - (a16 or 0)
-        if eff > 0 and cur then
-            Touch()
-            if sGroup then Add(cur.heal, sName or "?", ClassOf(sGUID), eff, a13) end
+        local overheal = a16 or 0
+        local eff = (a15 or 0) - overheal
+        if sGroup and (eff > 0 or overheal > 0) and pull then
+            local key, sp = Actor(sGUID, sName, a13 or "?")
+            AddHeal(run.players, key, sp, max(eff, 0), overheal, a18)
+            AddHeal(pull.players, key, sp, max(eff, 0), overheal, a18)
         end
-        if eff > 0 and dGroup and dGUID and dGUID:find("^Player") then Push(dGUID, "h", eff, sName, a13) end
+        if dPlayer and eff > 0 then Push(dGUID, "h", eff, sName, a13) end
         return
     end
 
-    if not cur then return end
+    -- casts ----------------------------------------------------------------
+    if sub == "SPELL_CAST_SUCCESS" then
+        if sGroup and sGUID and a13 then
+            if not pull then
+                if not UnitAffectingCombat("player") then return end
+                StartPull()
+            end
+            local key, sp = Actor(sGUID, sName, a13)
+            AddCast(run.players, key, sp)
+            AddCast(pull.players, key, sp)
+        end
+        return
+    end
+
+    -- auras that hit a player (kept for the death recap) -----------------------
+    if sub == "SPELL_AURA_REMOVED" then
+        if dPlayer and a15 == "BUFF" then Push(dGUID, "a-", nil, sName, a13) end
+        return
+    elseif sub == "SPELL_AURA_APPLIED" then
+        if dPlayer and a15 == "DEBUFF" then Push(dGUID, "a+", nil, sName, a13) end
+        return
+    end
+
+    -- interrupts, dispels --------------------------------------------------------
     if sub == "SPELL_INTERRUPT" and sGroup then
-        cur.ints[#cur.ints + 1] = { who = sName, spell = a13, target = dName, stopped = a16 }
+        local key = Actor(sGUID, sName, "x")
+        AddCount(run.players, key, "interrupts")
+        if pull then AddCount(pull.players, key, "interrupts") end
+        run.interrupts = run.interrupts or {}
+        if #run.interrupts < 400 then
+            run.interrupts[#run.interrupts + 1] = { t = time() - run.startTime, who = sName, target = dName, spell = a13, stopped = a16 }
+        end
+        return
     elseif sub == "SPELL_DISPEL" and sGroup then
-        cur.disp[sName or "?"] = (cur.disp[sName or "?"] or 0) + 1
-    elseif sub == "UNIT_DIED" and dGroup and dGUID and dGUID:find("^Player") then
-        Touch()
-        local lines = Recap(dGUID)
-        cur.deaths[#cur.deaths + 1] = { who = dName, c = ClassOf(dGUID), t = GetTime() - cur.t0, lines = lines }
-        if dGUID == UnitGUID("player") then
-            local last = lines[#lines]
-            CUI:Print("You died" .. (last and (" - last hit: " .. last) or "") .. ". Open /cuilog for the full recap.")
+        local key = Actor(sGUID, sName, "x")
+        AddCount(run.players, key, "dispels")
+        if pull then AddCount(pull.players, key, "dispels") end
+        return
+    end
+
+    -- deaths ---------------------------------------------------------------
+    if sub == "UNIT_DIED" then
+        if dPlayer then
+            RecordDeath(dGUID, dName)
+        elseif pull and not dGroup then
+            local bi = BossInfo(dGUID)
+            if bi then MarkBoss(bi, dGUID); pull.killed = true end
+            if pull.bossGUIDs[dGUID] then pull.killed = true end
         end
     end
 end
 
--- turn a spell map into the top list that is saved
-local function TopList(map)
-    local list = {}
-    for k, v in pairs(map) do list[#list + 1] = { k, v } end
-    table.sort(list, function(a, b) return a[2] > b[2] end)
-    while #list > TOP_SPELLS do list[#list] = nil end
-    return list
+-- boss found by encounter events (when the game sends them) or a skull-level unit in a raid
+local function OnEncounter(event, id, name, _, _, success)
+    if not run then return end
+    if event == "ENCOUNTER_START" then
+        if not pull then StartPull() end
+        MarkBoss({ id = id, name = name })
+    elseif event == "ENCOUNTER_END" and pull then
+        MarkBoss({ id = id, name = name })
+        if success == 1 then pull.killed = true end
+        pull.last = GetTime() - (IDLE_END - 1)    -- close the pull a moment after the encounter ends
+    end
 end
 
-local function Freeze(f)
-    local out = { at = f.at, zone = f.zone, dur = math.max(1, (lastEvent or GetTime()) - f.t0),
-                  deaths = f.deaths, ints = f.ints, disp = f.disp }
-    for _, key in ipairs({ "dmg", "heal", "taken" }) do
-        out[key] = {}
-        for name, e in pairs(f[key]) do out[key][name] = { t = e.t, c = e.c, s = TopList(e.s) } end
+local function ScanForBoss()
+    if not (run and pull) or pull.boss then return end
+    local _, itype = GetInstanceInfo()
+    if itype ~= "raid" then return end
+    local function Look(unit)
+        if UnitExists(unit) and UnitCanAttack("player", unit) and not UnitIsPlayer(unit) and not UnitIsDead(unit) then
+            local lvl = UnitLevel(unit)
+            if lvl == -1 or UnitClassification(unit) == "worldboss" then
+                local guid = UnitGUID(unit)
+                local id = guid and NpcID(guid)
+                if id then
+                    local nm = UnitName(unit)
+                    DB().learned[id] = nm
+                    bossCache[guid] = nil
+                    MarkBoss({ id = id, name = nm }, guid)
+                end
+            end
+        end
     end
-    local best, bestAmt, n = nil, 0, 0
-    for name, amt in pairs(f.enemy) do
-        n = n + 1
-        if amt > bestAmt then best, bestAmt = name, amt end
+    Look("target")
+    for i = 1, 4 do Look("party" .. i .. "target") end
+    if IsInRaid and IsInRaid() then
+        for i = 1, GetNumGroupMembers() do Look("raid" .. i .. "target") end
     end
-    out.name = best and (n > 3 and (best .. " +" .. (n - 1)) or best) or "Fight"
-    return out
+    for i = 1, 40 do Look("nameplate" .. i) end
 end
 
-local function Finish()
-    if not cur then return end
-    local f = cur
-    cur = nil
-    local dur = (lastEvent or GetTime()) - f.t0
-    local any = false
-    for _ in pairs(f.dmg) do any = true; break end
-    if not any then for _ in pairs(f.taken) do any = true; break end end
-    if dur < 4 or not any then return end
+local ev
+local function Enable()
+    if ev then return end
+    DB()
+    ev = CreateFrame("Frame")
+    ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    ev:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    ev:RegisterEvent("GROUP_ROSTER_UPDATE")
+    ev:RegisterEvent("UNIT_PET")
+    ev:RegisterEvent("PLAYER_LOGOUT")
+    pcall(ev.RegisterEvent, ev, "ENCOUNTER_START")
+    pcall(ev.RegisterEvent, ev, "ENCOUNTER_END")
+    ev:SetScript("OnEvent", function(_, event, ...)
+        if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+            OnCombatLog()
+        elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+            if C_Timer then C_Timer.After(1, function() CheckExpire(); CheckZone() end) else CheckZone() end
+        elseif event == "GROUP_ROSTER_UPDATE" or event == "UNIT_PET" then
+            if run then RefreshRoster() end
+        elseif event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
+            OnEncounter(event, ...)
+        end
+    end)
+    C_Timer.NewTicker(1, function()
+        if pull then
+            ScanForBoss()
+            if GetTime() - pull.last >= IDLE_END and not UnitAffectingCombat("player") then FinishPull() end
+        end
+        if CL.win and CL.win:IsShown() and run then CL.Tick() end
+    end)
+    C_Timer.NewTicker(5, function() if run and pull then RefreshRoster() end end)
+    -- picking up a run that was open when the game was reloaded
+    local a = DB().active
+    if a then
+        if a.manual then run = a else CheckExpire() end
+    end
+end
+
+-- API used by the window and the slash command ---------------------------------------
+function CL.Active() return run end
+function CL.Pull() return pull end
+function CL.StartManual()
+    if run then FinalizeRun() end
+    StartRun("Manual run", -1, true)
+end
+function CL.EndRun() if run then FinalizeRun() else CUI:Print("Cys's logs: no run is open.") end end
+function CL.Clear()
+    DB().runs = {}
+    if CL.Refresh then CL.Refresh() end
+    CUI:Print("Cys's logs: all saved runs cleared.")
+end
+function CL.ToggleBoss()
+    if not UnitExists("target") or UnitIsPlayer("target") then CUI:Print("Cys's logs: target a mob first."); return end
+    local guid = UnitGUID("target")
+    local id = guid and NpcID(guid)
+    if not id then return end
     local db = DB()
-    table.insert(db.fights, 1, Freeze(f))
-    while #db.fights > (db.keep or 15) do table.remove(db.fights) end
-    if CUI.CombatLog and CUI.CombatLog.Refresh then CUI.CombatLog.Refresh() end
+    if db.learned[id] or BOSS_IDS[id] then
+        db.learned[id] = nil
+        bossCache[guid] = nil
+        CUI:Print("Cys's logs: " .. UnitName("target") .. (BOSS_IDS[id] and " is on the built-in boss list and stays a boss." or " is no longer a boss."))
+    else
+        db.learned[id] = UnitName("target")
+        bossCache[guid] = nil
+        CUI:Print("Cys's logs: " .. UnitName("target") .. " will count as a boss from now on.")
+    end
 end
 
+
 --------------------------------------------------------------------------------
--- Window
+-- Viewer
 --------------------------------------------------------------------------------
-local CL = {}
-CUI.CombatLog = CL
-local win
-local state = { sel = 0, tab = "dmg" }
-local TABS = { { "dmg", "Damage" }, { "heal", "Healing" }, { "taken", "Taken" }, { "deaths", "Deaths" }, { "other", "Other" } }
-local ROWS = 15
+local ROWS, ROWH = 20, 22
+local TABS = { "Damage", "Healing", "Taken", "Player", "Deaths", "Other" }
+local view = { run = 1, seg = "all", tab = "Damage", player = nil, mode = "damage", offset = 0, segOffset = 0 }
 
 local function Fmt(n)
     n = n or 0
-    if n >= 1000000 then return string.format("%.2fm", n / 1000000) end
-    if n >= 10000 then return string.format("%.1fk", n / 1000) end
-    return tostring(math.floor(n + 0.5))
+    if n >= 1e6 then return string.format("%.2fm", n / 1e6) end
+    if n >= 1e4 then return string.format("%.1fk", n / 1e3) end
+    return tostring(floor(n + 0.5))
+end
+local function Clock(sec)
+    sec = max(0, floor((sec or 0) + 0.5))
+    if sec >= 3600 then return string.format("%d:%02d:%02d", floor(sec / 3600), floor(sec / 60) % 60, sec % 60) end
+    return string.format("%d:%02d", floor(sec / 60), sec % 60)
+end
+local function ClassRGB(class)
+    local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if c then return c.r, c.g, c.b end
+    return 0.7, 0.7, 0.7
 end
 
-local function Clock(s) return string.format("%d:%02d", s / 60, s % 60) end
-
-local function ClassColor(c)
-    local col = c and RAID_CLASS_COLORS and RAID_CLASS_COLORS[c]
-    if col then return col.r, col.g, col.b end
-    return 0.55, 0.55, 0.55
-end
-
--- the fight being shown: the live one first, then the saved ones
-local function Fights()
+local function RunList()
     local list = {}
-    if cur then
-        local f = Freeze(cur)
-        f.live = true
-        f.name = "Now: " .. f.name
-        list[#list + 1] = f
-    end
-    for _, f in ipairs(DB().fights) do list[#list + 1] = f end
+    if run then list[1] = run end
+    for _, r in ipairs(DB().runs) do list[#list + 1] = r end
     return list
 end
 
-local function SpellsOf(e)
-    if e.s and e.s[1] then return e.s end
-    return TopList(e.s or {})
+local mergedCache = {}
+-- the players table, the time it covers, and a title for the chosen run + segment
+local function Segment(r)
+    local seg = view.seg
+    local live = (r == run) and pull
+    if seg == "all" then
+        local dur = (r.combatTime or 0) + (live and max(1, GetTime() - pull.t0) or 0)
+        return r.players, dur, "Whole run"
+    elseif seg == "trash" then
+        return r.trash.players, r.trash.time, "Trash (" .. r.trash.pulls .. " pulls)"
+    elseif seg == "bosses" then
+        local key = tostring(r) .. #r.bosses
+        local c = mergedCache[key]
+        if not c then
+            c = { players = {}, dur = 0 }
+            for _, b in ipairs(r.bosses) do MergePlayers(c.players, b.players); c.dur = c.dur + b.dur end
+            wipe(mergedCache); mergedCache[key] = c
+        end
+        return c.players, c.dur, "All bosses"
+    else
+        local b = r.bosses[seg]
+        if b then return b.players, b.dur, b.name .. " #" .. b.attempt .. " (" .. b.result .. ")" end
+    end
+    return r.players, r.combatTime or 0, "Whole run"
 end
 
-local function Build()
-    if win then return end
-    win = CreateFrame("Frame", "CysLogFrame", UIParent)
-    win:SetSize(640, 400)
+local function Sorted(players, field)
+    local out = {}
+    for _, p in pairs(players) do
+        if (p[field] or 0) > 0 then out[#out + 1] = p end
+    end
+    table.sort(out, function(a, b) return a[field] > b[field] end)
+    return out
+end
+
+local win
+local rowFrames = {}
+local runBtns, segBtns, tabBtns = {}, {}, {}
+
+local function SetRow(row, cols, ratio, r, g, b, tip)
+    row:Show()
+    for i = 1, 7 do
+        local fs = row.cols[i]
+        if cols[i] ~= nil then fs:SetText(cols[i]); fs:Show() else fs:Hide() end
+    end
+    row.bar:SetColorTexture(r or 0.5, g or 0.5, b or 0.5, 0.35)
+    row.bar:SetWidth(max(1, (row:GetWidth()) * (ratio or 0)))
+    row.tip = tip
+end
+
+local function ColumnsFor(tab)
+    if tab == "Damage" then return { { "Player", 8, 170, "LEFT" }, { "Damage", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "DPS", 320, 70, "RIGHT" }, { "Crit %", 395, 60, "RIGHT" }, { "Casts", 460, 60, "RIGHT" } }
+    elseif tab == "Healing" then return { { "Player", 8, 170, "LEFT" }, { "Healing", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "HPS", 320, 70, "RIGHT" }, { "Overheal %", 395, 80, "RIGHT" }, { "Casts", 480, 60, "RIGHT" } }
+    elseif tab == "Taken" then return { { "Player", 8, 170, "LEFT" }, { "Taken", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "DTPS", 320, 70, "RIGHT" }, { "Deaths", 395, 60, "RIGHT" } }
+    elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "%", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
+    elseif tab == "Deaths" then return { { "Time", 8, 55, "LEFT" }, { "Player", 68, 120, "LEFT" }, { "Killing blow", 195, 220, "LEFT" }, { "Overkill", 420, 65, "RIGHT" }, { "Taken", 490, 70, "RIGHT" }, { "Healed", 565, 70, "RIGHT" } }
+    else return { { "Player", 8, 170, "LEFT" }, { "Interrupts", 180, 80, "RIGHT" }, { "Dispels", 265, 80, "RIGHT" }, { "Deaths", 350, 70, "RIGHT" } } end
+end
+
+local function Header(tab)
+    local cols = ColumnsFor(tab)
+    for i = 1, 7 do
+        local h = win.heads[i]
+        local c = cols[i]
+        if c then
+            h:ClearAllPoints()
+            h:SetPoint("LEFT", win.headRow, "LEFT", c[2], 0)
+            h:SetWidth(c[3]); h:SetJustifyH(c[4]); h:SetText(c[1]); h:Show()
+        else h:Hide() end
+    end
+    for _, row in ipairs(rowFrames) do
+        for i = 1, 7 do
+            local fs, c = row.cols[i], cols[i]
+            if c then
+                fs:ClearAllPoints()
+                fs:SetPoint("LEFT", row, "LEFT", c[2], 0)
+                fs:SetWidth(c[3]); fs:SetJustifyH(c[4])
+            end
+        end
+    end
+end
+
+local function FillRows(entries)
+    local total = #entries
+    win.total = total
+    view.offset = max(0, min(view.offset, max(0, total - ROWS)))
+    for i = 1, ROWS do
+        local e = entries[view.offset + i]
+        local row = rowFrames[i]
+        if e then SetRow(row, e.cols, e.ratio, e.r, e.g, e.b, e.tip); row.onClick = e.onClick
+        else row:Hide() end
+    end
+    win.scrollText:SetText(total > ROWS and string.format("%d-%d of %d  (mouse wheel)", view.offset + 1, min(total, view.offset + ROWS), total) or "")
+end
+
+local function Redraw()
+    if not win or not win:IsShown() then return end
+    local list = RunList()
+    if view.run > #list then view.run = max(1, #list) end
+    local r = list[view.run]
+
+    -- runs
+    for i, b in ipairs(runBtns) do
+        local rr = list[i]
+        if rr then
+            local label = rr.zoneName .. (rr == run and " (live)" or "")
+            b:SetLabel(label); b:SetPrimary(i == view.run); b:Show()
+            b.label:SetWidth(176)
+        else b:Hide() end
+    end
+    if not r then
+        for _, b in ipairs(segBtns) do b:Hide() end
+        for _, row in ipairs(rowFrames) do row:Hide() end
+        win.title:SetText("No runs yet")
+        win.sub:SetText("Walk into a dungeon or raid and the run starts by itself. /cuilog start begins one by hand.")
+        win.scrollText:SetText("")
+        return
+    end
+
+    -- segments
+    local segs = { { "all", "Whole run" }, { "bosses", "All bosses (" .. #r.bosses .. ")" }, { "trash", "Trash (" .. r.trash.pulls .. ")" } }
+    for i, b in ipairs(r.bosses) do
+        segs[#segs + 1] = { i, string.format("%s #%d  %s  %s", b.name, b.attempt, b.result == "kill" and "Kill" or "Wipe", Clock(b.dur)) }
+    end
+    view.segOffset = max(0, min(view.segOffset, max(0, #segs - #segBtns)))
+    for i, b in ipairs(segBtns) do
+        local sg = segs[view.segOffset + i]
+        if sg then
+            b:SetLabel(sg[2]); b:SetPrimary(view.seg == sg[1]); b.seg = sg[1]; b:Show(); b.label:SetWidth(176)
+        else b:Hide() end
+    end
+
+    for _, t in ipairs(tabBtns) do t:SetPrimary(t.tab == view.tab) end
+
+    local players, dur, segName = Segment(r)
+    dur = max(dur, 1)
+    local live = (r == run) and " - recording" or ""
+    win.title:SetText(r.zoneName .. live)
+    local when = date("%d %b %H:%M", r.startTime)
+    win.sub:SetText(string.format("%s  |  %s  |  %s run, %s in combat  |  %d boss attempts, %d deaths", segName, when, Clock(r.dur or (time() - r.startTime)), Clock(r.combatTime or 0), #r.bosses, #r.deaths))
+    Header(view.tab)
+
+    local tab = view.tab
+    local entries = {}
+    local function Pick(p) view.player = p.guid; view.tab = "Player"; view.offset = 0; Redraw() end
+    if tab == "Damage" or tab == "Healing" or tab == "Taken" then
+        local field = tab == "Damage" and "damage" or tab == "Healing" and "healing" or "taken"
+        local list2 = Sorted(players, field)
+        local sum, top = 0, 0
+        for _, p in ipairs(list2) do sum = sum + p[field]; top = max(top, p[field]) end
+        for _, p in ipairs(list2) do
+            local rr, gg, bb = ClassRGB(p.class)
+            local cols
+            if tab == "Damage" then
+                cols = { p.name, Fmt(p.damage), string.format("%.1f", p.damage / max(sum, 1) * 100), Fmt(p.damage / dur), string.format("%.0f", p.hits > 0 and p.crits / p.hits * 100 or 0), tostring(p.casts) }
+            elseif tab == "Healing" then
+                local raw = p.healing + p.overheal
+                cols = { p.name, Fmt(p.healing), string.format("%.1f", p.healing / max(sum, 1) * 100), Fmt(p.healing / dur), string.format("%.0f", raw > 0 and p.overheal / raw * 100 or 0), tostring(p.casts) }
+            else
+                cols = { p.name, Fmt(p.taken), string.format("%.1f", p.taken / max(sum, 1) * 100), Fmt(p.taken / dur), tostring(p.deaths) }
+            end
+            entries[#entries + 1] = { cols = cols, ratio = p[field] / max(top, 1), r = rr, g = gg, b = bb, onClick = function() Pick(p) end,
+                tip = function(tt)
+                    tt:AddLine(p.name, rr, gg, bb)
+                    local sp = {}
+                    for nm, s in pairs(p.spells) do
+                        local v = tab == "Healing" and s.healing or tab == "Damage" and s.damage or 0
+                        if v > 0 then sp[#sp + 1] = { nm, v } end
+                    end
+                    if tab == "Taken" then
+                        for from, amt in pairs(p.takenFrom) do sp[#sp + 1] = { from, amt } end
+                    end
+                    table.sort(sp, function(a, b) return a[2] > b[2] end)
+                    for i = 1, min(8, #sp) do tt:AddDoubleLine(sp[i][1], Fmt(sp[i][2]), 1, 1, 1, 1, 0.85, 0.2) end
+                    tt:AddLine("Click for the full ability table", 0.6, 0.6, 0.6)
+                end }
+        end
+    elseif tab == "Player" then
+        local p = view.player and players[view.player]
+        if not p then
+            -- default to the top damage dealer
+            local l = Sorted(players, "damage")
+            p = l[1]; view.player = p and p.guid
+        end
+        if p then
+            local useHeal = view.mode == "healing"
+            local list2, sum, top = {}, 0, 0
+            for nm, s in pairs(p.spells) do
+                local v = useHeal and s.healing or s.damage
+                if v > 0 or (s.casts > 0 and not useHeal) then list2[#list2 + 1] = { nm = nm, s = s, v = v }; sum = sum + v; top = max(top, v) end
+            end
+            table.sort(list2, function(a, b) if a.v ~= b.v then return a.v > b.v end return a.s.casts > b.s.casts end)
+            local rr, gg, bb = ClassRGB(p.class)
+            win.title:SetText(p.name .. " - " .. (useHeal and "healing" or "damage") .. "  (" .. Fmt(useHeal and p.healing or p.damage) .. ", " .. Fmt((useHeal and p.healing or p.damage) / dur) .. " per second)")
+            for _, e in ipairs(list2) do
+                local s = e.s
+                entries[#entries + 1] = { ratio = e.v / max(top, 1), r = rr, g = gg, b = bb,
+                    cols = { e.nm, Fmt(e.v), string.format("%.1f", e.v / max(sum, 1) * 100), tostring(s.casts), s.casts > 0 and string.format("%.1f", s.casts / (dur / 60)) or "-",
+                             s.hits > 0 and Fmt(e.v / s.hits) or "-", s.hits > 0 and string.format("%.0f", s.crits / s.hits * 100) or "-" } }
+            end
+        end
+    elseif tab == "Deaths" then
+        for i, d in ipairs(r.deaths) do
+            local rr, gg, bb = ClassRGB(d.class)
+            entries[#entries + 1] = { ratio = 0.0, r = rr, g = gg, b = bb,
+                cols = { Clock(d.t), d.name or "?", (d.killer or "?") .. ": " .. (d.spell or "?"), d.overkill and Fmt(d.overkill) or "-", Fmt(d.taken), Fmt(d.healed) },
+                tip = function(tt)
+                    tt:AddLine((d.name or "?") .. " died at " .. Clock(d.t), rr, gg, bb)
+                    for _, e in ipairs(d.events) do
+                        local ago = string.format("-%.1fs", e.ago)
+                        if e.k == "d" then tt:AddDoubleLine(ago .. "  " .. tostring(e.src) .. ": " .. tostring(e.spell), "-" .. Fmt(e.amt), 1, 0.4, 0.4, 1, 0.4, 0.4)
+                        elseif e.k == "h" then tt:AddDoubleLine(ago .. "  " .. tostring(e.src) .. ": " .. tostring(e.spell), "+" .. Fmt(e.amt), 0.4, 1, 0.4, 0.4, 1, 0.4)
+                        elseif e.k == "a+" then tt:AddLine(ago .. "  gained " .. tostring(e.spell) .. " (" .. tostring(e.src) .. ")", 0.9, 0.6, 1)
+                        else tt:AddLine(ago .. "  lost " .. tostring(e.spell), 0.7, 0.7, 0.7) end
+                    end
+                end }
+        end
+    else -- Other
+        local list2 = {}
+        for _, p in pairs(players) do
+            if p.interrupts > 0 or p.dispels > 0 or p.deaths > 0 then list2[#list2 + 1] = p end
+        end
+        table.sort(list2, function(a, b) return (a.interrupts + a.dispels) > (b.interrupts + b.dispels) end)
+        for _, p in ipairs(list2) do
+            local rr, gg, bb = ClassRGB(p.class)
+            entries[#entries + 1] = { ratio = 0.0, r = rr, g = gg, b = bb, cols = { p.name, tostring(p.interrupts), tostring(p.dispels), tostring(p.deaths) } }
+        end
+    end
+    FillRows(entries)
+
+    win.modeBtn:SetShown(tab == "Player")
+    win.prevBtn:SetShown(tab == "Player")
+    win.nextBtn:SetShown(tab == "Player")
+    win.modeBtn:SetLabel(view.mode == "healing" and "Showing healing" or "Showing damage")
+end
+CL.Refresh = Redraw
+function CL.Tick() Redraw() end
+
+local function CyclePlayer(dir)
+    local list = RunList()
+    local r = list[view.run]
+    if not r then return end
+    local players = Segment(r)
+    local l = Sorted(players, view.mode == "healing" and "healing" or "damage")
+    for i, p in ipairs(l) do
+        if p.guid == view.player then
+            local n = l[(i - 1 + dir) % #l + 1]
+            view.player = n.guid
+            Redraw()
+            return
+        end
+    end
+    if l[1] then view.player = l[1].guid; Redraw() end
+end
+
+local function BuildWindow()
+    win = CreateFrame("Frame", "CysLogWindow", UIParent)
+    CL.win = win
+    win:SetSize(880, 580)
     win:SetPoint("CENTER")
     win:SetFrameStrata("HIGH")
-    win:SetMovable(true)
-    win:EnableMouse(true)
-    win:SetClampedToScreen(true)
+    win:SetMovable(true); win:EnableMouse(true); win:SetClampedToScreen(true)
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    W.Texture(win, "BACKGROUND", T.bg):SetAllPoints()
+    local bg = W.Texture(win, "BACKGROUND", T.bg); bg:SetAllPoints()
     W.Border(win, 1, T.border, "BORDER")
-    win:Hide()
-    tinsert(UISpecialFrames, "CysLogFrame")
+    tinsert(UISpecialFrames, "CysLogWindow")
 
-    local title = W.Text(win, 13, T.accent)
-    title:SetPoint("TOPLEFT", 12, -10)
-    title:SetText("Cys's logs")
-    local close = W.Button(win, 22, 22, "x")
-    close:SetPoint("TOPRIGHT", -8, -8)
+    win.title = W.Text(win, 15, T.accent); win.title:SetPoint("TOPLEFT", 14, -12)
+    win.sub = W.Text(win, 11, T.desc); win.sub:SetPoint("TOPLEFT", 14, -34)
+    win.sub:SetWidth(840)
+    local close = W.Button(win, 22, 22, "x"); close:SetPoint("TOPRIGHT", -8, -8)
     close:SetScript("OnClick", function() win:Hide() end)
 
-    -- fights (left)
-    win.fightBtns = {}
-    for i = 1, 16 do
-        local b = W.Button(win, 170, 20, "")
-        b:SetPoint("TOPLEFT", 10, -34 - (i - 1) * 22)
-        b.label:SetFont(STANDARD_TEXT_FONT, 10, "")
-        b:SetScript("OnClick", function() state.sel = b.index - 1; CL.Refresh() end)
-        win.fightBtns[i] = b
+    -- left column
+    local lh = W.Text(win, 11, T.accent); lh:SetPoint("TOPLEFT", 14, -62); lh:SetText("Runs")
+    for i = 1, 8 do
+        local b = W.Button(win, 190, 20, "")
+        b:SetPoint("TOPLEFT", 14, -78 - (i - 1) * 22)
+        b:SetScript("OnClick", function() view.run = i; view.seg = "all"; view.offset = 0; view.segOffset = 0; view.player = nil; Redraw() end)
+        runBtns[i] = b
+    end
+    local sh = W.Text(win, 11, T.accent); sh:SetPoint("TOPLEFT", 14, -262); sh:SetText("Fights  (mouse wheel here)")
+    for i = 1, 12 do
+        local b = W.Button(win, 190, 20, "")
+        b:SetPoint("TOPLEFT", 14, -278 - (i - 1) * 22)
+        b:SetScript("OnClick", function(s) view.seg = s.seg; view.offset = 0; Redraw() end)
+        segBtns[i] = b
+    end
+    for _, b in ipairs(segBtns) do
+        b:EnableMouseWheel(true)
+        b:SetScript("OnMouseWheel", function(_, d) view.segOffset = max(0, view.segOffset - d); Redraw() end)
     end
 
     -- tabs
-    win.tabBtns = {}
-    local x = 196
-    for _, def in ipairs(TABS) do
-        local b = W.Button(win, 80, 22, def[2])
-        b:SetPoint("TOPLEFT", x, -34)
-        b:SetScript("OnClick", function() state.tab = def[1]; CL.Refresh() end)
-        win.tabBtns[def[1]] = b
-        x = x + 86
+    for i, name in ipairs(TABS) do
+        local t = W.Button(win, 90, 22, name)
+        t:SetPoint("TOPLEFT", 222 + (i - 1) * 94, -62)
+        t.tab = name
+        t:SetScript("OnClick", function() view.tab = name; view.offset = 0; Redraw() end)
+        tabBtns[i] = t
     end
+    win.modeBtn = W.Button(win, 130, 20, "Showing damage")
+    win.modeBtn:SetPoint("TOPLEFT", 222, -90)
+    win.modeBtn:SetScript("OnClick", function() view.mode = view.mode == "damage" and "healing" or "damage"; view.offset = 0; Redraw() end)
+    win.prevBtn = W.Button(win, 70, 20, "< Prev"); win.prevBtn:SetPoint("LEFT", win.modeBtn, "RIGHT", 8, 0)
+    win.prevBtn:SetScript("OnClick", function() CyclePlayer(-1) end)
+    win.nextBtn = W.Button(win, 70, 20, "Next >"); win.nextBtn:SetPoint("LEFT", win.prevBtn, "RIGHT", 6, 0)
+    win.nextBtn:SetScript("OnClick", function() CyclePlayer(1) end)
 
-    win.head = W.Text(win, 11, T.desc)
-    win.head:SetPoint("TOPLEFT", 196, -64)
+    -- table
+    win.headRow = CreateFrame("Frame", nil, win)
+    win.headRow:SetPoint("TOPLEFT", 222, -116); win.headRow:SetSize(640, 18)
+    win.heads = {}
+    for i = 1, 7 do
+        local h = W.Text(win.headRow, 11, T.accent)
+        win.heads[i] = h
+    end
+    local rule = W.Texture(win, "ARTWORK", T.line); rule:SetHeight(1)
+    rule:SetPoint("TOPLEFT", 222, -136); rule:SetPoint("TOPRIGHT", -16, -136)
 
-    -- rows
-    win.rows = {}
     for i = 1, ROWS do
-        local r = CreateFrame("Frame", nil, win)
-        r:SetSize(430, 18)
-        r:SetPoint("TOPLEFT", 196, -84 - (i - 1) * 20)
-        r:EnableMouse(true)
-        r.bar = r:CreateTexture(nil, "BACKGROUND")
-        r.bar:SetPoint("TOPLEFT"); r.bar:SetPoint("BOTTOMLEFT")
-        r.bar:SetTexture("Interface\\Buttons\\WHITE8X8")
-        r.name = W.Text(r, 11, T.text)
-        r.name:SetPoint("LEFT", 4, 0)
-        r.name:SetWidth(230)
-        r.name:SetWordWrap(false)
-        r.val = W.Text(r, 11, T.text, "RIGHT")
-        r.val:SetPoint("RIGHT", -4, 0)
-        r:SetScript("OnEnter", function(self)
-            if not self.tip then return end
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            for n, line in ipairs(self.tip) do
-                if n == 1 then GameTooltip:AddLine(line, 1, 0.82, 0) else GameTooltip:AddLine(line, 1, 1, 1) end
-            end
-            GameTooltip:Show()
+        local row = CreateFrame("Button", nil, win)
+        row:SetSize(642, ROWH - 2)
+        row:SetPoint("TOPLEFT", 222, -140 - (i - 1) * ROWH)
+        row.bar = row:CreateTexture(nil, "BACKGROUND")
+        row.bar:SetPoint("TOPLEFT"); row.bar:SetPoint("BOTTOMLEFT")
+        row.cols = {}
+        for c = 1, 7 do
+            local fs = W.Text(row, 12, T.text)
+            fs:SetPoint("LEFT", 8, 0)
+            row.cols[c] = fs
+        end
+        row:SetScript("OnClick", function(s) if s.onClick then s.onClick() end end)
+        row:SetScript("OnEnter", function(s)
+            if s.tip then GameTooltip:SetOwner(s, "ANCHOR_RIGHT"); GameTooltip:ClearLines(); s.tip(GameTooltip); GameTooltip:Show() end
         end)
-        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        win.rows[i] = r
+        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:Hide()
+        rowFrames[i] = row
     end
-    win.note = W.Text(win, 10, T.dim)
-    win.note:SetPoint("BOTTOMLEFT", 196, 12)
-end
-
-local function SetRow(i, text, valText, frac, c, tip)
-    local r = win.rows[i]
-    if not text then r:Hide() return end
-    r:Show()
-    r.name:SetText(text)
-    r.val:SetText(valText or "")
-    r.tip = tip
-    if frac then
-        r.bar:Show()
-        r.bar:SetWidth(math.max(1, 430 * frac))
-        local cr, cg, cb = ClassColor(c)
-        r.bar:SetVertexColor(cr, cg, cb, 0.45)
-    else
-        r.bar:Hide()
-    end
-end
-
-function CL.Refresh()
-    if not win or not win:IsShown() then return end
-    local fights = Fights()
-    for i, b in ipairs(win.fightBtns) do
-        local f = fights[i]
-        b.index = i
-        if f then
-            b:Show()
-            b:SetLabel(string.format("%s  %s  %s", f.live and "live" or date("%H:%M", f.at or 0), f.name or "?", Clock(f.dur or 0)))
-            b:SetPrimary((i - 1) == state.sel)
-        else
-            b:Hide()
-        end
-    end
-    for key, b in pairs(win.tabBtns) do b:SetPrimary(key == state.tab) end
-    if state.sel >= #fights then state.sel = 0 end
-    local f = fights[state.sel + 1]
-    for i = 1, ROWS do SetRow(i, nil) end
-    if not f then
-        win.head:SetText("No fights recorded yet. Go hit something.")
-        win.note:SetText("")
-        return
-    end
-    win.head:SetText(string.format("%s%s  -  %s", f.name or "?", f.zone ~= "" and (" (" .. f.zone .. ")") or "", Clock(f.dur or 0)))
-    win.note:SetText("Hover a row for the spells. The last " .. (DB().keep or 15) .. " fights are kept.")
-
-    if state.tab == "dmg" or state.tab == "heal" or state.tab == "taken" then
-        local list, total = {}, 0
-        for name, e in pairs(f[state.tab] or {}) do list[#list + 1] = { name = name, e = e }; total = total + e.t end
-        table.sort(list, function(a, b) return a.e.t > b.e.t end)
-        local top = list[1] and list[1].e.t or 1
-        for i = 1, math.min(#list, ROWS) do
-            local it = list[i]
-            local tip = { it.name .. " - " .. Fmt(it.e.t) }
-            for _, sp in ipairs(SpellsOf(it.e)) do
-                tip[#tip + 1] = string.format("%s  %s (%d%%)", sp[1], Fmt(sp[2]), it.e.t > 0 and math.floor(sp[2] / it.e.t * 100 + 0.5) or 0)
-            end
-            SetRow(i, i .. ". " .. it.name,
-                string.format("%s   %s/s   %d%%", Fmt(it.e.t), Fmt(it.e.t / math.max(1, f.dur or 1)), total > 0 and math.floor(it.e.t / total * 100 + 0.5) or 0),
-                it.e.t / top, it.e.c, tip)
-        end
-        if #list == 0 then SetRow(1, "Nothing recorded for this one.", "", nil) end
-    elseif state.tab == "deaths" then
-        local deaths = f.deaths or {}
-        for i = 1, math.min(#deaths, ROWS) do
-            local d = deaths[i]
-            local tip = { d.who .. " died at " .. Clock(d.t or 0) }
-            for _, l in ipairs(d.lines or {}) do tip[#tip + 1] = l end
-            if #tip == 1 then tip[2] = "No hits were seen in the last 15 seconds." end
-            SetRow(i, d.who, Clock(d.t or 0), 1, d.c, tip)
-            win.rows[i].val:SetText(Clock(d.t or 0))
-        end
-        if #deaths == 0 then SetRow(1, "Nobody died. Nice.", "", nil) end
-    else
-        local n = 0
-        for _, it in ipairs(f.ints or {}) do
-            n = n + 1
-            if n <= ROWS then SetRow(n, string.format("%s interrupted %s's %s", it.who or "?", it.target or "?", it.stopped or "a cast"), it.spell or "", nil) end
-        end
-        for who, count in pairs(f.disp or {}) do
-            n = n + 1
-            if n <= ROWS then SetRow(n, who .. " dispelled", count .. "x", nil) end
-        end
-        if n == 0 then SetRow(1, "No interrupts or dispels.", "", nil) end
-    end
+    win.scrollText = W.Text(win, 10, T.dim); win.scrollText:SetPoint("BOTTOMRIGHT", -16, 10)
+    win:EnableMouseWheel(true)
+    win:SetScript("OnMouseWheel", function(_, d) view.offset = max(0, view.offset - d * 3); Redraw() end)
+    win:SetScript("OnShow", Redraw)
+    win:Hide()
 end
 
 function CL.Toggle()
-    Build()
-    if win:IsShown() then win:Hide() else win:Show(); CL.Refresh() end
-end
-function CL.Open()
-    Build()
-    win:Show()
-    CL.Refresh()
-end
-function CL.Clear()
-    DB().fights = {}
-    cur = nil
-    CL.Refresh()
-    CUI:Print("Combat log cleared.")
+    DB()
+    if not win then BuildWindow() end
+    if win:IsShown() then win:Hide() else win:Show() end
 end
 
 SLASH_CYSLOG1 = "/cuilog"
 SLASH_CYSLOG2 = "/cyslog"
-SlashCmdList["CYSLOG"] = function() CL.Toggle() end
+SlashCmdList["CYSLOG"] = function(msg)
+    msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+    if msg == "start" then CL.StartManual()
+    elseif msg == "end" then CL.EndRun()
+    elseif msg == "boss" then CL.ToggleBoss()
+    elseif msg == "clear" then CL.Clear()
+    elseif msg == "help" then CUI:Print("/cuilog (window)  /cuilog start  /cuilog end  /cuilog boss (mark or unmark your target as a boss)  /cuilog clear")
+    else CL.Toggle() end
+end
 
 --------------------------------------------------------------------------------
--- Module and settings
+-- Settings page
 --------------------------------------------------------------------------------
-local ev
-local function Enable()
-    if ev then return end
-    ev = CreateFrame("Frame")
-    ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    ev:RegisterEvent("PLAYER_ENTERING_WORLD")
-    ev:SetScript("OnEvent", function(_, event)
-        if event == "COMBAT_LOG_EVENT_UNFILTERED" then OnCombatLog() else wipe(ring) end
-    end)
-    C_Timer.NewTicker(1, function()
-        if cur and lastEvent and GetTime() - lastEvent >= IDLE_END and not UnitAffectingCombat("player") then
-            Finish()
-        end
-        if win and win:IsShown() and cur then CL.Refresh() end
-    end)
-end
+CUI:RegisterPage("Combat Log", function(page)
+    local db = DB()
+    local width = 480
+    W.Header(page, "Combat log (Cys's logs)", width):SetPoint("TOPLEFT", 0, -4)
+    local intro = W.Text(page, 12, T.text)
+    intro:SetPoint("TOPLEFT", 4, -34); intro:SetWidth(width - 8); intro:SetJustifyV("TOP"); intro:SetSpacing(3)
+    intro:SetText("Records every dungeon and raid you enter as one run: bosses, trash, each player's damage, healing, damage taken, casts and deaths with a recap of the last hits. Walking out to run back does not end it.")
+    local y = -104
+    local c = W.Checkbox(page, "Record runs", function() return db.record end, function(on) db.record = on end)
+    c:SetPoint("TOPLEFT", 4, y); y = y - 28
+    local c2 = W.Checkbox(page, "Also turn on the game's own combat log during a run (for Warcraft Logs uploads)", function() return db.autoLog end, function(on) db.autoLog = on end)
+    c2:SetPoint("TOPLEFT", 4, y); y = y - 32
+    local st = W.Stepper(page, "Runs to keep", function() return db.keepRuns end, function(v)
+        db.keepRuns = v
+        while #db.runs > v do table.remove(db.runs) end
+    end, 3, 10, 1, "")
+    st:SetPoint("TOPLEFT", 4, y); y = y - 36
+    local open = W.Button(page, 130, 22, "Open the log", true)
+    open:SetPoint("TOPLEFT", 4, y)
+    open:SetScript("OnClick", CL.Toggle)
+    local clr = W.Button(page, 130, 22, "Clear saved runs")
+    clr:SetPoint("LEFT", open, "RIGHT", 8, 0)
+    clr:SetScript("OnClick", CL.Clear)
+    y = y - 40
+    W.Notes(page, 4, y, width - 8, "Commands", {
+        { "/cuilog", "open or close the window" },
+        { "/cuilog start / end", "begin or close a run by hand" },
+        { "/cuilog boss", "mark or unmark your target as a boss (remembered)" },
+        { "Bosses", "found from the built-in list, encounter events, skull-level units in raids, or /cuilog boss" },
+    })
+end)
 
 CUI:RegisterModule({
     key = "combatlog",
     name = "Combat Log (Cys's logs)",
     addon = "CysUI",
-    desc = "Records each fight (damage, healing, damage taken, deaths with a recap, interrupts, dispels) and shows it in a window: /cuilog.",
+    desc = "Records whole dungeon and raid runs (bosses, trash, every player's damage, healing, casts and deaths with a recap) and keeps the last few. View them with /cuilog.",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Combat Log") end,
 })
-
-CUI:RegisterPage("Combat Log", function(page)
-    local db = DB()
-    local width = 480
-    W.Header(page, "Combat log (Cys's logs)", width):SetPoint("TOPLEFT", 0, -4)
-
-    local intro = W.Text(page, 12, T.text)
-    intro:SetPoint("TOPLEFT", 4, -34)
-    intro:SetWidth(width - 8)
-    intro:SetJustifyV("TOP")
-    intro:SetSpacing(3)
-    intro:SetText("Every fight your group is in is summed up: who did the damage and healing, what hurt who, deaths with the last hits before them, interrupts and dispels. Open it with /cuilog. It is a summary, not a full event log, so it stays small.")
-
-    local open = W.Button(page, 200, 24, "Open the log window", true)
-    open:SetPoint("TOPLEFT", 4, -108)
-    open:SetScript("OnClick", function() CL.Open() end)
-
-    local rec = W.Checkbox(page, "Record fights", function() return db.record end, function(on) db.record = on end)
-    rec:SetPoint("TOPLEFT", 4, -146)
-    local keep = W.Stepper(page, "Fights to keep", function() return db.keep end,
-        function(v) db.keep = v; while #db.fights > v do table.remove(db.fights) end end, 5, 25, 5, "")
-    keep:SetPoint("TOPLEFT", 4, -176)
-    local clear = W.Button(page, 200, 22, "Clear all saved fights")
-    clear:SetPoint("TOPLEFT", 4, -210)
-    clear:SetScript("OnClick", function() CL.Clear() end)
-
-    W.Notes(page, 4, -250, width, "", {
-        "Only your group (you, party, raid and their pets) is counted. Mobs are never listed on the meters, only as the fight name.",
-        "A fight ends after a few seconds with nothing happening. Fights under 4 seconds are skipped.",
-        "To make a real log for warcraftlogs.com use the game's own /combatlog.",
-    })
-end)
