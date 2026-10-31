@@ -27,6 +27,7 @@ local function DB()
         if db[k] == nil then db[k] = v end
     end
     db.runs = db.runs or {}
+    db.avoidable = db.avoidable or {}   -- spell ids you added with /cuilog avoid
     db.learned = db.learned or {}      -- boss npc id -> name (learned from your game, or /cuilog boss)
     db.fights = nil                    -- the old 15-fight list is gone
     db.keep = nil
@@ -96,6 +97,39 @@ local BOSS_IDS = {
 }
 
 --------------------------------------------------------------------------------
+-- Phase 2 lookups
+--------------------------------------------------------------------------------
+-- Damage that standing in the right place avoids. Spell ids checked against the BigWigs Molten Core data
+-- (Rain of Fire 19717, Inferno 19695, Conflagration 19428, Living Bomb 20475). 20476 (the bomb's explosion) is
+-- unconfirmed. Add more in game with /cuilog avoid <spell id>.
+local AVOIDABLE = {
+    [19717] = "Rain of Fire", [19695] = "Inferno", [19428] = "Conflagration", [20475] = "Living Bomb", [20476] = "Living Bomb",
+}
+-- debuffs whose uptime on a boss is measured (matched by name, so every rank counts)
+local BOSS_DEBUFFS = {
+    ["Sunder Armor"] = "Sunder Armor", ["Faerie Fire"] = "Faerie Fire", ["Faerie Fire (Feral)"] = "Faerie Fire",
+    ["Curse of Recklessness"] = "Curse of Recklessness", ["Demoralizing Shout"] = "Demoralizing Shout",
+    ["Thunder Clap"] = "Thunder Clap",
+}
+-- buffs measured on each group member (seconds of combat they had it)
+local PLAYER_BUFFS = { ["Shield Block"] = true, ["Stoneskin"] = true, ["Windfury Totem"] = true }
+-- totems measured by how long they stood (seconds): name -> lifetime
+local TOTEM_LIFE = { ["Tremor Totem"] = 120, ["Windfury Totem"] = 120, ["Stoneskin Totem"] = 120, ["Grace of Air Totem"] = 120,
+                     ["Mana Spring Totem"] = 120, ["Healing Stream Totem"] = 120, ["Strength of Earth Totem"] = 120 }
+local TAUNTS = { ["Taunt"] = true, ["Growl"] = true, ["Mocking Blow"] = true, ["Challenging Shout"] = true, ["Challenging Roar"] = true }
+local AREA_TAUNTS = { ["Challenging Shout"] = true, ["Challenging Roar"] = true }
+
+local debuffs, pbuffs, totems, totByOwner = {}, {}, {}, {}   -- open timers, see AuraEvent / Totem handling
+
+local function Overlap(a1, a2, b1, b2) return max(0, min(a2, b2) - max(a1, b1)) end
+local function Credit(map, guid, name, secs)
+    if secs <= 0 then return end
+    local m = map[guid]
+    if not m then m = {}; map[guid] = m end
+    m[name] = (m[name] or 0) + secs
+end
+
+--------------------------------------------------------------------------------
 -- State
 --------------------------------------------------------------------------------
 local run            -- the active run (also saved in SavedVariables as db.active)
@@ -130,12 +164,14 @@ end
 -- Players and their tables
 --------------------------------------------------------------------------------
 local NUM_FIELDS = { "damage", "healing", "overheal", "taken", "casts", "hits", "crits", "healHits", "healCrits",
-                     "deaths", "interrupts", "dispels" }
+                     "deaths", "interrupts", "dispels", "avoidDamage", "avoidHits", "taunts", "tauntsLanded", "tauntsMissed" }
+local MAP_FIELDS = { "avoidSpells", "uptime", "stopped", "dispelled", "tauntMiss" }
 
 local function NewPlayer(guid, name, class)
     return { guid = guid, name = name, class = class, damage = 0, healing = 0, overheal = 0, taken = 0, casts = 0,
              hits = 0, crits = 0, healHits = 0, healCrits = 0, deaths = 0, interrupts = 0, dispels = 0,
-             spells = {}, takenFrom = {} }
+             avoidDamage = 0, avoidHits = 0, taunts = 0, tauntsLanded = 0, tauntsMissed = 0,
+             spells = {}, takenFrom = {}, avoidSpells = {}, uptime = {}, stopped = {}, dispelled = {}, tauntMiss = {} }
 end
 
 -- p for an actor in a players table (created from what the run already knows about them)
@@ -272,6 +308,12 @@ local function MergePlayers(dst, src)
             if s.max > ds.max then ds.max = s.max end
         end
         for from, amt in pairs(p.takenFrom) do d.takenFrom[from] = (d.takenFrom[from] or 0) + amt end
+        for _, f in ipairs(MAP_FIELDS) do
+            if p[f] then
+                d[f] = d[f] or {}
+                for k, v in pairs(p[f]) do d[f][k] = (d[f][k] or 0) + v end
+            end
+        end
     end
 end
 CL.MergePlayers = MergePlayers
@@ -341,7 +383,7 @@ end
 local function StartPull()
     run.pullCounter = (run.pullCounter or 0) + 1
     pull = { id = run.pullCounter, startTime = time(), t0 = GetTime(), last = GetTime(), players = {}, enemies = {},
-             bossGUIDs = {}, boss = nil, killed = false }
+             bossGUIDs = {}, boss = nil, killed = false, bossUp = {}, pbUp = {}, totUp = {} }
     RefreshRoster()
 end
 
@@ -361,6 +403,33 @@ local function FinishPull()
         if pl.damage > 0 or pl.taken > 0 or pl.healing > 0 then any = true; break end
     end
     if not any then return end
+    -- timers still open at the end of the pull count up to its last event
+    local t0, lim = p.t0, p.last
+    for guid, t in pairs(debuffs) do
+        if p.bossGUIDs[guid] then
+            for name, rec in pairs(t) do Credit(p.bossUp, guid, name, Overlap(rec.since, lim, t0, lim)) end
+        end
+    end
+    for guid, t in pairs(pbuffs) do
+        for name, rec in pairs(t) do Credit(p.pbUp, guid, name, Overlap(rec.since, lim, t0, lim)) end
+    end
+    for _, rec in pairs(totems) do
+        Credit(p.totUp, rec.owner, rec.name, Overlap(rec.since, min(lim, rec.since + rec.life), t0, lim))
+    end
+    for _, map in ipairs({ p.pbUp, p.totUp }) do
+        for guid, m in pairs(map) do
+            for name, secs in pairs(m) do
+                local u = GetP(p.players, guid).uptime
+                u[name] = (u[name] or 0) + secs
+                local ru = GetP(run.players, guid).uptime
+                ru[name] = (ru[name] or 0) + secs
+            end
+        end
+    end
+    local ups = {}
+    for _, m in pairs(p.bossUp) do
+        for name, secs in pairs(m) do ups[name] = max(ups[name] or 0, min(secs, dur)) end
+    end
     run.combatTime = (run.combatTime or 0) + dur
     if p.boss then
         local attempt = 1
@@ -368,7 +437,7 @@ local function FinishPull()
         Prune(p.players)
         run.bosses[#run.bosses + 1] = { name = p.boss.name, id = p.boss.id, attempt = attempt, pullId = p.id,
             startTime = p.startTime, endTime = time(), dur = dur, result = p.killed and "kill" or "wipe",
-            players = p.players, enemies = p.enemies }
+            players = p.players, enemies = p.enemies, uptimes = ups }
     else
         local tr = run.trash
         tr.pulls = tr.pulls + 1
@@ -391,7 +460,7 @@ local loggingByUs = false
 local function StartRun(zone, mapID, manual)
     local db = DB()
     pull = nil
-    wipe(ringBy); wipe(bossCache)
+    wipe(ringBy); wipe(bossCache); wipe(debuffs); wipe(pbuffs); wipe(totems); wipe(totByOwner)
     run = NewRun(zone, mapID, manual)
     db.active = run
     RefreshRoster()
@@ -473,7 +542,56 @@ end
 --------------------------------------------------------------------------------
 local HANDLED = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
     DAMAGE_SHIELD = true, SPELL_HEAL = true, SPELL_PERIODIC_HEAL = true, SPELL_CAST_SUCCESS = true,
-    SPELL_INTERRUPT = true, SPELL_DISPEL = true, SPELL_AURA_REMOVED = true, SPELL_AURA_APPLIED = true, UNIT_DIED = true }
+    SPELL_INTERRUPT = true, SPELL_DISPEL = true, SPELL_AURA_REMOVED = true, SPELL_AURA_APPLIED = true, UNIT_DIED = true,
+    SPELL_AURA_REFRESH = true, SPELL_MISSED = true, SPELL_SUMMON = true, UNIT_DESTROYED = true }
+
+local function CloseTotem(guid, now)
+    local rec = totems[guid]
+    if not rec then return end
+    totems[guid] = nil
+    if totByOwner[rec.owner .. rec.name] == guid then totByOwner[rec.owner .. rec.name] = nil end
+    if pull then
+        Credit(pull.totUp, rec.owner, rec.name, Overlap(rec.since, min(now, rec.since + rec.life), pull.t0, now))
+    end
+end
+
+-- buff / debuff timers: boss debuffs, a few buffs on group members, and group members' taunts landing
+local function AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, spell)
+    local removed = sub == "SPELL_AURA_REMOVED"
+    local key = BOSS_DEBUFFS[spell]
+    if key and not dGroup and BossInfo(dGUID) then
+        local t = debuffs[dGUID]
+        if not t then t = {}; debuffs[dGUID] = t end
+        if removed then
+            local rec = t[key]
+            if rec then
+                if pull then Credit(pull.bossUp, dGUID, key, Overlap(rec.since, now, pull.t0, now)) end
+                t[key] = nil
+            end
+        elseif not t[key] then
+            t[key] = { since = now }
+        end
+    end
+    if PLAYER_BUFFS[spell] and dPlayer then
+        local t = pbuffs[dGUID]
+        if not t then t = {}; pbuffs[dGUID] = t end
+        if removed then
+            local rec = t[spell]
+            if rec then
+                if pull then Credit(pull.pbUp, dGUID, spell, Overlap(rec.since, now, pull.t0, now)) end
+                t[spell] = nil
+            end
+        elseif not t[spell] then
+            t[spell] = { since = now }
+        end
+    end
+    -- a single-target taunt that lands puts its debuff on the mob
+    if sub == "SPELL_AURA_APPLIED" and TAUNTS[spell] and not AREA_TAUNTS[spell] and sGroup and not dGroup and sGUID then
+        local owner = Actor(sGUID, nil, spell)
+        AddCount(run.players, owner, "tauntsLanded")
+        if pull then AddCount(pull.players, owner, "tauntsLanded") end
+    end
+end
 
 local function OnCombatLog()
     if not run or run.leftAt then return end
@@ -482,7 +600,7 @@ local function OnCombatLog()
     if not HANDLED[sub] then return end
     local sGroup = sFlags and band(sFlags, 0x7) ~= 0
     local dGroup = dFlags and band(dFlags, 0x7) ~= 0
-    if not sGroup and not dGroup then return end
+    if sub ~= "UNIT_DIED" and not sGroup and not dGroup then return end   -- (a boss dying has no group flags)
 
     local now = GetTime()
     local dPlayer = dGroup and dGUID and dGUID:find("^Player")
@@ -510,6 +628,15 @@ local function OnCombatLog()
             local from = tostring(sName or "?") .. ": " .. tostring(spell or "?")
             AddTaken(run.players, dGUID, from, amount)
             AddTaken(pull.players, dGUID, from, amount)
+            if sub ~= "SWING_DAMAGE" and (AVOIDABLE[a12] or DB().avoidable[a12]) then
+                local label = AVOIDABLE[a12] or spell or "?"
+                for _, tbl in ipairs({ run.players, pull.players }) do
+                    local ap = GetP(tbl, dGUID)
+                    ap.avoidDamage = ap.avoidDamage + amount
+                    ap.avoidHits = ap.avoidHits + 1
+                    ap.avoidSpells[label] = (ap.avoidSpells[label] or 0) + amount
+                end
+            end
             Push(dGUID, "d", amount, sName, spell, (over and over > 0) and over or nil)
         end
         return
@@ -538,16 +665,53 @@ local function OnCombatLog()
             local key, sp = Actor(sGUID, sName, a13)
             AddCast(run.players, key, sp)
             AddCast(pull.players, key, sp)
+            if TAUNTS[a13] then
+                AddCount(run.players, key, "taunts")
+                AddCount(pull.players, key, "taunts")
+            end
         end
         return
     end
 
-    -- auras that hit a player (kept for the death recap) -----------------------
-    if sub == "SPELL_AURA_REMOVED" then
-        if dPlayer and a15 == "BUFF" then Push(dGUID, "a-", nil, sName, a13) end
+    -- a taunt that missed ------------------------------------------------------
+    if sub == "SPELL_MISSED" then
+        if sGroup and not dGroup and TAUNTS[a13] and not AREA_TAUNTS[a13] then
+            local owner = Actor(sGUID, sName, a13)
+            for _, tbl in ipairs({ run.players, pull and pull.players }) do
+                if tbl then
+                    local tp = GetP(tbl, owner)
+                    tp.tauntsMissed = tp.tauntsMissed + 1
+                    local why = tostring(a15 or "MISS")
+                    tp.tauntMiss[why] = (tp.tauntMiss[why] or 0) + 1
+                end
+            end
+        end
         return
-    elseif sub == "SPELL_AURA_APPLIED" then
-        if dPlayer and a15 == "DEBUFF" then Push(dGUID, "a+", nil, sName, a13) end
+    end
+
+    -- totems standing (Tremor, Windfury, ...) ------------------------------------
+    if sub == "SPELL_SUMMON" then
+        local life = dName and TOTEM_LIFE[dName]
+        if sGroup and life and sGUID:find("^Player") and dGUID then
+            local k = sGUID .. dName
+            if totByOwner[k] then CloseTotem(totByOwner[k], now) end
+            totems[dGUID] = { owner = sGUID, name = dName, since = now, life = life }
+            totByOwner[k] = dGUID
+        end
+        return
+    elseif sub == "UNIT_DESTROYED" then
+        if dGUID and totems[dGUID] then CloseTotem(dGUID, now) end
+        return
+    end
+
+    -- auras that hit a player (kept for the death recap) -----------------------
+    if sub == "SPELL_AURA_REMOVED" or sub == "SPELL_AURA_APPLIED" or sub == "SPELL_AURA_REFRESH" then
+        if a13 then AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, a13) end
+        if sub == "SPELL_AURA_REMOVED" then
+            if dPlayer and a15 == "BUFF" then Push(dGUID, "a-", nil, sName, a13) end
+        elseif sub == "SPELL_AURA_APPLIED" then
+            if dPlayer and a15 == "DEBUFF" then Push(dGUID, "a+", nil, sName, a13) end
+        end
         return
     end
 
@@ -556,6 +720,10 @@ local function OnCombatLog()
         local key = Actor(sGUID, sName, "x")
         AddCount(run.players, key, "interrupts")
         if pull then AddCount(pull.players, key, "interrupts") end
+        local what = tostring(a16 or "?")
+        for _, tbl in ipairs({ run.players, pull and pull.players }) do
+            if tbl then local ip = GetP(tbl, key); ip.stopped[what] = (ip.stopped[what] or 0) + 1 end
+        end
         run.interrupts = run.interrupts or {}
         if #run.interrupts < 400 then
             run.interrupts[#run.interrupts + 1] = { t = time() - run.startTime, who = sName, target = dName, spell = a13, stopped = a16 }
@@ -565,11 +733,16 @@ local function OnCombatLog()
         local key = Actor(sGUID, sName, "x")
         AddCount(run.players, key, "dispels")
         if pull then AddCount(pull.players, key, "dispels") end
+        local what = (dGroup and "" or "Purge: ") .. tostring(a16 or "?")
+        for _, tbl in ipairs({ run.players, pull and pull.players }) do
+            if tbl then local dp = GetP(tbl, key); dp.dispelled[what] = (dp.dispelled[what] or 0) + 1 end
+        end
         return
     end
 
     -- deaths ---------------------------------------------------------------
     if sub == "UNIT_DIED" then
+        if dGUID and totems[dGUID] then CloseTotem(dGUID, now) end
         if dPlayer then
             RecordDeath(dGUID, dName)
         elseif pull and not dGroup then
@@ -694,7 +867,7 @@ end
 -- Viewer
 --------------------------------------------------------------------------------
 local ROWS, ROWH = 20, 22
-local TABS = { "Damage", "Healing", "Taken", "Player", "Deaths", "Other" }
+local TABS = { "Damage", "Healing", "Taken", "Player", "Deaths", "Mistakes", "Uptimes", "Utility" }
 local view = { run = 1, seg = "all", tab = "Damage", player = nil, mode = "damage", offset = 0, segOffset = 0 }
 
 local function Fmt(n)
@@ -777,7 +950,9 @@ local function ColumnsFor(tab)
     elseif tab == "Taken" then return { { "Player", 8, 170, "LEFT" }, { "Taken", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "DTPS", 320, 70, "RIGHT" }, { "Deaths", 395, 60, "RIGHT" } }
     elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "%", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
     elseif tab == "Deaths" then return { { "Time", 8, 55, "LEFT" }, { "Player", 68, 120, "LEFT" }, { "Killing blow", 195, 220, "LEFT" }, { "Overkill", 420, 65, "RIGHT" }, { "Taken", 490, 70, "RIGHT" }, { "Healed", 565, 70, "RIGHT" } }
-    else return { { "Player", 8, 170, "LEFT" }, { "Interrupts", 180, 80, "RIGHT" }, { "Dispels", 265, 80, "RIGHT" }, { "Deaths", 350, 70, "RIGHT" } } end
+    elseif tab == "Mistakes" then return { { "Player", 8, 170, "LEFT" }, { "Avoidable dmg", 180, 95, "RIGHT" }, { "Hits", 280, 50, "RIGHT" }, { "% of taken", 335, 80, "RIGHT" } }
+    elseif tab == "Uptimes" then return { { "What", 8, 380, "LEFT" }, { "Uptime", 395, 70, "RIGHT" }, { "Seconds", 470, 70, "RIGHT" } }
+    else return { { "Player", 8, 170, "LEFT" }, { "Interrupts", 180, 75, "RIGHT" }, { "Dispels", 260, 60, "RIGHT" }, { "Taunts", 325, 55, "RIGHT" }, { "Landed", 385, 60, "RIGHT" }, { "Missed", 450, 60, "RIGHT" }, { "Deaths", 515, 55, "RIGHT" } } end
 end
 
 local function Header(tab)
@@ -938,15 +1113,83 @@ local function Redraw()
                     end
                 end }
         end
-    else -- Other
+    elseif tab == "Mistakes" then
+        local list2, top = {}, 0
+        for _, p in pairs(players) do
+            if (p.avoidDamage or 0) > 0 then list2[#list2 + 1] = p; top = max(top, p.avoidDamage) end
+        end
+        table.sort(list2, function(a, b) return a.avoidDamage > b.avoidDamage end)
+        for _, p in ipairs(list2) do
+            local rr, gg, bb = ClassRGB(p.class)
+            entries[#entries + 1] = { ratio = p.avoidDamage / max(top, 1), r = rr, g = gg, b = bb,
+                cols = { p.name, Fmt(p.avoidDamage), tostring(p.avoidHits or 0), string.format("%.0f", p.avoidDamage / max(p.taken, 1) * 100) },
+                tip = function(tt)
+                    tt:AddLine(p.name .. " - avoidable damage", rr, gg, bb)
+                    local sp = {}
+                    for nm, amt in pairs(p.avoidSpells or {}) do sp[#sp + 1] = { nm, amt } end
+                    table.sort(sp, function(a, b) return a[2] > b[2] end)
+                    for _, e in ipairs(sp) do tt:AddDoubleLine(e[1], Fmt(e[2]), 1, 1, 1, 1, 0.85, 0.2) end
+                end }
+        end
+        if #entries == 0 then
+            entries[1] = { cols = { "No avoidable damage recorded. Add spells with /cuilog avoid <spell id>." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
+        end
+    elseif tab == "Uptimes" then
+        local function Row(label, secs, base, r2, g2, b2)
+            local frac = base > 0 and min(1, secs / base) or 0
+            entries[#entries + 1] = { cols = { label, string.format("%.0f%%", frac * 100), Clock(secs) }, ratio = frac, r = r2, g = g2, b = b2 }
+        end
+        if view.seg ~= "trash" then
+            local keys = { "Sunder Armor", "Faerie Fire", "Curse of Recklessness", "Demoralizing Shout", "Thunder Clap" }
+            for i, b in ipairs(r.bosses) do
+                if view.seg == "all" or view.seg == "bosses" or view.seg == i then
+                    if b.uptimes then
+                        for _, k in ipairs(keys) do
+                            Row(string.format("%s #%d (%s) - %s on the boss", b.name, b.attempt, b.result, k), b.uptimes[k] or 0, b.dur, 0.9, 0.7, 0.2)
+                        end
+                    end
+                end
+            end
+        end
+        local names = {}
+        for _, p in pairs(players) do
+            if p.uptime and next(p.uptime) then names[#names + 1] = p end
+        end
+        table.sort(names, function(a, b) return a.name < b.name end)
+        for _, p in ipairs(names) do
+            local rr, gg, bb = ClassRGB(p.class)
+            local ks = {}
+            for k in pairs(p.uptime) do ks[#ks + 1] = k end
+            table.sort(ks)
+            for _, k in ipairs(ks) do Row(p.name .. " - " .. k, p.uptime[k], dur, rr, gg, bb) end
+        end
+        if #entries == 0 then
+            entries[1] = { cols = { "Nothing recorded yet. Boss debuffs show for boss attempts; totems and Shield Block per player." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
+        end
+    else -- Utility
         local list2 = {}
         for _, p in pairs(players) do
-            if p.interrupts > 0 or p.dispels > 0 or p.deaths > 0 then list2[#list2 + 1] = p end
+            if p.interrupts > 0 or p.dispels > 0 or (p.taunts or 0) > 0 or (p.tauntsLanded or 0) > 0 or (p.tauntsMissed or 0) > 0 or p.deaths > 0 then list2[#list2 + 1] = p end
         end
         table.sort(list2, function(a, b) return (a.interrupts + a.dispels) > (b.interrupts + b.dispels) end)
         for _, p in ipairs(list2) do
             local rr, gg, bb = ClassRGB(p.class)
-            entries[#entries + 1] = { ratio = 0.0, r = rr, g = gg, b = bb, cols = { p.name, tostring(p.interrupts), tostring(p.dispels), tostring(p.deaths) } }
+            entries[#entries + 1] = { ratio = 0.0, r = rr, g = gg, b = bb,
+                cols = { p.name, tostring(p.interrupts), tostring(p.dispels), tostring(p.taunts or 0), tostring(p.tauntsLanded or 0), tostring(p.tauntsMissed or 0), tostring(p.deaths) },
+                tip = function(tt)
+                    tt:AddLine(p.name, rr, gg, bb)
+                    local function List(title, map)
+                        if not map or not next(map) then return end
+                        tt:AddLine(title, 1, 0.85, 0.2)
+                        local l = {}
+                        for k, v in pairs(map) do l[#l + 1] = { k, v } end
+                        table.sort(l, function(a, b) return a[2] > b[2] end)
+                        for i = 1, min(8, #l) do tt:AddDoubleLine(l[i][1], tostring(l[i][2]), 1, 1, 1, 1, 1, 1) end
+                    end
+                    List("Interrupted", p.stopped)
+                    List("Dispelled", p.dispelled)
+                    List("Taunt misses", p.tauntMiss)
+                end }
         end
     end
     FillRows(entries)
@@ -1018,8 +1261,8 @@ local function BuildWindow()
 
     -- tabs
     for i, name in ipairs(TABS) do
-        local t = W.Button(win, 90, 22, name)
-        t:SetPoint("TOPLEFT", 222 + (i - 1) * 94, -62)
+        local t = W.Button(win, 78, 22, name)
+        t:SetPoint("TOPLEFT", 222 + (i - 1) * 80, -62)
         t.tab = name
         t:SetScript("OnClick", function() view.tab = name; view.offset = 0; Redraw() end)
         tabBtns[i] = t
@@ -1083,8 +1326,16 @@ SlashCmdList["CYSLOG"] = function(msg)
     if msg == "start" then CL.StartManual()
     elseif msg == "end" then CL.EndRun()
     elseif msg == "boss" then CL.ToggleBoss()
+    elseif msg:match("^avoid") then
+        local id = tonumber(msg:match("avoid%s+(%d+)"))
+        if not id then CUI:Print("Usage: /cuilog avoid <spell id>  (adds or removes a spell from the avoidable damage list)")
+        else
+            local av = DB().avoidable
+            if av[id] then av[id] = nil; CUI:Print("Cys's logs: spell " .. id .. " is no longer counted as avoidable.")
+            else av[id] = true; CUI:Print("Cys's logs: spell " .. id .. " now counts as avoidable damage.") end
+        end
     elseif msg == "clear" then CL.Clear()
-    elseif msg == "help" then CUI:Print("/cuilog (window)  /cuilog start  /cuilog end  /cuilog boss (mark or unmark your target as a boss)  /cuilog clear")
+    elseif msg == "help" then CUI:Print("/cuilog (window)  /cuilog start  /cuilog end  /cuilog boss (mark or unmark your target as a boss)  /cuilog avoid <spell id>  /cuilog clear")
     else CL.Toggle() end
 end
 

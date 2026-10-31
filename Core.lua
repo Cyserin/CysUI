@@ -319,9 +319,17 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.47.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.48.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.48.0", date = "2026-10-31",
+              added = {
+                  "Combat Log Mistakes tab: damage taken from avoidable abilities (Rain of Fire, Inferno, Conflagration, Living Bomb) per player, with a breakdown on hover. Add your own with /cuilog avoid and a spell id.",
+                  "Combat Log Uptimes tab: Sunder Armor, Faerie Fire, Curse of Recklessness, Demoralizing Shout and Thunder Clap uptime on each boss attempt, plus how long each player had Shield Block, Stoneskin or Windfury Totem, and how long their Tremor, Windfury and other totems stood.",
+                  "Combat Log Utility tab: interrupts (and what they stopped), dispels (and what they removed), and taunts landed or resisted for each player.",
+                  "Combat Log now also records taunts landed and resisted, and keeps the lists of what each player interrupted and dispelled.",
+              },
+            },
             { version = "0.47.0", date = "2026-10-31",
               added = {
                   "Combat Log rebuilt as a run viewer: every dungeon or raid you enter is recorded as one run, from walking in to walking out (running back after a death does not split it). Open it with /cuilog.",
