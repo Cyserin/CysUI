@@ -1,7 +1,14 @@
 name: Release
 
 # Every time you push to main, this checks the version in CysUI.toc.
-# If that version has no release yet, it zips the addon and publishes it as an alpha release.
+# If that version has no release yet, it zips the addon, publishes it on GitHub, and (once the
+# CF_API_KEY / WAGO_API_TOKEN secrets and the project IDs in the toc exist) uploads it to
+# CurseForge and Wago too.
+#
+# RELEASE_CHANNEL decides what the sites call the build:
+#   alpha  -> only people who opted in to alpha builds get it (use while testing)
+#   beta   -> same for beta
+#   (empty) -> a normal release that everyone gets
 on:
   push:
     branches: [main]
@@ -14,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_CHANNEL: alpha
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,8 +33,11 @@ jobs:
         id: ver
         run: |
           v=$(grep -m1 '^## Version:' CysUI.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')
+          tag="v$v"
+          if [ -n "$RELEASE_CHANNEL" ]; then tag="$tag-$RELEASE_CHANNEL"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          if gh release view "v$v" >/dev/null 2>&1; then
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -47,17 +60,25 @@ jobs:
         if: steps.ver.outputs.exists == 'false'
         run: |
           v="${{ steps.ver.outputs.version }}"
-          cat > notes.md <<'EOF'
-          Alpha test build. Download the file named **CysUI-v...zip** below (not "Source code").
+          tag="${{ steps.ver.outputs.tag }}"
+          label="${RELEASE_CHANNEL:-release}"
+          cat > notes.md <<'NOTES'
+          Test build. Download the file named **CysUI-v...zip** below (not "Source code").
 
           Unzip it so the folder is named exactly `CysUI` and sits in
           `World of Warcraft\_classic_era_\Interface\AddOns\`, then type `/cui` in game.
 
           What changed is in the game: `/cui` -> What's New.
           Bugs and ideas: use the Issues tab.
-          EOF
-          gh release create "v$v" "CysUI-v$v.zip" \
+          NOTES
+          gh release create "$tag" "CysUI-v$v.zip" \
             --target "$GITHUB_SHA" \
-            --title "Cys's UI v$v (alpha)" \
+            --title "Cys's UI v$v ($label)" \
             --latest \
             --notes-file notes.md
+
+      # CurseForge and Wago. Skipped until at least one of the two secrets is saved in the repo.
+      # (The packager reads the project IDs from the toc and CHANGELOG.md from the repo.)
+      - name: Upload to CurseForge and Wago
+        if: steps.ver.outputs.exists == 'false' && (env.CF_API_KEY != '' || env.WAGO_API_TOKEN != '')
+        uses: BigWigsMods/packager@v2

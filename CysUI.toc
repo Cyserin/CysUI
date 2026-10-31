@@ -6,6 +6,7 @@
 ## SavedVariables: CysUIDB, CysMapDB, CysBagsDB, CysArmoryDB, CysSkillsDB, CysTotemsDB, CysRollTrackerDB
 ## OptionalDeps: Postal, ElvUI, Plater, Platynator, Bagnon, CysBags, CysArmory, CysSkills, CysTotems, CysRollTracker
 ## IconTexture: Interface\Icons\INV_Misc_Gear_01
+## X-Curse-Project-ID: 1775372
 
 Compat.lua
 CysChangelog.lua

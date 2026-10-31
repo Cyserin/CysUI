@@ -1,9 +1,17 @@
 package-as: CysUI
 
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
 ignore:
   - README.md
+  - FEATURES.md
   - .github
   - .vscode
   - _backup
   - .gitignore
+  - .gitattributes
+  - Screenshots
   - screenshots
+  - Tests
