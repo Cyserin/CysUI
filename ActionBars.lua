@@ -785,9 +785,26 @@ CUI:RegisterPage("Action Bars", function(page)
     move:SetPoint("TOPLEFT", 4, y - 10)
     move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
-    local note = W.Notes(page, 4, y - 46, width, "These are still Blizzard's own buttons, so everything the game does with them keeps working.", {
+    -- one click to do what a fresh install does: show only the bars the game itself has switched on
+    local match = W.Button(page, 330, 22, "Match the game's bars (turns off the rest)")
+    match:SetPoint("TOPLEFT", 4, y - 38)
+    match:SetScript("OnClick", function()
+        local ok, bl, br, right, right2 = pcall(function() return GetActionBarToggles() end)
+        if not ok then CUI:Print("Could not read the game's action bar settings.") return end
+        local want = { bl = bl, br = br, right = right, right2 = right2, bar6 = false, bar7 = false, bar8 = false }
+        for key, on in pairs(want) do
+            if DB().bars[key] then
+                DB().bars[key].enabled = on and true or false
+                AB:ApplyEnabled(key)
+            end
+        end
+        CUI:Print("Action bars now match the game's own Action Bars settings. Turn any bar back on from the list on the left.")
+        Refresh()
+    end)
+
+    local note = W.Notes(page, 4, y - 82, width, "These are still Blizzard's own buttons, so everything the game does with them keeps working.", {
             "Changes made in combat apply when it ends.",
-            "Bars 2-8 show whether or not they are ticked in the game's Action Bars options.",
+            "New installs start with only the bars the game itself has switched on; the button above does the same for an existing setup.",
             "To go back to Blizzard's layout, untick Action Bars under Modules and reload.",
         })
     Refresh()

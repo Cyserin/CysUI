@@ -315,6 +315,7 @@ if CysChangelog then
                   "Class support list: the README, FEATURES.md and the new settings page show which classes and specs each module covers and what is still to add.",
               },
               improved = {
+                  "Settings window: Collapse all and Expand all buttons under the sidebar list fold or unfold every heading at once.",
                   "Heal test (/cuiheal): it now scans you by itself and opens a small Heal Test box with the steps, a list of your heal ranks that ticks off as each one is cast cleanly (critical heals ask for a recast; full health is fine), and a Copy report button that splits the report into parts that fit the Discord /bug command (1500 characters). Closing the box turns the test off. /cuiheal off and /cuiheal clear also work. The chat spam is gone and the test moved from Unit Frames to the Heal Advisor.",
                   "Heal Advisor rank rules: spells sit in families per class (main = the slow efficient ladder, fast = the quick heal; Priest Lesser Heal, Heal and Greater Heal are one ladder). Heavy damage is your biggest main heal within 10 percent of your best heal per mana, General healing is the next size down that is also within 10 percent (faster, less overheal), Small hits is the smallest rank within 20 percent that heals at least a fifth of the heavy heal, and Emergency is your biggest fast heal (Flash Heal, Lesser Healing Wave, Regrowth direct heal, Flash of Light). Paladins use Flash of Light for Small and General and Holy Light for Heavy. Druids and Shamans with Nature s Swiftness get a note on the Emergency row. Heal-over-time parts, absorbs and cooldowns are left out.",
                   "Player frame: the mana bar is a little taller and shows a number on its right side. Pick current, current / max, percent or off in Settings > Unit Frames (player only).",
@@ -341,7 +342,7 @@ if CysChangelog then
                   "Upgrade tooltip: a stat change is green when it adds EP and red when it costs EP, so a slower weapon you weight negatively for speed shows green instead of red.",
               },
               fixed = {
-                  "New installs: Blizzard's experience and reputation bars are now hidden by default (the option existed but started off, so the game's bar showed next to Cys's XP bar). Only the action bars the game itself has switched on are shown at first, instead of every bar at once, and Action Bars 6 to 8 start off. Existing setups are not changed. The same switch is now also on the XP Bar page.",
+                  "New installs: Blizzard's experience and reputation bars are now hidden by default (the option existed but started off, so the game's bar showed next to Cys's XP bar). Only the action bars the game itself has switched on are shown at first, instead of every bar at once, and Action Bars 6 to 8 start off. Existing setups are not changed. The same switch is now also on the XP Bar page, and the Action Bars page has a Match the game's bars button that turns off every bar the game itself has switched off.",
                   "Totem action-bar macros now follow the totem you pick (the icon no longer stays on the old one), and the Drop all button shows your four picked totems instead of a blank square.",
               },
             },

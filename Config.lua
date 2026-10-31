@@ -469,7 +469,7 @@ local function CreateWindow()
     -- (new modules, other addons) land under "Other" automatically.
     local sideScroll = CreateFrame("ScrollFrame", nil, sidebar)
     sideScroll:SetPoint("TOPLEFT", 0, 0)
-    sideScroll:SetPoint("BOTTOMRIGHT", -1, 0)
+    sideScroll:SetPoint("BOTTOMRIGHT", -1, 28)
     sideScroll:EnableMouseWheel(true)
     local side = CreateFrame("Frame", nil, sideScroll)
     side:SetSize(SIDEBAR_W - 1, 100)
@@ -616,6 +616,31 @@ local function CreateWindow()
         side:SetHeight(max(-y + 8, 100))
     end
     Layout()
+
+    -- Collapse all / Expand all, under the list
+    local foldBar = CreateFrame("Frame", nil, sidebar)
+    foldBar:SetPoint("BOTTOMLEFT", 0, 0)
+    foldBar:SetPoint("BOTTOMRIGHT", -1, 0)
+    foldBar:SetHeight(28)
+    W.Texture(foldBar, "BACKGROUND", T.sidebar):SetAllPoints()
+    local foldLine = W.Texture(foldBar, "BORDER", T.border)
+    foldLine:SetPoint("TOPLEFT"); foldLine:SetPoint("TOPRIGHT"); foldLine:SetHeight(1)
+    local bw = math.floor((SIDEBAR_W - 1 - 18) / 2)
+    local collapseAll = W.Button(foldBar, bw, 18, "Collapse all")
+    collapseAll:SetPoint("LEFT", 6, -1)
+    collapseAll:SetScript("OnClick", function()
+        local fold = Folded()
+        for _, e in ipairs(entries) do
+            if e.head and not e.head.empty then fold[e.key] = true end
+        end
+        Layout()
+    end)
+    local expandAll = W.Button(foldBar, bw, 18, "Expand all")
+    expandAll:SetPoint("LEFT", collapseAll, "RIGHT", 6, 0)
+    expandAll:SetScript("OnClick", function()
+        wipe(Folded())
+        Layout()
+    end)
 
     -- content
     -- pages scroll (mouse wheel) when they're taller than the window, so adding modules never overflows it
