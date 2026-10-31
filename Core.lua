@@ -92,6 +92,7 @@ local DEFAULTS = {
                    targetHighlight = true, myDebuffs = true, castBar = true, threat = "auto" },
     chat = { skin = true, hideButtons = true, tabsSolid = true, classColors = true, timestamps = false, use24h = false, fontSize = 14 },
     layout = {},      -- saved positions / sizes / scales from layout mode
+    blueShaman = false, -- draw Shamans blue (the later-expansion color) instead of Classic Era's pink
     snap = true,      -- snap dragged elements to a grid
     snapSize = 8,
     infobar = {
@@ -102,6 +103,20 @@ local DEFAULTS = {
                     bags = true, gold = true, fps = true, clock = true },
     },
 }
+
+-- Shaman blue instead of Classic Era's pink. It changes the game's own class color table, so every
+-- Cys's UI frame, the chat names and other addons that read it follow. Turning it off needs a /reload.
+function CUI:ApplyShamanColor()
+    if not (CysUIDB and CysUIDB.blueShaman) then return end
+    local t = RAID_CLASS_COLORS and RAID_CLASS_COLORS.SHAMAN
+    if not t then return end
+    t.r, t.g, t.b = 0.0, 0.44, 0.87
+    t.colorStr = "ff0070de"
+    if CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS.SHAMAN then
+        CUSTOM_CLASS_COLORS.SHAMAN.r, CUSTOM_CLASS_COLORS.SHAMAN.g, CUSTOM_CLASS_COLORS.SHAMAN.b = 0.0, 0.44, 0.87
+    end
+end
+
 
 local function CopyDefaults(dst, src)
     for k, v in pairs(src) do
@@ -231,6 +246,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         CopyDefaults(CysUIDB, DEFAULTS)
         CUI.db = CysUIDB
         if CUI.W and CUI.W.ApplyBorderStyle then CUI.W.ApplyBorderStyle() end
+        CUI:ApplyShamanColor()
         -- modules registered before the settings existed (the ones living in this addon)
         for _, key in ipairs(CUI.order) do
             local def = CUI.modules[key]
@@ -303,9 +319,26 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.2",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.4",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.43.4", date = "2026-10-31",
+              added = {
+                  "Tremor Alert: a green message (with a sound) now shows when your Tremor Totem breaks a fear, charm or sleep on someone in your group. It has its own checkbox on the Tremor Alert page.",
+              },
+              improved = {
+                  "Tremor Alert: when another Shaman in your group drops a Tremor Totem, the alert now reads Tremor Totem is down with their name, instead of asking you to drop one.",
+                  "Group loot boxes: icon, roll buttons and item name now fit inside the box, with a default size of 270 x 46. Boxes saved too small or too tall are reset to that default once; the size sliders now stop at 200 x 40 so they cannot be squeezed unreadably small.",
+              },
+            },
+            { version = "0.43.3", date = "2026-10-31",
+              added = {
+                  "Blue Shamans: a checkbox on the Unit Frames page draws Shamans blue (the later-expansion color) instead of Classic Era's pink, in Cys's UI frames, chat names and any other addon that uses the game's class colors. Turning it off needs a /reload.",
+              },
+              fixed = {
+                  "Skins: the right-click menu skin no longer puts a dark cover over the menu entries (on unit frame menus the choices could not be read); it now darkens the menu's own background instead.",
+              },
+            },
             { version = "0.43.2", date = "2026-10-31",
               fixed = {
                   "XP bar: rested XP now shows as a full-height blue segment starting right after your XP and drawn over the quest segment (rested is used up first), instead of a thin line along the bottom edge.",

@@ -3004,19 +3004,16 @@ local function SkinDropdowns()
         if not fr or not fr.GetRegions then return end
         for _, r in ipairs({ fr:GetRegions() }) do
             if r.GetObjectType and r:GetObjectType() == "Texture" and not r.cysOwn and IsMenuBg(r) then
-                r:SetAlpha(0)
+                -- darken Blizzard's own background texture instead of covering it with a frame of ours:
+                -- a cover frame can sit above the menu entries and hide their text
+                if not r.cysTinted then
+                    r.cysTinted = true
+                    pcall(r.SetDesaturated, r, true)
+                    pcall(r.SetVertexColor, r, 0.10, 0.10, 0.10, 1)
+                end
                 if not fr.cysMenuBg then
                     fr.cysMenuBg = true
                     menuHits = menuHits + 1
-                    -- context menus refuse CreateTexture on themselves, so the fill lives in a little frame of its own
-                    local fh = CreateFrame("Frame", nil, fr)
-                    fh.cysOwn = true
-                    fh:SetAllPoints(fr)
-                    fh:SetFrameLevel(max(fr:GetFrameLevel() - 1, 0))
-                    local fill = fh:CreateTexture(nil, "BACKGROUND", nil, -8)
-                    fill.cysOwn = true
-                    fill:SetColorTexture(T.bg[1], T.bg[2], T.bg[3], 0.97)
-                    fill:SetAllPoints()
                     local edge = CreateFrame("Frame", nil, fr)
                     edge.cysOwn = true
                     edge:SetAllPoints(fr)

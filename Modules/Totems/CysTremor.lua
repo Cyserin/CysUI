@@ -15,7 +15,7 @@ local W = CUI.W
 local T = W.T
 local D = CUI.Tremor or { ByNPC = {} }
 
-local DEFAULTS = { learn = true, needSpell = true, unverified = true, learned = {} }
+local DEFAULTS = { confirm = true, learn = true, needSpell = true, unverified = true, learned = {} }
 
 local function DB()
     CysUIDB = CysUIDB or {}
@@ -132,6 +132,17 @@ local function TremorUp()
     return false
 end
 
+-- Tremor Totems dropped by other Shamans in the group (seen in the combat log; they last 2 minutes)
+local others = {}   -- totem guid -> { owner, t }
+local function OtherTremor()
+    local now = GetTime()
+    for g, e in pairs(others) do
+        if now - e.t > 120 then others[g] = nil end
+    end
+    for _, e in pairs(others) do return e.owner end
+    return nil
+end
+
 local function Build()
     if f then return end
     f = CreateFrame("Frame", "CysTremorFrame", UIParent)
@@ -193,8 +204,11 @@ local function Render(lines)
     Build()
     if #lines == 0 then f:Hide() return end
     icon:SetTexture(TremorIcon())
+    local other = OtherTremor()
     if TremorUp() then
         header:SetText("|cff66ff66Tremor Totem is down|r")
+    elseif other then
+        header:SetText("|cff66ff66Tremor Totem is down|r (" .. other .. ")")
     else
         header:SetText("Drop Tremor Totem")
     end
@@ -318,15 +332,62 @@ local function Scan()
     Refresh()
 end
 
+local toast
+local function Toast(text)
+    if not toast then
+        toast = CreateFrame("Frame", nil, UIParent)
+        toast:SetSize(400, 30)
+        toast:SetFrameStrata("HIGH")
+        toast.text = toast:CreateFontString(nil, "OVERLAY")
+        toast.text:SetFont(STANDARD_TEXT_FONT, 18, "OUTLINE")
+        toast.text:SetPoint("CENTER")
+        toast:Hide()
+        toast:SetScript("OnUpdate", function(self, e)
+            self.t = (self.t or 0) + e
+            if self.t > 3 then self:Hide() elseif self.t > 2 then self:SetAlpha(3 - self.t) end
+        end)
+    end
+    toast:ClearAllPoints()
+    if CysTremorFrame and CysTremorFrame:IsShown() then
+        toast:SetPoint("BOTTOM", CysTremorFrame, "TOP", 0, 6)
+    else
+        toast:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
+    end
+    toast.text:SetText(text)
+    toast.text:SetTextColor(0.3, 1, 0.4)
+    toast.t = 0
+    toast:SetAlpha(1)
+    toast:Show()
+    PlaySound(SOUNDKIT and SOUNDKIT.UI_QUEST_ROLLING_FORWARD_01 or 3175)
+end
+
 local function OnCombatLog()
     local _, sub, _, sGUID, sName, sFlags, _, dGUID, dName, dFlags, _, spellId, spellName, _, auraType = CombatLogGetCurrentEventInfo()
     if InBattleground() then return end
     if sub == "UNIT_DIED" then
+        others[dGUID] = nil
         seen[dGUID] = nil
         active[dGUID] = nil
         return
     end
     local db = DB()
+    -- another Shaman in the group drops a Tremor Totem
+    if sub == "SPELL_SUMMON" and spellName == "Tremor Totem" and dGUID
+        and sGUID ~= UnitGUID("player") and bit.band(sFlags or 0, 0x7) ~= 0 then
+        for g, e in pairs(others) do
+            if e.owner == (sName or "?") then others[g] = nil end
+        end
+        others[dGUID] = { owner = sName or "?", t = GetTime() }
+        return
+    end
+    -- Tremor Totem breaking a fear, charm or sleep on someone in the group
+    if db.confirm and (sub == "SPELL_DISPEL" or sub == "SPELL_AURA_REMOVED") and sName and sName:find("Tremor Totem")
+        and bit.band(dFlags or 0, 0x7) ~= 0 then
+        local extraName = select(16, CombatLogGetCurrentEventInfo())
+        local what = (sub == "SPELL_DISPEL" and extraName) or spellName or "an effect"
+        Toast("Tremor Totem broke " .. what .. " on " .. (dName or "a player"))
+        return
+    end
     -- a hostile NPC fighting someone in our group: remember it for a few seconds
     if sGUID and sGUID:find("^Creature") and sName and (D.ByNPC[sName] or db.learned[sName]) then
         if bit.band(dFlags or 0, 0x7) ~= 0 then seen[sGUID] = { name = sName, t = GetTime() } end
@@ -354,7 +415,7 @@ local function Enable()
         if event == "COMBAT_LOG_EVENT_UNFILTERED" then
             OnCombatLog()
         elseif event == "PLAYER_ENTERING_WORLD" then
-            wipe(seen); wipe(active)
+            wipe(seen); wipe(active); wipe(others)
         else
             Refresh()
         end
@@ -421,6 +482,7 @@ CUI:RegisterPage("Tremor Alert", function(page)
         c:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
+    Check("Show a message when Tremor breaks a fear, charm or sleep", "confirm")
     Check("Only show once I know Tremor Totem", "needSpell")
     Check("Learn new mobs that fear, charm or sleep my group", "learn")
     Check("Show entries that still need checking in game (marked ?)", "unverified")

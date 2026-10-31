@@ -15,11 +15,17 @@ local holder
 local function DB()
     if not CysUIDB then CysUIDB = {} end
     if not CysUIDB.grouploot then
-        CysUIDB.grouploot = { enable = true, scale = 1.0, customWidth = 280, customHeight = 60 }
+        CysUIDB.grouploot = { enable = true, scale = 1.0, customWidth = 270, customHeight = 46 }
     end
     if CysUIDB.grouploot.scale == nil then CysUIDB.grouploot.scale = 1.0 end
     if CysUIDB.grouploot.customWidth == nil then CysUIDB.grouploot.customWidth = 280 end
-    if CysUIDB.grouploot.customHeight == nil then CysUIDB.grouploot.customHeight = 60 end
+    if CysUIDB.grouploot.customHeight == nil then CysUIDB.grouploot.customHeight = 46 end
+    if CysUIDB.grouploot.roomy ~= 2 then
+        CysUIDB.grouploot.roomy = 2
+        local g = CysUIDB.grouploot
+        if g.customWidth < 250 or (g.customWidth == 300 and g.customHeight == 64) then g.customWidth = 270 end
+        if g.customHeight < 40 or g.customHeight >= 56 then g.customHeight = 46 end
+    end
     if CysUIDB.grouploot.qualityColors == nil then CysUIDB.grouploot.qualityColors = true end
     return CysUIDB.grouploot
 end
@@ -36,7 +42,7 @@ local function LayoutRollFrame(frame)
     if not frame or not frame.cysSkinned then return end
     local w, h = frame:GetWidth(), frame:GetHeight()
     if not w or not h or w < 10 then return end
-    local isz = max(18, min(h - 12, 44))
+    local isz = max(24, min(h - 18, 36))
 
     local iconFrame = Part(frame, "IconFrame")
     local icon = Part(frame, "Icon") or (iconFrame and iconFrame.Icon)
@@ -54,7 +60,7 @@ local function LayoutRollFrame(frame)
     end
 
     -- buttons, right to left: Pass, Greed, Disenchant, Need
-    local bsize = max(18, min(floor((h - 12) * 0.6), 28))
+    local bsize = max(20, min(floor((h - 12) * 0.6), 26))
     local anchor, anchorPoint, gap = frame, "RIGHT", -6
     local leftmost
     for _, key in ipairs({ "PassButton", "GreedButton", "DisenchantButton", "NeedButton" }) do
@@ -78,6 +84,7 @@ local function LayoutRollFrame(frame)
         end
         name:SetPoint("RIGHT", leftmost or frame, leftmost and "LEFT" or "RIGHT", -8, 0)
         name:SetJustifyH("LEFT")
+        if name.SetFont then name:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE") end
         if name.SetWordWrap then name:SetWordWrap(false) end
         if name.SetMaxLines then name:SetMaxLines(1) end
     end
@@ -283,7 +290,7 @@ function GL.Enable()
     CUI:RegisterMovable(holder, "grouploot_box", "Group Loot Boxes", {
         point = "TOPLEFT", x = 16, y = -120,
         scalable = false,
-        resizable = true, minW = 150, maxW = 500, minH = 30, maxH = 140,
+        resizable = true, minW = 200, maxW = 500, minH = 40, maxH = 140,
         onResize = function(_, w, h)
             DB().customWidth, DB().customHeight = math.floor(w + 0.5), math.floor(h + 0.5)
             if GL.ApplyDims then GL.ApplyDims() end
@@ -405,7 +412,7 @@ CUI:RegisterPage("Loot", function(page)
 
     W.Header(page, "Group loot size", width):SetPoint("TOPLEFT", 0, -286)
     local w = W.Stepper(page, "Box width", function() return db.customWidth end,
-        function(v) db.customWidth = v; ApplyDimensions() end, 150, 500, 10, " px")
+        function(v) db.customWidth = v; ApplyDimensions() end, 200, 500, 10, " px")
     w:SetPoint("TOPLEFT", 4, -318)
     local h = W.Stepper(page, "Box height", function() return db.customHeight end,
         function(v) db.customHeight = v; ApplyDimensions() end, 40, 150, 5, " px")

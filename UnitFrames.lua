@@ -673,8 +673,21 @@ CUI:RegisterPage("Unit Frames", function(page)
         end, "Mana number (player): ")
     manaBtn:SetPoint("TOPLEFT", 4, -98)
 
-    W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -140)
-    local y = -170
+    local blue = W.Checkbox(page, "Blue Shamans instead of pink (everywhere; turning off needs a /reload)",
+        function() return CysUIDB.blueShaman end,
+        function(on)
+            CysUIDB.blueShaman = on and true or false
+            if on then
+                CUI:ApplyShamanColor()
+                for _, f in pairs(UF.frames) do if UnitExists(f.unit) then UF:Update(f) end end
+            else
+                CUI:Print("Shamans go back to pink after a /reload.")
+            end
+        end)
+    blue:SetPoint("TOPLEFT", 4, -130)
+
+    W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -170)
+    local y = -200
     for _, row in ipairs({ { "player", "Player" }, { "target", "Target (with buffs, debuffs, combo points)" },
                            { "targettarget", "Target of target" }, { "pet", "Pet" }, { "party", "Party" } }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] end, function(on) db[row[1]] = on end)
