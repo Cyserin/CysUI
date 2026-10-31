@@ -355,161 +355,44 @@
     </div>
 
         <script>
-    // Fetch and parse CHANGELOG.md dynamically on page load
     async function loadChangelog() {
         try {
-            const response = await fetch('CHANGELOG.md');
-            const markdown = await response.text();
-            parseAndRenderMarkdown(markdown);
+            const response = await fetch('https://api.github.com/repos/Cyserin/CysUI/releases');
+            const data = await response.json();
+            
+            const releases = data.map(release => {
+                // Parse release body lines into feature/fix objects
+                const lines = (release.body || '').split('\n').filter(Boolean);
+                const changes = lines.map(line => {
+                    const cleanLine = line.replace(/^[-*]\s*/, '');
+                    const isFix = cleanLine.toLowerCase().includes('fix');
+                    return {
+                        type: isFix ? 'fix' : 'feature',
+                        title: cleanLine.includes(':') ? cleanLine.split(':')[0].replace(/\*\*/g, '') : 'Update',
+                        desc: cleanLine.includes(':') ? cleanLine.split(':').slice(1).join(':').trim() : cleanLine
+                    };
+                });
+
+                return {
+                    version: release.tag_name,
+                    title: release.name || release.tag_name,
+                    date: new Date(release.published_at).toLocaleDateString(),
+                    changes: changes.length > 0 ? changes : [{ type: 'feature', title: 'Release Update', desc: release.body || 'No description provided.' }]
+                };
+            });
+
+            document.getElementById('release-count').innerText = `Showing all ${releases.length} releases`;
+            renderReleaseCards(releases);
         } catch (error) {
-            console.error('Error loading changelog:', error);
+            console.error('Error loading releases from GitHub API:', error);
             document.getElementById('changelog-container').innerHTML = `
                 <div class="p-6 text-center text-red-400 bg-neutral-900 rounded-xl border border-neutral-800">
-                    Failed to load changelog. Please check that CHANGELOG.md exists in the root directory.
+                    Failed to load releases from GitHub. Please check your internet connection.
                 </div>`;
         }
     }
 
-    function parseAndRenderMarkdown(markdown) {
-        const container = document.getElementById('changelog-container');
-        container.innerHTML = '';
-
-        // Split markdown by release headers (assuming # vX.X.X format)
-        const rawReleases = markdown.split(/^#\s+/gm).filter(Boolean);
-        const releases = [];
-
-        rawReleases.forEach(block => {
-            const lines = block.trim().split('\n');
-            const headerLine = lines[0] || '';
-            
-            // Extract version and title from header (e.g., "v0.52.0-alpha - Player Auras")
-            let version = "Update";
-            let title = headerLine;
-            const dashIndex = headerLine.indexOf('-');
-            if (dashIndex !== -1) {
-                version = headerLine.substring(0, dashIndex).trim();
-                title = headerLine.substring(dashIndex + 1).trim();
-            }
-
-            const changes = [];
-            let currentChange = null;
-
-            // Parse bullet points
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line.startsWith('- **') || line.startsWith('* **')) {
-                    const match = line.match(/^[-*]\s+\*\*([^*]+)\*\*:\s*(.*)/);
-                    if (match) {
-                        currentChange = {
-                            type: match[1].toLowerCase().includes('fix') ? 'fix' : 'feature',
-                            title: match[1],
-                            desc: match[2]
-                        };
-                        changes.push(currentChange);
-                    }
-                } else if (line.startsWith('-') || line.startsWith('*')) {
-                    if (currentChange) {
-                        currentChange.desc += " " + line.replace(/^[-*]\s+/, '');
-                    }
-                }
-            }
-
-            releases.push({ version, title, changes });
-        });
-
-        // Update release count badge
-        document.getElementById('release-count').innerText = `Showing all ${releases.length} releases`;
-
-        // Render release cards into the UI
-        renderReleaseCards(releases);
-    }
-
-    // Run on page load
-    window.addEventListener('DOMContentLoaded', loadChangelog);
-</script>
-                version: "v0.50.1-alpha",
-                title: "Nameplate & Tooltip Difficulty Scaling",
-                date: "Build Update",
-                changes: [
-                    { type: "feature", title: "Dynamic Level Colors", desc: "Restyled unit levels on both tooltips and nameplates to dynamically color-code by level gap relative to the player (Red for +5/Bosses, Orange for +3/4, Yellow for -2 to +2, Green for low level, Grey for trivial)." },
-                    { type: "fix", title: "Corpse Level Parsing", desc: "Updated tooltip string scanning to parse level numbers directly out of line strings (e.g., 'Level 17 Corpse') when UnitLevel() returns 0 or -1 for dead units." },
-                    { type: "feature", title: "Nameplate Layout Polish", desc: "Isolated level text coloring so mob names retain their standard reaction/class colors while only the numeric level text updates dynamically." }
-                ]
-            },
-            {
-                version: "v0.48.0-alpha",
-                title: "Combat Log Phase 2 (Mistakes, Uptimes & Utility)",
-                date: "Combat Log Update",
-                changes: [
-                    { type: "feature", title: "Avoidable Damage Tracking", desc: "Added per-player avoidable damage monitoring (editable via /cuilog avoid)." },
-                    { type: "feature", title: "Debuff & Buff Uptimes", desc: "Track boss debuffs (Sunder, Faerie Fire, Recklessness, Demo Shout, Thunder Clap) and utility uptimes (Shield Block, Stoneskin, Windfury, and totems)." },
-                    { type: "feature", title: "Detailed Interrupts & Taunts", desc: "Enhanced logs to show what abilities interrupts and dispels hit, alongside tracked taunts landed and missed." },
-                    { type: "fix", title: "Boss Kill Logging Fix", desc: "Fixed boss kills being incorrectly logged as wipes caused by filtered-out boss death events." }
-                ]
-            },
-            {
-                version: "v0.47.0-alpha",
-                title: "Persistent Run Viewer Combat Log",
-                date: "Combat Log Release",
-                changes: [
-                    { type: "feature", title: "Run-Based Recording", desc: "Combat Log (Cys's logs) now records each dungeon or raid as a single run—capturing bosses, trash, per-player damage/healing/taken/casts/crits/interrupts/dispels, and per-ability tables." },
-                    { type: "system", title: "Persistence & Deaths", desc: "Retains the last 3 to 10 runs with a detailed 10-event death recap per death." },
-                    { type: "feature", title: "Boss Detection", desc: "Upgraded boss detection using integrated BigWigs/LittleWigs data covering all Classic raids plus Deadmines, Dire Maul, Stratholme, and Zul'Farrak." },
-                    { type: "system", title: "Commands & Control", desc: "Use /cuilog to open the viewer, or /cuilog start|end|boss|clear for manual control." }
-                ]
-            },
-            {
-                version: "v0.46.0-alpha",
-                title: "Group Utility, Buff Trackers & CysUpgrade Enhancements",
-                date: "Feature Update",
-                changes: [
-                    { type: "feature", title: "Missing Buffs Icons", desc: "Added visual trackers for essential party/raid buffs (Fortitude, Mark of the Wild, Arcane Intellect, Divine Spirit)." },
-                    { type: "feature", title: "Roll Counts", desc: "Added Need/Greed/Pass roll counts directly onto group loot boxes." },
-                    { type: "feature", title: "Party Distance & Fade", desc: "Added party range fading and a rough distance indicator on targeted players." },
-                    { type: "feature", title: "Tremor Alert Refinement", desc: "Tremor Alerts now trigger strictly in combat for mobs actively fighting your group." },
-                    { type: "system", title: "CysUpgrade Enhancements", desc: "CysUpgrade now scores base items, shows the enchant you would lose, and identifies the best armor kit." }
-                ]
-            },
-            {
-                version: "v0.44.0-alpha",
-                title: "Stat Compare, Armory Sync & Tremor Totem Alerts",
-                date: "Feature Update",
-                changes: [
-                    { type: "feature", title: "Stat Compare Enhancements", desc: "CysUpgrade displays +EP, percentage changes, and explicit status labels (Big Upgrade / Upgrade / Sidegrade / Downgrade)." },
-                    { type: "feature", title: "Armory Set Sync", desc: "CysUpgrade compares incoming loot against the specific item in the Armory set linked to your active profile." },
-                    { type: "feature", title: "Group Loot Sizing", desc: "Adjusted group loot frames so boxes cleanly fit item icons, action buttons, and full item names." },
-                    { type: "feature", title: "Tremor Totem Alerts", desc: "Added alert messages when Tremor Totem breaks a Fear, Charm, or Sleep effect, along with group detection when another Shaman already has Tremor down." }
-                ]
-            },
-            {
-                version: "v0.43.4-alpha",
-                title: "Shaman Class Colors & Loot Box Polish",
-                date: "Minor Update",
-                changes: [
-                    { type: "feature", title: "Shaman Class Color Toggle", desc: "Option to set Shaman class colors to custom blue instead of standard Classic Era pink across UI frames, chat names, and unit frames." },
-                    { type: "fix", title: "Loot Box Sizing", desc: "Refined group loot popup boxes to fit icons, buttons, and names dynamically." }
-                ]
-            },
-            {
-                version: "v0.43.2-alpha",
-                title: "Rested XP Bar Integration",
-                date: "Minor Update",
-                changes: [
-                    { type: "feature", title: "Rested XP Bar", desc: "Updated the XP bar so rested XP displays as a full-height blue segment starting directly after current XP (rested XP is consumed first)." }
-                ]
-            },
-            {
-                version: "v0.43.1-alpha & v0.43.0",
-                title: "First-Run Welcome Window & Automated Packaging",
-                date: "Initial Release Suite",
-                changes: [
-                    { type: "feature", title: "First-Run Welcome Window", desc: "Added a first-run setup window to match game action bars, hide Blizzard's default XP bar, select custom border colors, and point to /cui (use /cui welcome to show it again)." },
-                    { type: "system", title: "Settings Window Flow", desc: "After finishing layout mode, clicking Done now automatically reopens the settings window if it was previously open." },
-                    { type: "system", title: "Automated Packaging", desc: "Configured GitHub release workflow for automated CurseForge and Wago.io uploads with proper release tag fetching and X-Wago-ID tracking." }
-                ]
-            }
-        ];
-
+    window.addEventListener('DOMContentLoaded', loadChangelog);              
         function renderReleases(filter = "") {
             const container = document.getElementById('changelogContainer');
             const noResults = document.getElementById('noResults');
