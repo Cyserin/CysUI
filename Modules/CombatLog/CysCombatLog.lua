@@ -39,72 +39,114 @@ local RESUME_GRACE = 900    -- seconds outside the instance before a run is clos
 local RING = 10             -- events kept per player for the death recap
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
--- Known bosses (npc id -> name). Taken from the BigWigs / LittleWigs boss data for Classic. Raids are complete
--- (Molten Core to Naxxramas). Dungeons only cover what that data has (Deadmines, Dire Maul, Stratholme,
--- Zul'Farrak, Blackrock Spire's Emberseer); for the rest use /cuilog boss on the boss once and it is remembered.
--- Encounter events and skull-level raid units are still picked up on top of this list.
+-- Known bosses (npc id -> name) for the 15-60 dungeons, from the CMaNGOS Classic database (names matched to
+-- ids one by one; Stratholme's Malor and Galford agree with BigWigs/LittleWigs). There is no raid data here
+-- on purpose. Add any boss that is missing with /cuilog boss on it once; the game remembers it.
 --------------------------------------------------------------------------------
 local BOSS_IDS = {
-    -- Molten Core, Onyxia
-    [12118] = "Lucifron", [11982] = "Magmadar", [12259] = "Gehennas", [12057] = "Garr", [12264] = "Shazzrah",
-    [12056] = "Baron Geddon", [12098] = "Sulfuron Harbinger", [11988] = "Golemagg the Incinerator",
-    [12018] = "Majordomo Executus", [11502] = "Ragnaros", [10184] = "Onyxia",
-    -- Blackwing Lair
-    [12435] = "Razorgore the Untamed", [13020] = "Vaelastrasz the Corrupt", [12017] = "Broodlord Lashlayer",
-    [11983] = "Firemaw", [14601] = "Ebonroc", [11981] = "Flamegor", [14020] = "Chromaggus", [11583] = "Nefarian",
-    [10162] = "Lord Victor Nefarius",
-    -- Zul'Gurub
-    [14517] = "High Priestess Jeklik", [14507] = "High Priest Venoxis", [14510] = "High Priestess Mar'li",
-    [11382] = "Bloodlord Mandokir", [15082] = "Gri'lek", [15083] = "Hazza'rah", [15084] = "Renataki",
-    [15085] = "Wushoolay", [15114] = "Gahz'ranka", [14509] = "High Priest Thekal", [14515] = "High Priestess Arlokk",
-    [11380] = "Jin'do the Hexxer", [14834] = "Hakkar",
-    -- Ruins of Ahn'Qiraj
-    [15348] = "Kurinnaxx", [15341] = "General Rajaxx", [15340] = "Moam", [15370] = "Buru the Gorger",
-    [15369] = "Ayamiss the Hunter", [15339] = "Ossirian the Unscarred",
-    -- Temple of Ahn'Qiraj
-    [15263] = "The Prophet Skeram", [15543] = "Princess Yauj", [15544] = "Vem", [15511] = "Lord Kri",
-    [15516] = "Battleguard Sartura", [15510] = "Fankriss the Unyielding", [15299] = "Viscidus",
-    [15509] = "Princess Huhuran", [15275] = "Emperor Vek'nilash", [15276] = "Emperor Vek'lor",
-    [15517] = "Ouro", [15727] = "C'Thun", [15589] = "Eye of C'Thun",
-    -- Naxxramas
-    [15956] = "Anub'Rekhan", [15953] = "Grand Widow Faerlina", [15952] = "Maexxna",
-    [15954] = "Noth the Plaguebringer", [15936] = "Heigan the Unclean", [16011] = "Loatheb",
-    [16061] = "Instructor Razuvious", [16060] = "Gothik the Harvester",
-    [16062] = "Highlord Mograine", [16063] = "Sir Zeliek", [16064] = "Thane Korth'azz", [16065] = "Lady Blaumeux",
-    [16028] = "Patchwerk", [15931] = "Grobbulus", [15932] = "Gluth",
-    [15928] = "Thaddius", [15929] = "Stalagg", [15930] = "Feugen",
-    [15989] = "Sapphiron", [15990] = "Kel'Thuzad",
+    -- Ragefire Chasm
+    [11517] = "Oggleflint", [11520] = "Taragaman the Hungerer", [11518] = "Jergosh the Invoker",
+    [11519] = "Bazzalan",
+    -- Wailing Caverns
+    [3669] = "Lord Cobrahn", [3671] = "Lady Anacondra", [3653] = "Kresh", [3670] = "Lord Pythas", [3674] = "Skum",
+    [3673] = "Lord Serpentis", [5775] = "Verdan the Everliving", [3654] = "Mutanus the Devourer",
     -- Deadmines
-    [644] = "Rhahk'Zor", [642] = "Sneed's Shredder Pilot", [643] = "Sneed's Shredder", [1763] = "Gilnid",
-    [646] = "Mr. Smite", [647] = "Captain Greenskin", [645] = "Cookie", [639] = "Edwin VanCleef",
-    -- Blackrock Spire
-    [9816] = "Pyroguard Emberseer",
+    [644] = "Rhahk'Zor", [642] = "Sneed's Shredder", [643] = "Sneed", [1763] = "Gilnid", [646] = "Mr. Smite",
+    [647] = "Captain Greenskin", [639] = "Edwin VanCleef", [645] = "Cookie",
+    -- Shadowfang Keep
+    [3914] = "Rethilgore", [3886] = "Razorclaw the Butcher", [3887] = "Baron Silverlaine",
+    [4278] = "Commander Springvale", [4279] = "Odo the Blindwatcher", [4274] = "Fenrus the Devourer",
+    [3927] = "Wolf Master Nandos", [4275] = "Archmage Arugal",
+    -- Blackfathom Deeps
+    [4887] = "Ghamoo-ra", [4831] = "Lady Sarevess", [6243] = "Gelihast", [12876] = "Baron Aquanis",
+    [4832] = "Twilight Lord Kelris", [4830] = "Old Serra'kis", [4829] = "Aku'mai",
+    -- Stockade
+    [1696] = "Targorr the Dread", [1666] = "Kam Deepfury", [1717] = "Hamhock", [1663] = "Dextren Ward",
+    [1716] = "Bazil Thredd",
+    -- Gnomeregan
+    [7361] = "Grubbis", [7079] = "Viscous Fallout", [6235] = "Electrocutioner 6000", [6229] = "Crowd Pummeler 9-60",
+    [6228] = "Dark Iron Ambassador", [7800] = "Mekgineer Thermaplugg",
+    -- Razorfen Kraul
+    [6168] = "Roogug", [4424] = "Aggem Thorncurse", [4428] = "Death Speaker Jargba", [4420] = "Overlord Ramtusk",
+    [4422] = "Agathelos the Raging", [4421] = "Charlga Razorflank",
+    -- Scarlet Monastery
+    [3983] = "Interrogator Vishas", [4543] = "Bloodmage Thalnos", [3974] = "Houndmaster Loksey",
+    [6487] = "Arcanist Doan", [3975] = "Herod", [4542] = "High Inquisitor Fairbanks",
+    [3976] = "Scarlet Commander Mograine", [3977] = "High Inquisitor Whitemane",
+    -- Razorfen Downs
+    [7355] = "Tuten'kash", [7357] = "Mordresh Fire Eye", [8567] = "Glutton", [7354] = "Ragglesnout",
+    [7358] = "Amnennar the Coldbringer", [7356] = "Plaguemaw the Rotting",
+    -- Uldaman
+    [6910] = "Revelosh", [6906] = "Baelog", [6907] = "Eric \"The Swift\"", [6908] = "Olaf", [7228] = "Ironaya",
+    [7023] = "Obsidian Sentinel", [7206] = "Ancient Stone Keeper", [7291] = "Galgann Firehammer", [4854] = "Grimlok",
+    [2748] = "Archaedas",
+    -- Zul'Farrak
+    [8127] = "Antu'sul", [7272] = "Theka the Martyr", [7271] = "Witch Doctor Zum'rah", [7796] = "Nekrum Gutchewer",
+    [7275] = "Shadowpriest Sezz'ziz", [10081] = "Dustwraith", [7604] = "Sergeant Bly",
+    [7795] = "Hydromancer Velratha", [7273] = "Gahz'rilla", [7267] = "Chief Ukorz Sandscalp",
+    -- Maraudon
+    [13282] = "Noxxion", [12258] = "Razorlash", [12236] = "Lord Vyletongue", [12225] = "Celebras the Cursed",
+    [12203] = "Landslide", [13601] = "Tinkerer Gizlock", [13596] = "Rotgrip", [12201] = "Princess Theradras",
+    -- Sunken Temple
+    [8580] = "Atal'alarion", [5721] = "Dreamscythe", [5720] = "Weaver", [5710] = "Jammal'an the Prophet",
+    [5711] = "Ogom the Wretched", [5719] = "Morphaz", [5722] = "Hazzas", [5709] = "Shade of Eranikus",
+    [8443] = "Avatar of Hakkar",
+    -- Blackrock Depths
+    [9025] = "Lord Roccor", [9018] = "High Interrogator Gerstahn", [9319] = "Houndmaster Grebmar",
+    [9031] = "Anub'shiah", [9029] = "Eviscerator", [9027] = "Gorosh the Dervish", [9028] = "Grizzle",
+    [9032] = "Hedrum the Creeper", [9030] = "Ok'thor the Breaker", [9024] = "Pyromancer Loregrain",
+    [9041] = "Warder Stilgiss", [9042] = "Verek", [9056] = "Fineous Darkvire", [9017] = "Lord Incendius",
+    [9016] = "Bael'Gar", [9033] = "General Angerforge", [8983] = "Golem Lord Argelmach",
+    [9537] = "Hurley Blackbreath", [9502] = "Phalanx", [9543] = "Ribbly Screwspigot", [9499] = "Plugger Spazzring",
+    [9156] = "Ambassador Flamelash", [9938] = "Magmus", [9019] = "Emperor Dagran Thaurissan",
+    [8929] = "Princess Moira Bronzebeard", [9039] = "Doom'rel", [9037] = "Gloom'rel",
+    -- Lower Blackrock Spire
+    [9196] = "Highlord Omokk", [9236] = "Shadow Hunter Vosh'gajin", [9237] = "War Master Voone",
+    [10596] = "Mother Smolderweb", [10584] = "Urok Doomhowl", [9736] = "Quartermaster Zigris",
+    [10268] = "Gizrul the Slavener", [10220] = "Halycon", [9568] = "Overlord Wyrmthalak",
+    -- Upper Blackrock Spire
+    [9816] = "Pyroguard Emberseer", [10264] = "Solakar Flamewreath", [10509] = "Jed Runewatcher",
+    [10899] = "Goraluk Anvilcrack", [10429] = "Warchief Rend Blackhand", [10430] = "The Beast",
+    [10363] = "General Drakkisath",
+    -- Stratholme
+    [10393] = "Skul", [10558] = "Hearthsinger Forresten", [10808] = "Timmy the Cruel", [11032] = "Malor the Zealous",
+    [10997] = "Cannon Master Willey", [10811] = "Archivist Galford", [10813] = "Balnazzar",
+    [10812] = "Grand Crusader Dathrohan", [10436] = "Baroness Anastari", [10437] = "Nerub'enkan",
+    [10438] = "Maleki the Pallid", [10435] = "Magistrate Barthilas", [10439] = "Ramstein the Gorger",
+    [10440] = "Baron Rivendare", [10516] = "The Unforgiven", [11143] = "Postmaster Malown", [11058] = "Fras Siabi",
+    -- Scholomance
+    [14861] = "Blood Steward of Kirtonos", [10506] = "Kirtonos the Herald", [10503] = "Jandice Barov",
+    [11622] = "Rattlegore", [10433] = "Marduk Blackpool", [10432] = "Vectus", [10508] = "Ras Frostwhisper",
+    [10505] = "Instructor Malicia", [11261] = "Doctor Theolen Krastinov", [10901] = "Lorekeeper Polkelt",
+    [10507] = "The Ravenian", [10504] = "Lord Alexei Barov", [10502] = "Lady Illucia Barov",
+    [1853] = "Darkmaster Gandling",
     -- Dire Maul
-    [14327] = "Lethtendris", [13280] = "Hydrospawn", [11490] = "Zevrim Thornhoof", [11492] = "Alzzin the Wildshaper",
+    [11490] = "Zevrim Thornhoof", [13280] = "Hydrospawn", [14327] = "Lethtendris", [11492] = "Alzzin the Wildshaper",
     [11489] = "Tendris Warpwood", [11488] = "Illyanna Ravenoak", [11487] = "Magister Kalendris",
     [11496] = "Immol'thar", [11486] = "Prince Tortheldrin", [14326] = "Guard Mol'dar", [14322] = "Stomper Kreeg",
+    [14321] = "Guard Fengus", [14323] = "Guard Slip'kik", [14325] = "Captain Kromcrush",
     [14324] = "Cho'Rush the Observer", [11501] = "King Gordok",
-    -- Stratholme
-    [10812] = "Grand Crusader Dathrohan", [10436] = "Baroness Anastari", [11032] = "Commander Malor",
-    [10558] = "Hearthsinger Forresten", [10811] = "Instructor Galford", [10440] = "Baron Rivendare",
-    [10435] = "Magistrate Barthilas", [10438] = "Maleki the Pallid", [10437] = "Nerub'enkan",
-    [11143] = "Postmaster Malown", [10439] = "Ramstein the Gorger", [10516] = "The Unforgiven",
-    [10808] = "Timmy the Cruel", [10997] = "Willey Hopebreaker",
-    -- Zul'Farrak
-    [8127] = "Antu'sul", [7267] = "Chief Ukorz Sandscalp", [7273] = "Gahz'rilla", [7796] = "Nekrum Gutchewer",
-    [7275] = "Shadowpriest Sezz'ziz", [7272] = "Theka the Martyr", [7795] = "Hydromancer Velratha",
-    [7271] = "Witch Doctor Zum'rah",
 }
 
 --------------------------------------------------------------------------------
 -- Phase 2 lookups
 --------------------------------------------------------------------------------
--- Damage that standing in the right place avoids. Spell ids checked against the BigWigs Molten Core data
--- (Rain of Fire 19717, Inferno 19695, Conflagration 19428, Living Bomb 20475). 20476 (the bomb's explosion) is
--- unconfirmed. Add more in game with /cuilog avoid <spell id>.
-local AVOIDABLE = {
-    [19717] = "Rain of Fire", [19695] = "Inferno", [19428] = "Conflagration", [20475] = "Living Bomb", [20476] = "Living Bomb",
+-- Damage that standing in the right place avoids. Checked against the CMaNGOS database: 11990 is the Sandfury
+-- Firecaller's Rain of Fire (Zul'Farrak). Add more in game with /cuilog avoid <spell id>.
+local AVOIDABLE = { [11990] = "Rain of Fire" }
+-- Dungeon mechanics that punish a group when they land on a player (counted as "mechanics hit" on the
+-- Mistakes tab). Ids and casters checked against the same database.
+local MECH_AURAS = {
+    [8040] = "Druid's Slumber",        -- Druid of the Fang (Wailing Caverns)
+    [7967] = "Naralex's Nightmare",    -- Mutanus the Devourer (Wailing Caverns)
+    [7621] = "Arugal's Curse",         -- Shadowfang Keep
+    [8377] = "Earthgrab",              -- Razorfen Totemic's Earthgrab Totem (Razorfen Kraul)
+    [9256] = "Deep Sleep",             -- High Inquisitor Whitemane (Scarlet Monastery)
+    [11641] = "Hex",                   -- Sandfury Shadowhunter (Zul'Farrak)
+    [12890] = "Deep Slumber",          -- Shade of Eranikus (Sunken Temple)
 }
+-- Enemy casts that mean the group did not stop something (counted once per run on the Mistakes tab)
+local MECH_CASTS = { [3605] = "Remote-Controlled Golem summoned (Goblin Engineer, Deadmines)" }
 -- debuffs whose uptime on a boss is measured (matched by name, so every rank counts)
 local BOSS_DEBUFFS = {
     ["Sunder Armor"] = "Sunder Armor", ["Faerie Fire"] = "Faerie Fire", ["Faerie Fire (Feral)"] = "Faerie Fire",
@@ -112,10 +154,12 @@ local BOSS_DEBUFFS = {
     ["Thunder Clap"] = "Thunder Clap",
 }
 -- buffs measured on each group member (seconds of combat they had it)
-local PLAYER_BUFFS = { ["Shield Block"] = true, ["Stoneskin"] = true, ["Windfury Totem"] = true }
+local PLAYER_BUFFS = { ["Shield Block"] = true, ["Stoneskin"] = true, ["Windfury Totem"] = true, ["Strength of Earth"] = true }
 -- totems measured by how long they stood (seconds): name -> lifetime
 local TOTEM_LIFE = { ["Tremor Totem"] = 120, ["Windfury Totem"] = 120, ["Stoneskin Totem"] = 120, ["Grace of Air Totem"] = 120,
-                     ["Mana Spring Totem"] = 120, ["Healing Stream Totem"] = 120, ["Strength of Earth Totem"] = 120 }
+                     ["Mana Spring Totem"] = 120, ["Healing Stream Totem"] = 120, ["Strength of Earth Totem"] = 120,
+                     ["Searing Totem"] = 60, ["Fire Nova Totem"] = 6 }
+local rockOn, myGUID = false, nil   -- own weapon carries Rockbiter (read from its tooltip once a second)
 local TAUNTS = { ["Taunt"] = true, ["Growl"] = true, ["Mocking Blow"] = true, ["Challenging Shout"] = true, ["Challenging Roar"] = true }
 local AREA_TAUNTS = { ["Challenging Shout"] = true, ["Challenging Roar"] = true }
 
@@ -164,14 +208,16 @@ end
 -- Players and their tables
 --------------------------------------------------------------------------------
 local NUM_FIELDS = { "damage", "healing", "overheal", "taken", "casts", "hits", "crits", "healHits", "healCrits",
-                     "deaths", "interrupts", "dispels", "avoidDamage", "avoidHits", "taunts", "tauntsLanded", "tauntsMissed" }
-local MAP_FIELDS = { "avoidSpells", "uptime", "stopped", "dispelled", "tauntMiss" }
+                     "deaths", "interrupts", "dispels", "avoidDamage", "avoidHits", "taunts", "tauntsLanded", "tauntsMissed",
+                     "mechHits", "blocks", "blockedDmg", "swingsIn", "rockDamage" }
+local MAP_FIELDS = { "avoidSpells", "uptime", "stopped", "dispelled", "tauntMiss", "hitBy" }
 
 local function NewPlayer(guid, name, class)
     return { guid = guid, name = name, class = class, damage = 0, healing = 0, overheal = 0, taken = 0, casts = 0,
              hits = 0, crits = 0, healHits = 0, healCrits = 0, deaths = 0, interrupts = 0, dispels = 0,
              avoidDamage = 0, avoidHits = 0, taunts = 0, tauntsLanded = 0, tauntsMissed = 0,
-             spells = {}, takenFrom = {}, avoidSpells = {}, uptime = {}, stopped = {}, dispelled = {}, tauntMiss = {} }
+             mechHits = 0, blocks = 0, blockedDmg = 0, swingsIn = 0, rockDamage = 0,
+             spells = {}, takenFrom = {}, avoidSpells = {}, uptime = {}, stopped = {}, dispelled = {}, tauntMiss = {}, hitBy = {} }
 end
 
 -- p for an actor in a players table (created from what the run already knows about them)
@@ -199,6 +245,8 @@ local function Actor(guid, name, spell)
     if guid:find("^Player") then return guid, spell end
     local owner = petOwner[guid]
     if owner then return owner, "Pet: " .. spell end
+    local tot = totems[guid]
+    if tot then return tot.owner, "Totem: " .. spell end
     -- an unowned guardian or totem: listed under its own name
     if run and not run.players[guid] then
         run.players[guid] = NewPlayer(guid, name or "?", nil)
@@ -543,7 +591,7 @@ end
 local HANDLED = { SWING_DAMAGE = true, RANGE_DAMAGE = true, SPELL_DAMAGE = true, SPELL_PERIODIC_DAMAGE = true,
     DAMAGE_SHIELD = true, SPELL_HEAL = true, SPELL_PERIODIC_HEAL = true, SPELL_CAST_SUCCESS = true,
     SPELL_INTERRUPT = true, SPELL_DISPEL = true, SPELL_AURA_REMOVED = true, SPELL_AURA_APPLIED = true, UNIT_DIED = true,
-    SPELL_AURA_REFRESH = true, SPELL_MISSED = true, SPELL_SUMMON = true, UNIT_DESTROYED = true }
+    SPELL_AURA_REFRESH = true, SPELL_MISSED = true, SPELL_SUMMON = true, UNIT_DESTROYED = true, SWING_MISSED = true }
 
 local function CloseTotem(guid, now)
     local rec = totems[guid]
@@ -556,8 +604,20 @@ local function CloseTotem(guid, now)
 end
 
 -- buff / debuff timers: boss debuffs, a few buffs on group members, and group members' taunts landing
-local function AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, spell)
+local function Each(guid, fn)
+    fn(GetP(run.players, guid))
+    if pull then fn(GetP(pull.players, guid)) end
+end
+
+local function AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, spell, spellId)
     local removed = sub == "SPELL_AURA_REMOVED"
+    if sub == "SPELL_AURA_APPLIED" and dPlayer and spellId and MECH_AURAS[spellId] then
+        local label = MECH_AURAS[spellId]
+        Each(dGUID, function(mp)
+            mp.mechHits = mp.mechHits + 1
+            mp.hitBy[label] = (mp.hitBy[label] or 0) + 1
+        end)
+    end
     local key = BOSS_DEBUFFS[spell]
     if key and not dGroup and BossInfo(dGUID) then
         local t = debuffs[dGUID]
@@ -600,16 +660,22 @@ local function OnCombatLog()
     if not HANDLED[sub] then return end
     local sGroup = sFlags and band(sFlags, 0x7) ~= 0
     local dGroup = dFlags and band(dFlags, 0x7) ~= 0
+    if sub == "SPELL_CAST_SUCCESS" and MECH_CASTS[a12] then
+        run.mechCasts = run.mechCasts or {}
+        local label = MECH_CASTS[a12]
+        run.mechCasts[label] = (run.mechCasts[label] or 0) + 1
+        return
+    end
     if sub ~= "UNIT_DIED" and not sGroup and not dGroup then return end   -- (a boss dying has no group flags)
 
     local now = GetTime()
     local dPlayer = dGroup and dGUID and dGUID:find("^Player")
 
     -- damage ---------------------------------------------------------------
-    local amount, spell, crit, over
-    if sub == "SWING_DAMAGE" then amount, spell, over, crit = a12, "Melee", a13, a18
+    local amount, spell, crit, over, blocked
+    if sub == "SWING_DAMAGE" then amount, spell, over, crit, blocked = a12, "Melee", a13, a18, a16
     elseif sub == "RANGE_DAMAGE" or sub == "SPELL_DAMAGE" or sub == "SPELL_PERIODIC_DAMAGE" or sub == "DAMAGE_SHIELD" then
-        amount, spell, over, crit = a15, a13, a16, a21
+        amount, spell, over, crit, blocked = a15, a13, a16, a21, a19
     end
     if amount then
         if amount <= 0 then return end
@@ -621,6 +687,10 @@ local function OnCombatLog()
             local key, sp = Actor(sGUID, sName, spell or "?")
             AddDamage(run.players, key, sp, amount, crit)
             AddDamage(pull.players, key, sp, amount, crit)
+            if sub == "SWING_DAMAGE" and rockOn and sGUID == myGUID then
+                GetP(run.players, key).rockDamage = GetP(run.players, key).rockDamage + amount
+                GetP(pull.players, key).rockDamage = GetP(pull.players, key).rockDamage + amount
+            end
             local en = dName or "?"
             pull.enemies[en] = (pull.enemies[en] or 0) + amount
         end
@@ -628,6 +698,10 @@ local function OnCombatLog()
             local from = tostring(sName or "?") .. ": " .. tostring(spell or "?")
             AddTaken(run.players, dGUID, from, amount)
             AddTaken(pull.players, dGUID, from, amount)
+            Each(dGUID, function(bp)
+                if sub == "SWING_DAMAGE" then bp.swingsIn = bp.swingsIn + 1 end
+                if blocked and blocked > 0 then bp.blocks = bp.blocks + 1; bp.blockedDmg = bp.blockedDmg + blocked end
+            end)
             if sub ~= "SWING_DAMAGE" and (AVOIDABLE[a12] or DB().avoidable[a12]) then
                 local label = AVOIDABLE[a12] or spell or "?"
                 for _, tbl in ipairs({ run.players, pull.players }) do
@@ -674,7 +748,19 @@ local function OnCombatLog()
     end
 
     -- a taunt that missed ------------------------------------------------------
+    if sub == "SWING_MISSED" then
+        if dPlayer then
+            Each(dGUID, function(bp)
+                bp.swingsIn = bp.swingsIn + 1
+                if a12 == "BLOCK" then bp.blocks = bp.blocks + 1 end
+            end)
+        end
+        return
+    end
     if sub == "SPELL_MISSED" then
+        if dPlayer and a15 == "BLOCK" then
+            Each(dGUID, function(bp) bp.blocks = bp.blocks + 1 end)
+        end
         if sGroup and not dGroup and TAUNTS[a13] and not AREA_TAUNTS[a13] then
             local owner = Actor(sGUID, sName, a13)
             for _, tbl in ipairs({ run.players, pull and pull.players }) do
@@ -706,7 +792,7 @@ local function OnCombatLog()
 
     -- auras that hit a player (kept for the death recap) -----------------------
     if sub == "SPELL_AURA_REMOVED" or sub == "SPELL_AURA_APPLIED" or sub == "SPELL_AURA_REFRESH" then
-        if a13 then AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, a13) end
+        if a13 then AuraEvent(sub, now, sGUID, sGroup, dGUID, dGroup, dPlayer, a13, a12) end
         if sub == "SPELL_AURA_REMOVED" then
             if dPlayer and a15 == "BUFF" then Push(dGUID, "a-", nil, sName, a13) end
         elseif sub == "SPELL_AURA_APPLIED" then
@@ -793,6 +879,24 @@ local function ScanForBoss()
     for i = 1, 40 do Look("nameplate" .. i) end
 end
 
+-- Rockbiter on the main hand: read from the weapon's tooltip (own character only)
+local rockTip
+local function ScanRock()
+    if not rockTip then
+        rockTip = CreateFrame("GameTooltip", "CysLogRockTip", nil, "GameTooltipTemplate")
+    end
+    rockTip:SetOwner(UIParent, "ANCHOR_NONE")
+    rockTip:ClearLines()
+    local ok = pcall(rockTip.SetInventoryItem, rockTip, "player", 16)
+    if not ok then return false end
+    for i = 2, rockTip:NumLines() do
+        local fs = _G["CysLogRockTipTextLeft" .. i]
+        local text = fs and fs:GetText()
+        if text and text:find("Rockbiter") then return true end
+    end
+    return false
+end
+
 local ev
 local function Enable()
     if ev then return end
@@ -821,6 +925,16 @@ local function Enable()
         if pull then
             ScanForBoss()
             if GetTime() - pull.last >= IDLE_END and not UnitAffectingCombat("player") then FinishPull() end
+        end
+        myGUID = myGUID or UnitGUID("player")
+        local _, cls = UnitClass("player")
+        if cls == "SHAMAN" and run then
+            rockOn = ScanRock()
+            if rockOn and pull and myGUID then
+                Each(myGUID, function(rp) rp.uptime["Rockbiter Weapon"] = (rp.uptime["Rockbiter Weapon"] or 0) + 1 end)
+            end
+        else
+            rockOn = false
         end
         if CL.win and CL.win:IsShown() and run then CL.Tick() end
     end)
@@ -867,7 +981,7 @@ end
 -- Viewer
 --------------------------------------------------------------------------------
 local ROWS, ROWH = 20, 22
-local TABS = { "Damage", "Healing", "Taken", "Player", "Deaths", "Mistakes", "Uptimes", "Utility" }
+local TABS = { "Damage", "Healing", "Taken", "Player", "Deaths", "Mistakes", "Uptimes", "Utility", "Class" }
 local view = { run = 1, seg = "all", tab = "Damage", player = nil, mode = "damage", offset = 0, segOffset = 0 }
 
 local function Fmt(n)
@@ -950,7 +1064,8 @@ local function ColumnsFor(tab)
     elseif tab == "Taken" then return { { "Player", 8, 170, "LEFT" }, { "Taken", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "DTPS", 320, 70, "RIGHT" }, { "Deaths", 395, 60, "RIGHT" } }
     elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "%", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
     elseif tab == "Deaths" then return { { "Time", 8, 55, "LEFT" }, { "Player", 68, 120, "LEFT" }, { "Killing blow", 195, 220, "LEFT" }, { "Overkill", 420, 65, "RIGHT" }, { "Taken", 490, 70, "RIGHT" }, { "Healed", 565, 70, "RIGHT" } }
-    elseif tab == "Mistakes" then return { { "Player", 8, 170, "LEFT" }, { "Avoidable dmg", 180, 95, "RIGHT" }, { "Hits", 280, 50, "RIGHT" }, { "% of taken", 335, 80, "RIGHT" } }
+    elseif tab == "Mistakes" then return { { "Player", 8, 170, "LEFT" }, { "Avoidable dmg", 180, 95, "RIGHT" }, { "Hits", 280, 50, "RIGHT" }, { "% of taken", 335, 80, "RIGHT" }, { "Mechanics hit", 420, 100, "RIGHT" } }
+    elseif tab == "Class" then return { { "Player", 8, 150, "LEFT" }, { "What", 165, 230, "LEFT" }, { "Value", 400, 90, "RIGHT" }, { "Detail", 495, 140, "RIGHT" } }
     elseif tab == "Uptimes" then return { { "What", 8, 380, "LEFT" }, { "Uptime", 395, 70, "RIGHT" }, { "Seconds", 470, 70, "RIGHT" } }
     else return { { "Player", 8, 170, "LEFT" }, { "Interrupts", 180, 75, "RIGHT" }, { "Dispels", 260, 60, "RIGHT" }, { "Taunts", 325, 55, "RIGHT" }, { "Landed", 385, 60, "RIGHT" }, { "Missed", 450, 60, "RIGHT" }, { "Deaths", 515, 55, "RIGHT" } } end
 end
@@ -1116,23 +1231,65 @@ local function Redraw()
     elseif tab == "Mistakes" then
         local list2, top = {}, 0
         for _, p in pairs(players) do
-            if (p.avoidDamage or 0) > 0 then list2[#list2 + 1] = p; top = max(top, p.avoidDamage) end
+            if (p.avoidDamage or 0) > 0 or (p.mechHits or 0) > 0 then list2[#list2 + 1] = p; top = max(top, p.avoidDamage or 0) end
         end
-        table.sort(list2, function(a, b) return a.avoidDamage > b.avoidDamage end)
+        table.sort(list2, function(a, b) return ((a.avoidDamage or 0) + (a.mechHits or 0) * 1e6) > ((b.avoidDamage or 0) + (b.mechHits or 0) * 1e6) end)
         for _, p in ipairs(list2) do
             local rr, gg, bb = ClassRGB(p.class)
-            entries[#entries + 1] = { ratio = p.avoidDamage / max(top, 1), r = rr, g = gg, b = bb,
-                cols = { p.name, Fmt(p.avoidDamage), tostring(p.avoidHits or 0), string.format("%.0f", p.avoidDamage / max(p.taken, 1) * 100) },
+            entries[#entries + 1] = { ratio = (p.avoidDamage or 0) / max(top, 1), r = rr, g = gg, b = bb,
+                cols = { p.name, Fmt(p.avoidDamage or 0), tostring(p.avoidHits or 0), string.format("%.0f", (p.avoidDamage or 0) / max(p.taken, 1) * 100), tostring(p.mechHits or 0) },
                 tip = function(tt)
-                    tt:AddLine(p.name .. " - avoidable damage", rr, gg, bb)
+                    tt:AddLine(p.name .. " - mistakes", rr, gg, bb)
                     local sp = {}
-                    for nm, amt in pairs(p.avoidSpells or {}) do sp[#sp + 1] = { nm, amt } end
-                    table.sort(sp, function(a, b) return a[2] > b[2] end)
-                    for _, e in ipairs(sp) do tt:AddDoubleLine(e[1], Fmt(e[2]), 1, 1, 1, 1, 0.85, 0.2) end
+                    for nm, amt in pairs(p.avoidSpells or {}) do sp[#sp + 1] = { nm, Fmt(amt) } end
+                    table.sort(sp, function(a, b) return a[1] < b[1] end)
+                    for _, e in ipairs(sp) do tt:AddDoubleLine("Avoidable: " .. e[1], e[2], 1, 1, 1, 1, 0.85, 0.2) end
+                    for nm, n in pairs(p.hitBy or {}) do tt:AddDoubleLine(nm, n .. "x", 1, 1, 1, 1, 0.85, 0.2) end
                 end }
         end
+        for label, n in pairs(r.mechCasts or {}) do
+            entries[#entries + 1] = { cols = { "Group", label .. "  x" .. n }, ratio = 0, r = 0.8, g = 0.4, b = 0.3 }
+        end
         if #entries == 0 then
-            entries[1] = { cols = { "No avoidable damage recorded. Add spells with /cuilog avoid <spell id>." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
+            entries[1] = { cols = { "Nothing recorded. Add avoidable spells with /cuilog avoid <spell id>." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
+        end
+    elseif tab == "Class" then
+        local names = {}
+        for _, p in pairs(players) do names[#names + 1] = p end
+        table.sort(names, function(a, b) return a.name < b.name end)
+        for _, p in ipairs(names) do
+            local rr, gg, bb = ClassRGB(p.class)
+            local function Row(what, value, detail)
+                entries[#entries + 1] = { cols = { p.name, what, value, detail or "" }, ratio = 0, r = rr, g = gg, b = bb }
+            end
+            local sp = p.spells or {}
+            if (p.blocks or 0) > 0 then
+                Row("Attacks blocked (shield)", tostring(p.blocks), string.format("of %d melee swings, %s blocked", p.swingsIn or 0, Fmt(p.blockedDmg)))
+            end
+            local br = sp["Bloodrage"]
+            if br and br.casts > 0 then Row("Bloodrage casts", tostring(br.casts), string.format("%.1f per min", br.casts / (dur / 60))) end
+            local es = sp["Earth Shock"]
+            if es and (es.casts > 0 or es.damage > 0) then
+                Row("Earth Shock damage", Fmt(es.damage), string.format("%d casts, avg %s", es.casts, es.hits > 0 and Fmt(es.damage / es.hits) or "-"))
+            end
+            if (p.rockDamage or 0) > 0 then
+                local melee = sp["Melee"]
+                local pct = melee and melee.damage > 0 and (p.rockDamage / melee.damage * 100) or 0
+                Row("Melee damage with Rockbiter", Fmt(p.rockDamage), string.format("%.0f%% of melee, %s", pct, Clock((p.uptime or {})["Rockbiter Weapon"] or 0)))
+            end
+            local st = sp["Searing Totem"]
+            local sb = sp["Totem: Searing Bolt"]
+            if (st and st.casts > 0) or sb then
+                Row("Searing Totem", st and (st.casts .. " casts") or "-", sb and (Fmt(sb.damage) .. " damage") or "no damage seen")
+            end
+            local fn = sp["Fire Nova Totem"]
+            local fd = sp["Totem: Fire Nova"]
+            if (fn and fn.casts > 0) or fd then
+                Row("Fire Nova Totem", fn and (fn.casts .. " casts") or "-", fd and (Fmt(fd.damage) .. " damage") or "no damage seen")
+            end
+        end
+        if #entries == 0 then
+            entries[1] = { cols = { "Nothing yet. Shows shield blocks, Bloodrage, Earth Shock, Rockbiter melee and Searing / Fire Nova Totems." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
         end
     elseif tab == "Uptimes" then
         local function Row(label, secs, base, r2, g2, b2)
@@ -1261,8 +1418,8 @@ local function BuildWindow()
 
     -- tabs
     for i, name in ipairs(TABS) do
-        local t = W.Button(win, 78, 22, name)
-        t:SetPoint("TOPLEFT", 222 + (i - 1) * 80, -62)
+        local t = W.Button(win, 70, 22, name)
+        t:SetPoint("TOPLEFT", 222 + (i - 1) * 72, -62)
         t.tab = name
         t:SetScript("OnClick", function() view.tab = name; view.offset = 0; Redraw() end)
         tabBtns[i] = t

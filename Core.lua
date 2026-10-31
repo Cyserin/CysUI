@@ -319,9 +319,20 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.48.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.49.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.49.0", date = "2026-10-31",
+              added = {
+                  "Combat Log boss list rebuilt for the 15-60 dungeons: Ragefire Chasm to Upper Blackrock Spire, Stratholme, Scholomance and Dire Maul, 190+ bosses matched against a Classic database. The raid bosses are gone.",
+                  "Combat Log Mistakes tab now also counts dungeon mechanics that land on a player (Druid's Slumber, Naralex's Nightmare, Arugal's Curse, Earthgrab, Deep Sleep, Hex, Deep Slumber) and tells you when the Deadmines Goblin Engineer got its Remote-Controlled Golem out.",
+                  "Combat Log Class tab: attacks blocked and damage blocked, Bloodrage casts, Earth Shock damage and casts, melee damage dealt with Rockbiter on your weapon (your own character), and Searing Totem and Fire Nova Totem casts and damage.",
+                  "Combat Log Uptimes now include Strength of Earth, and totems that deal damage are credited to the Shaman who dropped them.",
+              },
+              improved = {
+                  "The avoidable damage list now holds only checked spells (Rain of Fire from Zul'Farrak Firecallers); add more with /cuilog avoid and a spell id.",
+              },
+            },
             { version = "0.48.0", date = "2026-10-31",
               added = {
                   "Combat Log Mistakes tab: damage taken from avoidable abilities (Rain of Fire, Inferno, Conflagration, Living Bomb) per player, with a breakdown on hover. Add your own with /cuilog avoid and a spell id.",
