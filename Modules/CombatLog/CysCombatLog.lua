@@ -1083,7 +1083,7 @@ local function ColumnsFor(tab)
     elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "Share", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
     elseif tab == "Deaths" then return { { "Time", 8, 55, "LEFT" }, { "Player", 68, 120, "LEFT" }, { "Killing blow", 195, 220, "LEFT" }, { "Overkill", 420, 65, "RIGHT" }, { "Taken", 490, 70, "RIGHT" }, { "Healed", 565, 70, "RIGHT" } }
     elseif tab == "Mistakes" then return { { "Player Name", 8, 170, "LEFT" }, { "Avoidable Dmg", 180, 95, "RIGHT" }, { "Total Hits", 280, 60, "RIGHT" }, { "Share of Taken", 345, 90, "RIGHT" }, { "Mechanics Hit", 440, 100, "RIGHT" } }
-    elseif tab == "Class" then return { { "Player Name", 8, 150, "LEFT" }, { "Ability", 165, 200, "LEFT" }, { "Total", 370, 80, "RIGHT" }, { "Detail", 455, 210, "RIGHT" } }
+    elseif tab == "Class" then return { { "Player Name", 8, 130, "LEFT" }, { "What", 140, 190, "LEFT" }, { "Total", 335, 80, "RIGHT" }, { "Detail", 430, 330, "LEFT" } }
     elseif tab == "Uptimes" then return { { "Aura / Totem", 8, 380, "LEFT" }, { "Uptime", 395, 70, "RIGHT" }, { "Seconds", 470, 70, "RIGHT" } }
     else return { { "Player Name", 8, 170, "LEFT" }, { "Interrupts", 180, 75, "RIGHT" }, { "Dispels", 260, 60, "RIGHT" }, { "Taunts", 325, 55, "RIGHT" }, { "Landed", 385, 60, "RIGHT" }, { "Missed", 450, 60, "RIGHT" }, { "Deaths", 515, 55, "RIGHT" } } end
 end
@@ -1095,7 +1095,7 @@ local function Header(tab)
         local c = cols[i]
         if c then
             h:ClearAllPoints()
-            h:SetPoint("LEFT", win.headRow, "LEFT", c[2], 0)
+            h:SetPoint("LEFT", win, "TOPLEFT", SIDE + 16 + c[2], -125)
             h:SetWidth(c[3]); h:SetJustifyH(c[4]); h:SetText(c[1]); h:Show()
         else h:Hide() end
     end
@@ -1284,12 +1284,16 @@ local function Redraw()
         table.sort(names, function(a, b) return a.name < b.name end)
         for _, p in ipairs(names) do
             local rr, gg, bb = ClassRGB(p.class)
-            local function Row(what, value, detail, num)
-                entries[#entries + 1] = { cols = { p.name, what, value, detail or "" }, ratio = 0, num = num or 0, what = what, r = rr, g = gg, b = bb }
+            local firstRow = true
+            local function Row(what, value, detail, num, ratio)
+                entries[#entries + 1] = { cols = { firstRow and p.name or "", what, value, detail or "" }, ratio = ratio or 0, fixed = ratio ~= nil, num = num or 0, what = what, r = rr, g = gg, b = bb }
+                firstRow = false
             end
             local sp = p.spells or {}
             if (p.blocks or 0) > 0 then
-                Row("Attacks blocked (shield)", tostring(p.blocks), string.format("of %d swings, %s blocked", p.swingsIn or 0, Fmt(p.blockedDmg)), p.blocks)
+                local sw = max(p.swingsIn or 0, p.blocks)
+                Row("Shield blocks", p.blocks .. (p.blocks == 1 and " block" or " blocks"),
+                    string.format("%.0f%% of %d melee hits blocked  -  %s damage stopped", p.blocks / sw * 100, sw, Fmt(p.blockedDmg)), p.blocks, p.blocks / sw)
             end
             local br = sp["Bloodrage"]
             if br and br.casts > 0 then Row("Bloodrage casts", tostring(br.casts), string.format("%.1f per min", br.casts / (dur / 60)), br.casts) end
@@ -1323,7 +1327,7 @@ local function Redraw()
         end
         local topBy = {}
         for _, e in ipairs(entries) do topBy[e.what] = max(topBy[e.what] or 1, e.num or 0) end
-        for _, e in ipairs(entries) do e.ratio = (e.num or 0) / topBy[e.what] end
+        for _, e in ipairs(entries) do if not e.fixed then e.ratio = (e.num or 0) / topBy[e.what] end end
         if #entries == 0 then
             entries[1] = { cols = { "Nothing yet. Shows shield blocks, Bloodrage, Earth Shock, Rockbiter melee and Searing / Fire Nova Totems." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
         end
@@ -1577,6 +1581,7 @@ local function BuildWindow()
     win.heads = {}
     for i = 1, 7 do
         local hfs = W.Text(win.headRow, 11, T.accent)
+        hfs:SetWordWrap(false)
         win.heads[i] = hfs
     end
 

@@ -319,9 +319,21 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.50.2",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.51.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.51.0", date = "2026-10-31",
+              added = {
+                  "Combat Numbers: floating numbers on your own frames. Damage you take, healing you receive and Miss / Dodge / Parry / Block / Resist show on the player frame; your damage, your pet's damage, your heals and your own misses show on the target frame. Crits pop in bigger.",
+                  "Combat Numbers has a test button, a text size setting, a toggle for every kind of number and an option to turn off the game's own floating numbers.",
+              },
+              improved = {
+                  "Combat Log Class tab: the player name shows once per player, shield blocks read as a count with the block rate and damage stopped beside it, and the detail text sits next to the numbers instead of far to the right.",
+              },
+              fixed = {
+                  "Combat Log: column headers now line up exactly over their columns.",
+              },
+            },
             { version = "0.50.2", date = "2026-10-31",
               improved = {
                   "Combat Log Player tab: the damage / healing switch and the player picker are now drop-down lists instead of cycle buttons.",
