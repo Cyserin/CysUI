@@ -227,6 +227,7 @@ local function DragTick(m)
     if not g then return end
     local al = Align(m)
     g:ShowAlign(al)
+    g:Reveal(m.mover)
 end
 
 function CUI:RegisterMovable(frame, key, label, opts)
@@ -281,7 +282,7 @@ function CUI:RegisterMovable(frame, key, label, opts)
     mover:SetScript("OnDragStop", function(s)
         s:SetScript("OnUpdate", nil)
         s:StopMovingOrSizing()
-        if guides then guides:ShowAlign(nil) end
+        if guides then guides:ShowAlign(nil); guides:Reveal(nil) end
         CaptureDrag(m)
     end)
 
@@ -433,7 +434,7 @@ local function BuildPanel()
     f.snap = W.Checkbox(f, "Snap to a grid when dragging", function() return CysUIDB.snap end,
         function(on) CysUIDB.snap = on end)
 
-    f.showGrid = W.Checkbox(f, "Show grid lines", function() return CysUIDB.showGrid ~= false end,
+    f.showGrid = W.Checkbox(f, "Show grid lines near the box I move", function() return CysUIDB.showGrid ~= false end,
         function(on) CysUIDB.showGrid = on; if guides then guides:DrawGrid() end end)
 
     f.resetOne = W.Button(f, 110, 22, "Reset this one")
@@ -482,10 +483,12 @@ local function BuildGuides()
     g:Hide()
 
     -- the centre of the screen
-    local v = W.Texture(g, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.5 })
+    local v = W.Texture(g, "BACKGROUND", T.border) -- tracks the Border color setting (gold / class / ...)
+    v:SetAlpha(0.6)
     v:SetWidth(1)
     v:SetPoint("TOP"); v:SetPoint("BOTTOM")
-    local h = W.Texture(g, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.5 })
+    local h = W.Texture(g, "BACKGROUND", T.border)
+    h:SetAlpha(0.6)
     h:SetHeight(1)
     h:SetPoint("LEFT"); h:SetPoint("RIGHT")
 
@@ -507,26 +510,48 @@ local function BuildGuides()
             n = n + 1
             local t = self.grid[n]
             if not t then
-                t = W.Texture(self, "BACKGROUND", { 1, 1, 1, 0.26 })
+                t = W.Texture(self, "BACKGROUND", T.border) -- grid lines take the Border color too
                 self.grid[n] = t
             end
+            t.vertical = vertical
             t:ClearAllPoints()
             -- two screen pixels thick, placed on whole pixels counted from the screen edge, so no line is ever dropped
             if vertical then
                 local x = floor((sw / 2 + off) / px + 0.5) * px
+                t.pos = x
                 t:SetWidth(px * 2)
                 t:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, 0)
                 t:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, 0)
             else
                 local y = floor((sh / 2 + off) / px + 0.5) * px
+                t.pos = y
                 t:SetHeight(px * 2)
                 t:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y)
                 t:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", 0, y)
             end
+            t:SetAlpha(0) -- hidden until a box is dragged close to it (see Reveal)
             t:Show()
         end
         for i = 1, nx / 2 do Line(true, i * stepX); Line(true, -i * stepX) end
         for i = 1, ny / 2 do Line(false, i * stepY); Line(false, -i * stepY) end
+    end
+
+    -- the grid is hidden; lines fade in as the box being moved gets near them, and fade out again as it leaves
+    function g:Reveal(mover)
+        local l, r, t, b
+        if mover then l, r, t, b = mover:GetLeft(), mover:GetRight(), mover:GetTop(), mover:GetBottom() end
+        local stepX, stepY = GridSteps()
+        for _, ln in ipairs(self.grid) do
+            local a = 0
+            if l and r and t and b and ln.pos then
+                local lo, hi, reach
+                if ln.vertical then lo, hi, reach = l, r, stepX * 1.25 else lo, hi, reach = b, t, stepY * 1.25 end
+                local d = 0
+                if ln.pos < lo then d = lo - ln.pos elseif ln.pos > hi then d = ln.pos - hi end
+                if d < reach then a = 0.34 * (1 - d / reach) end
+            end
+            ln:SetAlpha(a)
+        end
     end
 
     -- bright lines while a box lines up with something

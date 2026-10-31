@@ -1,8 +1,8 @@
 --------------------------------------------------------------------------------
 -- Cys's UI - welcome window
 --
--- Shown once, the first time Cys's UI loads on an account (and again on /cui welcome). Two steps people
--- actually need, then a pointer to the settings: 1) action bars and Blizzard's XP bar, 2) border color.
+-- Shown once, the first time Cys's UI loads on an account (and again on /cui welcome). Steps people
+-- actually need, then a pointer to the settings: 1) action bars and Blizzard's XP bar, 2) screen size and UI scale, 3) border color.
 --------------------------------------------------------------------------------
 local CUI = CysUI
 local W = CUI.W
@@ -83,7 +83,54 @@ local function Build()
     t1c:SetWidth(416); t1c:SetJustifyV("TOP")
     t1c:SetText("Turning this off needs a /reload. Cys's XP bar has its own page in the settings.")
 
-    ---------------------------------------------------------------- 2: border color
+    ---------------------------------------------------------------- 2: your screen
+    local ps = NewPage()
+    local ts = W.Text(ps, 12, T.desc)
+    ts:SetPoint("TOPLEFT", 0, 0)
+    ts:SetWidth(420); ts:SetJustifyV("TOP"); ts:SetSpacing(3)
+    local tsb = W.Text(ps, 11, T.desc)
+    tsb:SetPoint("TOPLEFT", 4, -118)
+    tsb:SetWidth(416); tsb:SetJustifyV("TOP"); tsb:SetSpacing(3)
+    local scaleBtns = {}
+    local function ScaleMode(mode)
+        local db = CysUIDB.scale
+        if not db then return end
+        db.mode = mode
+        db.prompted = true
+        if StaticPopup_Hide then StaticPopup_Hide("CYSUI_SCALE") end
+        if CUI.Scale then CUI.Scale:Apply() end
+        f.refreshScreen()
+    end
+    scaleBtns.pixel = W.Button(ps, 200, 24, "Pixel perfect")
+    scaleBtns.pixel:SetPoint("TOPLEFT", 4, -78)
+    scaleBtns.pixel:SetScript("OnClick", function() ScaleMode("pixel") end)
+    scaleBtns.layout = W.Button(ps, 200, 24, "Match the 1080p layout")
+    scaleBtns.layout:SetPoint("LEFT", scaleBtns.pixel, "RIGHT", 8, 0)
+    scaleBtns.layout:SetScript("OnClick", function() ScaleMode("layout") end)
+    f.refreshScreen = function()
+        local S = CUI.Scale
+        if not S or not CysUIDB.scale then ts:SetText("The UI Scale module is switched off, so the game keeps its own scale."); return end
+        local w, h = S:ScreenSize()
+        local aspect = w / h
+        local wide = aspect >= 2.2
+        local kind = wide and (aspect >= 3 and "super ultrawide" or "ultrawide") or "standard widescreen"
+        local rec = (h > 1080) and "layout" or "pixel"
+        ts:SetText(string.format("Your screen is |cFFFFD100%d x %d|r (%s). Cys's UI is designed around a 1920 x 1080 screen, so the right scale depends on yours.", w, h, kind))
+        local msg
+        if rec == "pixel" then
+            msg = "Recommended for you: |cFFFFD100Pixel perfect|r. One UI unit is one real pixel, which keeps every line sharp (this is what ElvUI does)."
+        else
+            msg = "Recommended for you: |cFFFFD100Match the 1080p layout|r. Frames keep the size and positions they have on a 1080p screen, just sharper. Pixel perfect is also fine, but everything gets physically smaller on a screen this big."
+        end
+        if wide then
+            msg = msg .. "\n\nYour screen is very wide, so frames pinned to the edges sit far apart. Use |cFFFFD100/cui layout|r to pull the bars and frames in toward the middle."
+        end
+        tsb:SetText(msg)
+        local mode = CysUIDB.scale.mode
+        for key, b in pairs(scaleBtns) do b:SetPrimary(mode == key) end
+    end
+
+    ---------------------------------------------------------------- 3: border color
     local p2 = NewPage()
     local t2 = W.Text(p2, 12, T.desc)
     t2:SetPoint("TOPLEFT", 0, 0)
@@ -124,7 +171,7 @@ local function Build()
     t2b:SetWidth(416); t2b:SetJustifyV("TOP"); t2b:SetSpacing(3)
     t2b:SetText("You can change it any time under Skins in the settings. If a window keeps its old color, type /reload.")
 
-    ---------------------------------------------------------------- 3: explore
+    ---------------------------------------------------------------- 4: explore
     local p3 = NewPage()
     local t3 = W.Text(p3, 12, T.desc)
     t3:SetPoint("TOPLEFT", 0, 0)
@@ -139,7 +186,7 @@ local function Build()
     open:SetScript("OnClick", function() f:Hide(); CUI:OpenConfig("General") end)
 
     ---------------------------------------------------------------- navigation
-    local titles = { "Welcome to Cys's UI", "Border color", "Make it yours" }
+    local titles = { "Welcome to Cys's UI", "Your screen", "Border color", "Make it yours" }
     local idx = 1
     local back = W.Button(f, 80, 24, "Back")
     back:SetPoint("BOTTOMLEFT", 16, 14)
@@ -164,7 +211,7 @@ local function Build()
         if idx == #pages then f:Hide() else Show(idx + 1) end
     end)
     skip:SetScript("OnClick", function() f:Hide() end)
-    f:SetScript("OnShow", function() Show(1); f.refreshSwatches() end)
+    f:SetScript("OnShow", function() Show(1); f.refreshSwatches(); f.refreshScreen() end)
     tinsert(UISpecialFrames, "CysUIWelcomeFrame")
     return f
 end

@@ -328,6 +328,9 @@ if CysChangelog then
                   "Combat Numbers has a test button, a text size setting, a toggle for every kind of number and an option to turn off the game's own floating numbers.",
               },
               improved = {
+                  "Welcome window: new Your screen step that shows your resolution (and whether it is ultrawide), recommends pixel perfect or the 1080p layout for it, and lets you pick right there.",
+                  "Layout mode: the centre cross and grid lines now use your Border color (gold, class color, black or grey).",
+                  "Layout mode grid: only the centre cross is always shown. The smaller grid lines fade in near the box you are dragging and fade out as you move away, so wide and ultrawide screens no longer fill with lines.",
                   "Combat Log Class tab: the player name shows once per player, shield blocks read as a count with the block rate and damage stopped beside it, and the detail text sits next to the numbers instead of far to the right.",
               },
               fixed = {
