@@ -11,7 +11,8 @@ name: Release
 #   (empty) -> a normal release that everyone gets
 on:
   push:
-    branches: [main]
+    branches: [ main ]
+    tags: [ 'v*' ]  # <-- This tells GitHub Actions to run when you push a v-tag
 
 permissions:
   contents: write
