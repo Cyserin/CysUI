@@ -330,6 +330,7 @@ if CysChangelog then
                   "The last 3 to 10 runs are saved between sessions (your choice). Commands: /cuilog start, /cuilog end, /cuilog boss (marks your target as a boss), /cuilog clear. Optional checkbox turns on the game's own combat log during a run.",
               },
               improved = {
+                  "Boss detection now uses a boss list checked against BigWigs data: every Molten Core to Naxxramas boss, Onyxia, Zul'Gurub, plus Deadmines, Dire Maul, Stratholme and Zul'Farrak bosses. Other dungeon bosses can be added with /cuilog boss.",
                   "The old list of the last 15 fights is gone; the log is now organised by run instead.",
               },
             },

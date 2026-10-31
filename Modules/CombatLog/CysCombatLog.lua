@@ -37,9 +37,11 @@ local IDLE_END = 6          -- seconds with nothing happening end a pull
 local RESUME_GRACE = 900    -- seconds outside the instance before a run is closed
 local RING = 10             -- events kept per player for the death recap
 
---------------------------------------------------------------------------------
--- Known bosses (npc id -> name). A seed list: the rest is found through encounter events, skull-level units
--- in raids, or /cuilog boss on a target (saved and remembered).
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Known bosses (npc id -> name). Taken from the BigWigs / LittleWigs boss data for Classic. Raids are complete
+-- (Molten Core to Naxxramas). Dungeons only cover what that data has (Deadmines, Dire Maul, Stratholme,
+-- Zul'Farrak, Blackrock Spire's Emberseer); for the rest use /cuilog boss on the boss once and it is remembered.
+-- Encounter events and skull-level raid units are still picked up on top of this list.
 --------------------------------------------------------------------------------
 local BOSS_IDS = {
     -- Molten Core, Onyxia
@@ -48,16 +50,49 @@ local BOSS_IDS = {
     [12018] = "Majordomo Executus", [11502] = "Ragnaros", [10184] = "Onyxia",
     -- Blackwing Lair
     [12435] = "Razorgore the Untamed", [13020] = "Vaelastrasz the Corrupt", [12017] = "Broodlord Lashlayer",
-    [11983] = "Firemaw", [14601] = "Ebonroc", [11981] = "Flamegore", [14020] = "Chromaggus", [11583] = "Nefarian",
+    [11983] = "Firemaw", [14601] = "Ebonroc", [11981] = "Flamegor", [14020] = "Chromaggus", [11583] = "Nefarian",
+    [10162] = "Lord Victor Nefarius",
     -- Zul'Gurub
     [14517] = "High Priestess Jeklik", [14507] = "High Priest Venoxis", [14510] = "High Priestess Mar'li",
     [11382] = "Bloodlord Mandokir", [15082] = "Gri'lek", [15083] = "Hazza'rah", [15084] = "Renataki",
     [15085] = "Wushoolay", [15114] = "Gahz'ranka", [14509] = "High Priest Thekal", [14515] = "High Priestess Arlokk",
     [11380] = "Jin'do the Hexxer", [14834] = "Hakkar",
-    -- a few dungeons
-    [11517] = "Oggleflint", [11518] = "Jergosh the Invoker", [11519] = "Bazzalan", [11520] = "Taragaman the Hungerer",
-    [644] = "Rhahk'Zor", [643] = "Sneed's Shredder", [1763] = "Gilnid", [646] = "Mr. Smite",
-    [647] = "Captain Greenskin", [639] = "Edwin VanCleef",
+    -- Ruins of Ahn'Qiraj
+    [15348] = "Kurinnaxx", [15341] = "General Rajaxx", [15340] = "Moam", [15370] = "Buru the Gorger",
+    [15369] = "Ayamiss the Hunter", [15339] = "Ossirian the Unscarred",
+    -- Temple of Ahn'Qiraj
+    [15263] = "The Prophet Skeram", [15543] = "Princess Yauj", [15544] = "Vem", [15511] = "Lord Kri",
+    [15516] = "Battleguard Sartura", [15510] = "Fankriss the Unyielding", [15299] = "Viscidus",
+    [15509] = "Princess Huhuran", [15275] = "Emperor Vek'nilash", [15276] = "Emperor Vek'lor",
+    [15517] = "Ouro", [15727] = "C'Thun", [15589] = "Eye of C'Thun",
+    -- Naxxramas
+    [15956] = "Anub'Rekhan", [15953] = "Grand Widow Faerlina", [15952] = "Maexxna",
+    [15954] = "Noth the Plaguebringer", [15936] = "Heigan the Unclean", [16011] = "Loatheb",
+    [16061] = "Instructor Razuvious", [16060] = "Gothik the Harvester",
+    [16062] = "Highlord Mograine", [16063] = "Sir Zeliek", [16064] = "Thane Korth'azz", [16065] = "Lady Blaumeux",
+    [16028] = "Patchwerk", [15931] = "Grobbulus", [15932] = "Gluth",
+    [15928] = "Thaddius", [15929] = "Stalagg", [15930] = "Feugen",
+    [15989] = "Sapphiron", [15990] = "Kel'Thuzad",
+    -- Deadmines
+    [644] = "Rhahk'Zor", [642] = "Sneed's Shredder Pilot", [643] = "Sneed's Shredder", [1763] = "Gilnid",
+    [646] = "Mr. Smite", [647] = "Captain Greenskin", [645] = "Cookie", [639] = "Edwin VanCleef",
+    -- Blackrock Spire
+    [9816] = "Pyroguard Emberseer",
+    -- Dire Maul
+    [14327] = "Lethtendris", [13280] = "Hydrospawn", [11490] = "Zevrim Thornhoof", [11492] = "Alzzin the Wildshaper",
+    [11489] = "Tendris Warpwood", [11488] = "Illyanna Ravenoak", [11487] = "Magister Kalendris",
+    [11496] = "Immol'thar", [11486] = "Prince Tortheldrin", [14326] = "Guard Mol'dar", [14322] = "Stomper Kreeg",
+    [14324] = "Cho'Rush the Observer", [11501] = "King Gordok",
+    -- Stratholme
+    [10812] = "Grand Crusader Dathrohan", [10436] = "Baroness Anastari", [11032] = "Commander Malor",
+    [10558] = "Hearthsinger Forresten", [10811] = "Instructor Galford", [10440] = "Baron Rivendare",
+    [10435] = "Magistrate Barthilas", [10438] = "Maleki the Pallid", [10437] = "Nerub'enkan",
+    [11143] = "Postmaster Malown", [10439] = "Ramstein the Gorger", [10516] = "The Unforgiven",
+    [10808] = "Timmy the Cruel", [10997] = "Willey Hopebreaker",
+    -- Zul'Farrak
+    [8127] = "Antu'sul", [7267] = "Chief Ukorz Sandscalp", [7273] = "Gahz'rilla", [7796] = "Nekrum Gutchewer",
+    [7275] = "Shadowpriest Sezz'ziz", [7272] = "Theka the Martyr", [7795] = "Hydromancer Velratha",
+    [7271] = "Witch Doctor Zum'rah",
 }
 
 --------------------------------------------------------------------------------
