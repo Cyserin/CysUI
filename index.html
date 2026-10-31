@@ -355,13 +355,15 @@
     </div>
 
         <script>
+    let releases = [];
+
     async function loadChangelog() {
         try {
             const response = await fetch('https://api.github.com/repos/Cyserin/CysUI/releases');
+            if (!response.ok) throw new Error('Failed to fetch from GitHub API');
             const data = await response.json();
             
-            const releases = data.map(release => {
-                // Parse release body lines into feature/fix objects
+            releases = Array.isArray(data) ? data.map(release => {
                 const lines = (release.body || '').split('\n').filter(Boolean);
                 const changes = lines.map(line => {
                     const cleanLine = line.replace(/^[-*]\s*/, '');
@@ -379,116 +381,126 @@
                     date: new Date(release.published_at).toLocaleDateString(),
                     changes: changes.length > 0 ? changes : [{ type: 'feature', title: 'Release Update', desc: release.body || 'No description provided.' }]
                 };
-            });
+            }) : [];
 
-            document.getElementById('release-count').innerText = `Showing all ${releases.length} releases`;
-            renderReleaseCards(releases);
+            const countEl = document.getElementById('release-count') || document.getElementById('resultsCount');
+            if (countEl) countEl.innerText = `Showing all ${releases.length} releases`;
+            renderReleases();
         } catch (error) {
             console.error('Error loading releases from GitHub API:', error);
-            document.getElementById('changelog-container').innerHTML = `
-                <div class="p-6 text-center text-red-400 bg-neutral-900 rounded-xl border border-neutral-800">
-                    Failed to load releases from GitHub. Please check your internet connection.
-                </div>`;
+            const container = document.getElementById('changelogContainer');
+            if (container) {
+                container.innerHTML = `
+                    <div class="p-6 text-center text-red-400 bg-neutral-900 rounded-xl border border-neutral-800">
+                        Failed to load releases from GitHub. Please check your internet connection.
+                    </div>`;
+            }
         }
     }
 
-    window.addEventListener('DOMContentLoaded', loadChangelog);              
-        function renderReleases(filter = "") {
-            const container = document.getElementById('changelogContainer');
-            const noResults = document.getElementById('noResults');
-            container.innerHTML = "";
-            
-            const query = filter.toLowerCase();
-            let matchCount = 0;
+    function renderReleases(filter = '') {
+        const container = document.getElementById('changelogContainer');
+        const noResults = document.getElementById('noResults');
+        if (!container) return;
+        container.innerHTML = '';
 
-            releases.forEach((rel, index) => {
-                const matchesVersion = rel.version.toLowerCase().includes(query);
-                const matchesTitle = rel.title.toLowerCase().includes(query);
-                const matchingChanges = rel.changes.filter(c => 
-                    c.title.toLowerCase().includes(query) || c.desc.toLowerCase().includes(query)
-                );
+        const query = filter ? filter.toLowerCase() : '';
+        let matchCount = 0;
 
-                if (!query || matchesVersion || matchesTitle || matchingChanges.length > 0) {
-                    matchCount++;
-                    const card = document.createElement('div');
-                    card.className = `release-card ${index === 0 || query ? 'expanded' : ''}`;
-                    
-                    let changesHtml = '';
-                    const changesToDisplay = query && !matchesVersion && !matchesTitle ? matchingChanges : rel.changes;
-                    
-                    changesToDisplay.forEach(change => {
-                        changesHtml += `
-                            <div class="change-item">
-                                <div class="change-title">
-                                    <span class="tag-${change.type}">•</span> ${change.title}
-                                </div>
-                                <div class="change-desc">${change.desc}</div>
-                            </div>
-                        `;
-                    });
+        (releases || []).forEach((rel, index) => {
+            const matchesVersion = (rel.version || '').toLowerCase().includes(query);
+            const matchesTitle = (rel.title || '').toLowerCase().includes(query);
+            const matchingChanges = (rel.changes || []).filter(c => 
+                (c.title || '').toLowerCase().includes(query) || (c.desc || '').toLowerCase().includes(query)
+            );
 
-                    card.innerHTML = `
-                        <div class="release-header" onclick="toggleCard(this)">
-                            <div class="release-title-area">
-                                <span class="version-badge">${rel.version}</span>
-                                <span class="release-title">${rel.title}</span>
+            if (!query || matchesVersion || matchesTitle || matchingChanges.length > 0) {
+                matchCount++;
+                const card = document.createElement('div');
+                card.className = `release-card ${index === 0 || query ? 'expanded' : ''}`;
+
+                let changesHtml = '';
+                const changesToDisplay = query && !matchesVersion && !matchesTitle ? matchingChanges : rel.changes;
+
+                (changesToDisplay || []).forEach(change => {
+                    changesHtml += `
+                        <div class="change-item">
+                            <div class="change-title">
+                                <span class="tag-${change.type || 'feature'}">•</span> ${change.title || ''}
                             </div>
-                            <div class="release-actions" onclick="event.stopPropagation()">
-                                <button class="copy-discord-btn" onclick="copyDiscordMarkdown('${rel.version}', '${rel.title}', this)">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    Copy Discord
-                                </button>
-                                <svg class="chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
-                            </div>
-                        </div>
-                        <div class="release-body">
-                            ${changesHtml}
+                            <div class="change-desc">${change.desc || ''}</div>
                         </div>
                     `;
-                    container.appendChild(card);
-                }
-            });
+                });
 
-            if (matchCount === 0) {
-                noResults.style.display = 'block';
-                document.getElementById('resultsCount').innerText = 'No matching releases found';
-            } else {
-                noResults.style.display = 'none';
-                document.getElementById('resultsCount').innerText = query ? `Found matches in ${matchCount} releases` : `Showing all ${releases.length} releases`;
+                card.innerHTML = `
+                    <div class="release-header" onclick="toggleCard(this)">
+                        <div class="release-title-area">
+                            <span class="version-badge">${rel.version || ''}</span>
+                            <span class="release-title">${rel.title || ''}</span>
+                        </div>
+                        <div class="release-actions" onclick="event.stopPropagation()">
+                            <button class="copy-discord-btn" onclick="copyDiscordMarkdown('${rel.version || ''}', '${rel.title || ''}', this)">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                Copy Discord
+                            </button>
+                            <svg class="chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                        </div>
+                    </div>
+                    <div class="release-body">
+                        ${changesHtml}
+                    </div>
+                `;
+                container.appendChild(card);
             }
-        }
-
-        function toggleCard(headerEl) {
-            headerEl.parentElement.classList.toggle('expanded');
-        }
-
-        function expandAll() {
-            document.querySelectorAll('.release-card').forEach(c => c.classList.add('expanded'));
-        }
-
-        function collapseAll() {
-            document.querySelectorAll('.release-card').forEach(c => c.classList.remove('expanded'));
-        }
-
-        function copyDiscordMarkdown(version, title, btn) {
-            const rel = releases.find(r => r.version === version);
-            let text = `🏷️ **${rel.version} — ${rel.title}**\n`;
-            rel.changes.forEach(c => {
-                text += `• **${c.title}:** ${c.desc}\n`;
-            });
-
-            navigator.clipboard.writeText(text).then(() => {
-                const originalText = btn.innerHTML;
-                btn.innerHTML = '✓ Copied!';
-                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
-            });
-        }
-
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            renderReleases(e.target.value);
         });
 
-        renderReleases();
-    </script>
+        const resultsCountEl = document.getElementById('resultsCount') || document.getElementById('release-count');
+        if (matchCount === 0 && noResults) {
+            noResults.style.display = 'block';
+            if (resultsCountEl) resultsCountEl.innerText = 'No matching releases found';
+        } else if (noResults) {
+            noResults.style.display = 'none';
+            if (resultsCountEl) resultsCountEl.innerText = query ? `Found matches in ${matchCount} releases` : `Showing all ${releases.length} releases`;
+        }
+    }
+
+    function toggleCard(headerEl) {
+        headerEl.parentElement.classList.toggle('expanded');
+    }
+
+    function expandAll() {
+        document.querySelectorAll('.release-card').forEach(c => c.classList.add('expanded'));
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.release-card').forEach(c => c.classList.remove('expanded'));
+    }
+
+    function copyDiscordMarkdown(version, title, btn) {
+        const rel = releases.find(r => r.version === version);
+        if (!rel) return;
+        let text = `✨ **${rel.version} — ${rel.title}**\n`;
+        (rel.changes || []).forEach(c => {
+            text += `• **${c.title}:** ${c.desc}\n`;
+        });
+
+        navigator.clipboard.writeText(text).then(() => {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✓ Copied!';
+            setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        loadChangelog();
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                renderReleases(e.target.value);
+            });
+        }
+    });
+</script>
 </body>
 </html>
