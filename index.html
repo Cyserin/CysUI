@@ -354,18 +354,79 @@
         </footer>
     </div>
 
-    <script>
-        const releases = [
-            {
-                version: "v0.52.0-alpha & v0.51.0-alpha",
-                title: "Player Auras & Right-Click Cancel Fixes",
-                date: "Recent Update",
-                changes: [
-                    { type: "fix", title: "Secure Right-Click Cancellation", desc: "Replaced aura icon click handlers with secure macro attributes (type2 / macrotext2) executing /cancelaura. Right-clicking buffs now cancels them safely without combat taint or visibility loss." },
-                    { type: "system", title: "TOC & Module Restoration", desc: "Re-registered PlayerAuras.lua in CysUI.toc and fixed frame initialization to guarantee aura rendering and timer updating across all game sessions." }
-                ]
-            },
-            {
+        <script>
+    // Fetch and parse CHANGELOG.md dynamically on page load
+    async function loadChangelog() {
+        try {
+            const response = await fetch('CHANGELOG.md');
+            const markdown = await response.text();
+            parseAndRenderMarkdown(markdown);
+        } catch (error) {
+            console.error('Error loading changelog:', error);
+            document.getElementById('changelog-container').innerHTML = `
+                <div class="p-6 text-center text-red-400 bg-neutral-900 rounded-xl border border-neutral-800">
+                    Failed to load changelog. Please check that CHANGELOG.md exists in the root directory.
+                </div>`;
+        }
+    }
+
+    function parseAndRenderMarkdown(markdown) {
+        const container = document.getElementById('changelog-container');
+        container.innerHTML = '';
+
+        // Split markdown by release headers (assuming # vX.X.X format)
+        const rawReleases = markdown.split(/^#\s+/gm).filter(Boolean);
+        const releases = [];
+
+        rawReleases.forEach(block => {
+            const lines = block.trim().split('\n');
+            const headerLine = lines[0] || '';
+            
+            // Extract version and title from header (e.g., "v0.52.0-alpha - Player Auras")
+            let version = "Update";
+            let title = headerLine;
+            const dashIndex = headerLine.indexOf('-');
+            if (dashIndex !== -1) {
+                version = headerLine.substring(0, dashIndex).trim();
+                title = headerLine.substring(dashIndex + 1).trim();
+            }
+
+            const changes = [];
+            let currentChange = null;
+
+            // Parse bullet points
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith('- **') || line.startsWith('* **')) {
+                    const match = line.match(/^[-*]\s+\*\*([^*]+)\*\*:\s*(.*)/);
+                    if (match) {
+                        currentChange = {
+                            type: match[1].toLowerCase().includes('fix') ? 'fix' : 'feature',
+                            title: match[1],
+                            desc: match[2]
+                        };
+                        changes.push(currentChange);
+                    }
+                } else if (line.startsWith('-') || line.startsWith('*')) {
+                    if (currentChange) {
+                        currentChange.desc += " " + line.replace(/^[-*]\s+/, '');
+                    }
+                }
+            }
+
+            releases.push({ version, title, changes });
+        });
+
+        // Update release count badge
+        document.getElementById('release-count').innerText = `Showing all ${releases.length} releases`;
+
+        // Render release cards into the UI
+        renderReleaseCards(releases);
+    }
+
+    // Run on page load
+    window.addEventListener('DOMContentLoaded', loadChangelog);
+</script>
                 version: "v0.50.1-alpha",
                 title: "Nameplate & Tooltip Difficulty Scaling",
                 date: "Build Update",
