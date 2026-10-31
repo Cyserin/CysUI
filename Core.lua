@@ -285,6 +285,8 @@ SlashCmdList["CYSUI"] = function(msg)
                 CUI:Print("Mouse is on: " .. table.concat(chain, "  <  ") .. "  [" .. tostring(f.GetFrameStrata and f:GetFrameStrata()) .. " " .. tostring(f.GetFrameLevel and f:GetFrameLevel()) .. "]")
             end
         end)
+    elseif msg == "welcome" or msg == "tour" then
+        if CUI.ShowWelcome then CUI:ShowWelcome() end
     elseif msg == "layout" or msg == "move" or msg == "unlock" then
         if CUI.ToggleLayout then CUI:ToggleLayout() end
     elseif msg == "" or msg == "config" or msg == "options" then
@@ -301,9 +303,17 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.42.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.43.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.43.0", date = "2026-10-30",
+              added = {
+                  "Welcome window: shown once on first load. Step 1 matches the action bars to the game and hides Blizzard's XP bar, step 2 picks the border color, and the last step points to the settings. /cui welcome shows it again.",
+              },
+              improved = {
+                  "Layout mode: if the settings window was open when you started /cui layout (the Move and resize button), pressing Done brings it back.",
+              },
+            },
             { version = "0.42.0", date = "2026-10-30",
               added = {
                   "Heal Advisor (new, healers): /cuirank opens a window for Druids, Paladins, Priests and Shamans that reads your level, the heal ranks you know, bonus healing, Intellect, Spirit, mana and your healing talents, and names the rank to use for small hits, general healing, heavy damage, an emergency and group healing. It compares your ranks by heal per mana, counting the penalty on bonus healing for low-level and far-below-your-level ranks, so it never needs a health number (made for healing strangers) and only names spells you know. Talents are read from their own in-game tooltips: cast-time and healing-bonus talents change the numbers, mana-cost talents are already in the game's mana costs, and crit or chance talents are listed but not counted. Press Scan to save your stats and talents; the advice keeps using that scan until you scan again, and a popup says when learning a spell or leveling up changes the advice. Priest, Druid and Paladin are new and still to be checked in game. Find it under Class > General.",

@@ -602,8 +602,13 @@ function CUI:SetLayoutMode(on)
     panel:SetShown(on)
     self:ApplyLayoutFilter()
     if on then
+        -- remember whether the settings window was open so Done can bring it back
+        self.reopenConfig = CysUIConfigFrame and CysUIConfigFrame:IsShown() or false
         if CysUIConfigFrame then CysUIConfigFrame:Hide() end
         SelectMover(selected or self.moverOrder[1])
+    elseif self.reopenConfig then
+        self.reopenConfig = false
+        if CysUIConfigFrame and not InCombatLockdown() then CysUIConfigFrame:Show() end
     end
 end
 

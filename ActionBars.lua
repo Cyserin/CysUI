@@ -708,6 +708,21 @@ CUI:RegisterModule({
 --------------------------------------------------------------------------------
 -- Settings page
 --------------------------------------------------------------------------------
+-- show only the bars the game itself has switched on (used by the Action Bars page and the welcome window)
+function AB:MatchGameBars()
+    local ok, bl, br, right, right2 = pcall(function() return GetActionBarToggles() end)
+    if not ok then CUI:Print("Could not read the game's action bar settings.") return false end
+    local want = { bl = bl, br = br, right = right, right2 = right2, bar6 = false, bar7 = false, bar8 = false }
+    for key, on in pairs(want) do
+        if DB().bars[key] then
+            DB().bars[key].enabled = on and true or false
+            AB:ApplyEnabled(key)
+        end
+    end
+    CUI:Print("Action bars now match the game's own Action Bars settings. Turn any bar back on from the list on the left.")
+    return true
+end
+
 CUI:RegisterPage("Action Bars", function(page)
     local db = EnsureDB()
     local width = 480
@@ -789,17 +804,7 @@ CUI:RegisterPage("Action Bars", function(page)
     local match = W.Button(page, 330, 22, "Match the game's bars (turns off the rest)")
     match:SetPoint("TOPLEFT", 4, y - 38)
     match:SetScript("OnClick", function()
-        local ok, bl, br, right, right2 = pcall(function() return GetActionBarToggles() end)
-        if not ok then CUI:Print("Could not read the game's action bar settings.") return end
-        local want = { bl = bl, br = br, right = right, right2 = right2, bar6 = false, bar7 = false, bar8 = false }
-        for key, on in pairs(want) do
-            if DB().bars[key] then
-                DB().bars[key].enabled = on and true or false
-                AB:ApplyEnabled(key)
-            end
-        end
-        CUI:Print("Action bars now match the game's own Action Bars settings. Turn any bar back on from the list on the left.")
-        Refresh()
+        if AB:MatchGameBars() then Refresh() end
     end)
 
     local note = W.Notes(page, 4, y - 82, width, "These are still Blizzard's own buttons, so everything the game does with them keeps working.", {
