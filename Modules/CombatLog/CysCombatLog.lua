@@ -1135,6 +1135,10 @@ local function Redraw()
             b.label:SetWidth(176)
         else b:Hide() end
     end
+    for _, t in ipairs(tabBtns) do t:SetPrimary(t.tab == view.tab) end
+    win.modeBtn:SetShown(view.tab == "Player" and r ~= nil)
+    win.prevBtn:SetShown(view.tab == "Player" and r ~= nil)
+    win.nextBtn:SetShown(view.tab == "Player" and r ~= nil)
     if not r then
         for _, b in ipairs(segBtns) do b:Hide() end
         for _, row in ipairs(rowFrames) do row:Hide() end
@@ -1461,7 +1465,13 @@ local function BuildWindow()
     -- title strip over the right panel
     win.title = W.Text(win, 15, T.accent); win.title:SetPoint("TOPLEFT", SIDE + 16, -12)
     win.sub = W.Text(win, 11, T.desc); win.sub:SetPoint("TOPLEFT", SIDE + 16, -34)
-    local close = W.Button(win, 22, 22, "x"); close:SetPoint("TOPRIGHT", -8, -8)
+    -- close: a flat dark square that turns red under the mouse
+    local close = CreateFrame("Button", nil, win)
+    close:SetSize(22, 22); close:SetPoint("TOPRIGHT", -8, -8)
+    close.bg = W.Texture(close, "BACKGROUND", { 0.13, 0.135, 0.15, 1 }); close.bg:SetAllPoints()
+    close.x = W.Text(close, 13, T.desc, "CENTER"); close.x:SetPoint("CENTER", 0, 1); close.x:SetText("x")
+    close:SetScript("OnEnter", function(self) self.bg:SetColorTexture(0.55, 0.12, 0.12, 1); self.x:SetTextColor(1, 1, 1) end)
+    close:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0.13, 0.135, 0.15, 1); self.x:SetTextColor(T.desc[1], T.desc[2], T.desc[3]) end)
     close:SetScript("OnClick", function() win:Hide() end)
 
     -- left column: runs, then the fights of the chosen run
@@ -1498,6 +1508,12 @@ local function BuildWindow()
     win.prevBtn:SetScript("OnClick", function() CyclePlayer(-1) end)
     win.nextBtn = W.Button(win, 70, 20, "Next >"); win.nextBtn:SetPoint("LEFT", win.prevBtn, "RIGHT", 6, 0)
     win.nextBtn:SetScript("OnClick", function() CyclePlayer(1) end)
+    -- flat, translucent dark buttons with a one-pixel border
+    for _, fb in ipairs({ win.modeBtn, win.prevBtn, win.nextBtn }) do
+        fb.bg:SetColorTexture(0.1, 0.105, 0.12, 0.7)
+        W.SetBorder(fb.edges, PAL.border)
+        fb:SetScript("OnLeave", function(self) W.SetBorder(self.edges, PAL.border) end)
+    end
 
     -- column header strip
     local hb = W.Texture(win, "ARTWORK", PAL.head)

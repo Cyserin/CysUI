@@ -319,9 +319,17 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.50.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.50.1",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.50.1", date = "2026-10-31",
+              improved = {
+                  "Combat Log window: the close button is now a flat dark square that turns red when the mouse is over it, and the paging buttons are flat translucent dark with a thin border.",
+              },
+              fixed = {
+                  "Combat Log: the Showing damage / Prev / Next buttons only appear on the Player tab, also when there are no runs yet.",
+              },
+            },
             { version = "0.50.0", date = "2026-10-31",
               added = {
                   "Combat Log window redesigned: flat charcoal panels with a one-pixel border, a left column for runs and fights, and a right panel with the tabs, a column header strip and a table of status bars.",
