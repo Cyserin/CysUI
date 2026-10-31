@@ -12,7 +12,7 @@ name: Release
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]  # <-- This tells GitHub Actions to run when you push a v-tag
+    tags: [ 'v*.*.*', 'v*.*.*-*' ]
 
 permissions:
   contents: write
