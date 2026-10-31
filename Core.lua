@@ -319,9 +319,20 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.49.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.50.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.50.0", date = "2026-10-31",
+              added = {
+                  "Combat Log window redesigned: flat charcoal panels with a one-pixel border, a left column for runs and fights, and a right panel with the tabs, a column header strip and a table of status bars.",
+                  "The window can be resized with the grip in the bottom right corner, and it remembers its size and position. /cuilog reset puts it back in the middle.",
+                  "Every tab now has labelled columns and bars (shares of damage, healing, avoidable damage, uptimes, blocks, utility and deaths).",
+              },
+              improved = {
+                  "Tooltips now open beside the window instead of over the row, and use colors: white spell names, red damage numbers, green healing and dispels, gold interrupts and mechanics.",
+                  "The fights list in the left column shows as many fights as fit the window height.",
+              },
+            },
             { version = "0.49.0", date = "2026-10-31",
               added = {
                   "Combat Log boss list rebuilt for the 15-60 dungeons: Ragefire Chasm to Upper Blackrock Spire, Stratholme, Scholomance and Dire Maul, 190+ bosses matched against a Classic database. The raid bosses are gone.",

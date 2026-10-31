@@ -980,7 +980,19 @@ end
 --------------------------------------------------------------------------------
 -- Viewer
 --------------------------------------------------------------------------------
-local ROWS, ROWH = 20, 22
+local MAXROWS, ROWH = 40, 22
+local SIDE = 206   -- width of the left column
+-- flat charcoal palette
+local PAL = {
+    bg = { 0.085, 0.09, 0.10, 0.97 }, side = { 0.065, 0.07, 0.08, 1 }, head = { 0.13, 0.135, 0.15, 1 },
+    border = { 0.27, 0.28, 0.31, 1 }, stripe = { 1, 1, 1, 0.025 }, hover = { 1, 1, 1, 0.07 },
+}
+local BAR_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
+-- tooltip colours: spell names white, damage red, healing green, dispels green, headings gold
+local C_WHITE, C_DMG, C_HEAL, C_GOLD = { 1, 1, 1 }, { 1, 0.4, 0.4 }, { 0.4, 1, 0.4 }, { 1, 0.82, 0.2 }
+local function TipLine(tt, left, right, rc)
+    tt:AddDoubleLine(left, right, 1, 1, 1, rc[1], rc[2], rc[3])
+end
 local TABS = { "Damage", "Healing", "Taken", "Player", "Deaths", "Mistakes", "Uptimes", "Utility", "Class" }
 local view = { run = 1, seg = "all", tab = "Damage", player = nil, mode = "damage", offset = 0, segOffset = 0 }
 
@@ -1053,21 +1065,22 @@ local function SetRow(row, cols, ratio, r, g, b, tip)
         local fs = row.cols[i]
         if cols[i] ~= nil then fs:SetText(cols[i]); fs:Show() else fs:Hide() end
     end
-    row.bar:SetColorTexture(r or 0.5, g or 0.5, b or 0.5, 0.35)
-    row.bar:SetWidth(max(1, (row:GetWidth()) * (ratio or 0)))
+    row.bar:SetVertexColor(r or 0.5, g or 0.5, b or 0.5, 0.55)
+    row.bar:SetWidth(max(1, (win.rowW or 600) * min(1, ratio or 0)))
+    row.bar:SetShown((ratio or 0) > 0)
     row.tip = tip
 end
 
 local function ColumnsFor(tab)
-    if tab == "Damage" then return { { "Player", 8, 170, "LEFT" }, { "Damage", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "DPS", 320, 70, "RIGHT" }, { "Crit %", 395, 60, "RIGHT" }, { "Casts", 460, 60, "RIGHT" } }
-    elseif tab == "Healing" then return { { "Player", 8, 170, "LEFT" }, { "Healing", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "HPS", 320, 70, "RIGHT" }, { "Overheal %", 395, 80, "RIGHT" }, { "Casts", 480, 60, "RIGHT" } }
-    elseif tab == "Taken" then return { { "Player", 8, 170, "LEFT" }, { "Taken", 180, 80, "RIGHT" }, { "%", 265, 50, "RIGHT" }, { "DTPS", 320, 70, "RIGHT" }, { "Deaths", 395, 60, "RIGHT" } }
-    elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "%", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
+    if tab == "Damage" then return { { "Player Name", 8, 170, "LEFT" }, { "Damage", 180, 80, "RIGHT" }, { "Share", 265, 50, "RIGHT" }, { "DPS", 320, 70, "RIGHT" }, { "Crit %", 395, 60, "RIGHT" }, { "Casts", 460, 60, "RIGHT" } }
+    elseif tab == "Healing" then return { { "Player Name", 8, 170, "LEFT" }, { "Healing", 180, 80, "RIGHT" }, { "Share", 265, 50, "RIGHT" }, { "HPS", 320, 70, "RIGHT" }, { "Overheal %", 395, 80, "RIGHT" }, { "Casts", 480, 60, "RIGHT" } }
+    elseif tab == "Taken" then return { { "Player Name", 8, 170, "LEFT" }, { "Taken", 180, 80, "RIGHT" }, { "Share", 265, 50, "RIGHT" }, { "DTPS", 320, 70, "RIGHT" }, { "Deaths", 395, 60, "RIGHT" } }
+    elseif tab == "Player" then return { { "Ability", 8, 220, "LEFT" }, { "Total", 230, 80, "RIGHT" }, { "Share", 315, 50, "RIGHT" }, { "Casts", 370, 55, "RIGHT" }, { "Per min", 430, 60, "RIGHT" }, { "Avg", 495, 65, "RIGHT" }, { "Crit %", 565, 55, "RIGHT" } }
     elseif tab == "Deaths" then return { { "Time", 8, 55, "LEFT" }, { "Player", 68, 120, "LEFT" }, { "Killing blow", 195, 220, "LEFT" }, { "Overkill", 420, 65, "RIGHT" }, { "Taken", 490, 70, "RIGHT" }, { "Healed", 565, 70, "RIGHT" } }
-    elseif tab == "Mistakes" then return { { "Player", 8, 170, "LEFT" }, { "Avoidable dmg", 180, 95, "RIGHT" }, { "Hits", 280, 50, "RIGHT" }, { "% of taken", 335, 80, "RIGHT" }, { "Mechanics hit", 420, 100, "RIGHT" } }
-    elseif tab == "Class" then return { { "Player", 8, 150, "LEFT" }, { "What", 165, 230, "LEFT" }, { "Value", 400, 90, "RIGHT" }, { "Detail", 495, 140, "RIGHT" } }
-    elseif tab == "Uptimes" then return { { "What", 8, 380, "LEFT" }, { "Uptime", 395, 70, "RIGHT" }, { "Seconds", 470, 70, "RIGHT" } }
-    else return { { "Player", 8, 170, "LEFT" }, { "Interrupts", 180, 75, "RIGHT" }, { "Dispels", 260, 60, "RIGHT" }, { "Taunts", 325, 55, "RIGHT" }, { "Landed", 385, 60, "RIGHT" }, { "Missed", 450, 60, "RIGHT" }, { "Deaths", 515, 55, "RIGHT" } } end
+    elseif tab == "Mistakes" then return { { "Player Name", 8, 170, "LEFT" }, { "Avoidable Dmg", 180, 95, "RIGHT" }, { "Total Hits", 280, 60, "RIGHT" }, { "Share of Taken", 345, 90, "RIGHT" }, { "Mechanics Hit", 440, 100, "RIGHT" } }
+    elseif tab == "Class" then return { { "Player Name", 8, 150, "LEFT" }, { "Ability", 165, 230, "LEFT" }, { "Total", 400, 90, "RIGHT" }, { "Detail", 495, 170, "RIGHT" } }
+    elseif tab == "Uptimes" then return { { "Aura / Totem", 8, 380, "LEFT" }, { "Uptime", 395, 70, "RIGHT" }, { "Seconds", 470, 70, "RIGHT" } }
+    else return { { "Player Name", 8, 170, "LEFT" }, { "Interrupts", 180, 75, "RIGHT" }, { "Dispels", 260, 60, "RIGHT" }, { "Taunts", 325, 55, "RIGHT" }, { "Landed", 385, 60, "RIGHT" }, { "Missed", 450, 60, "RIGHT" }, { "Deaths", 515, 55, "RIGHT" } } end
 end
 
 local function Header(tab)
@@ -1095,15 +1108,16 @@ end
 
 local function FillRows(entries)
     local total = #entries
+    local vis = win.rowCount or 20
     win.total = total
-    view.offset = max(0, min(view.offset, max(0, total - ROWS)))
-    for i = 1, ROWS do
+    view.offset = max(0, min(view.offset, max(0, total - vis)))
+    for i = 1, MAXROWS do
         local e = entries[view.offset + i]
         local row = rowFrames[i]
-        if e then SetRow(row, e.cols, e.ratio, e.r, e.g, e.b, e.tip); row.onClick = e.onClick
+        if e and i <= vis then SetRow(row, e.cols, e.ratio, e.r, e.g, e.b, e.tip); row.onClick = e.onClick
         else row:Hide() end
     end
-    win.scrollText:SetText(total > ROWS and string.format("%d-%d of %d  (mouse wheel)", view.offset + 1, min(total, view.offset + ROWS), total) or "")
+    win.scrollText:SetText(total > vis and string.format("%d-%d of %d  (mouse wheel)", view.offset + 1, min(total, view.offset + vis), total) or "")
 end
 
 local function Redraw()
@@ -1135,10 +1149,11 @@ local function Redraw()
     for i, b in ipairs(r.bosses) do
         segs[#segs + 1] = { i, string.format("%s #%d  %s  %s", b.name, b.attempt, b.result == "kill" and "Kill" or "Wipe", Clock(b.dur)) }
     end
-    view.segOffset = max(0, min(view.segOffset, max(0, #segs - #segBtns)))
+    local segVis = win.segVisible or 12
+    view.segOffset = max(0, min(view.segOffset, max(0, #segs - segVis)))
     for i, b in ipairs(segBtns) do
         local sg = segs[view.segOffset + i]
-        if sg then
+        if sg and i <= segVis then
             b:SetLabel(sg[2]); b:SetPrimary(view.seg == sg[1]); b.seg = sg[1]; b:Show(); b.label:SetWidth(176)
         else b:Hide() end
     end
@@ -1184,7 +1199,7 @@ local function Redraw()
                         for from, amt in pairs(p.takenFrom) do sp[#sp + 1] = { from, amt } end
                     end
                     table.sort(sp, function(a, b) return a[2] > b[2] end)
-                    for i = 1, min(8, #sp) do tt:AddDoubleLine(sp[i][1], Fmt(sp[i][2]), 1, 1, 1, 1, 0.85, 0.2) end
+                    for i = 1, min(8, #sp) do TipLine(tt, sp[i][1], Fmt(sp[i][2]), tab == "Healing" and C_HEAL or C_DMG) end
                     tt:AddLine("Click for the full ability table", 0.6, 0.6, 0.6)
                 end }
         end
@@ -1213,9 +1228,11 @@ local function Redraw()
             end
         end
     elseif tab == "Deaths" then
+        local topT = 1
+        for _, d in ipairs(r.deaths) do topT = max(topT, d.taken or 0) end
         for i, d in ipairs(r.deaths) do
             local rr, gg, bb = ClassRGB(d.class)
-            entries[#entries + 1] = { ratio = 0.0, r = rr, g = gg, b = bb,
+            entries[#entries + 1] = { ratio = (d.taken or 0) / topT, r = rr, g = gg, b = bb,
                 cols = { Clock(d.t), d.name or "?", (d.killer or "?") .. ": " .. (d.spell or "?"), d.overkill and Fmt(d.overkill) or "-", Fmt(d.taken), Fmt(d.healed) },
                 tip = function(tt)
                     tt:AddLine((d.name or "?") .. " died at " .. Clock(d.t), rr, gg, bb)
@@ -1236,15 +1253,15 @@ local function Redraw()
         table.sort(list2, function(a, b) return ((a.avoidDamage or 0) + (a.mechHits or 0) * 1e6) > ((b.avoidDamage or 0) + (b.mechHits or 0) * 1e6) end)
         for _, p in ipairs(list2) do
             local rr, gg, bb = ClassRGB(p.class)
-            entries[#entries + 1] = { ratio = (p.avoidDamage or 0) / max(top, 1), r = rr, g = gg, b = bb,
+            entries[#entries + 1] = { ratio = top > 0 and (p.avoidDamage or 0) / top or min(1, (p.mechHits or 0) / 5), r = rr, g = gg, b = bb,
                 cols = { p.name, Fmt(p.avoidDamage or 0), tostring(p.avoidHits or 0), string.format("%.0f", (p.avoidDamage or 0) / max(p.taken, 1) * 100), tostring(p.mechHits or 0) },
                 tip = function(tt)
                     tt:AddLine(p.name .. " - mistakes", rr, gg, bb)
                     local sp = {}
                     for nm, amt in pairs(p.avoidSpells or {}) do sp[#sp + 1] = { nm, Fmt(amt) } end
                     table.sort(sp, function(a, b) return a[1] < b[1] end)
-                    for _, e in ipairs(sp) do tt:AddDoubleLine("Avoidable: " .. e[1], e[2], 1, 1, 1, 1, 0.85, 0.2) end
-                    for nm, n in pairs(p.hitBy or {}) do tt:AddDoubleLine(nm, n .. "x", 1, 1, 1, 1, 0.85, 0.2) end
+                    for _, e in ipairs(sp) do TipLine(tt, "Avoidable: " .. e[1], e[2], C_DMG) end
+                    for nm, n in pairs(p.hitBy or {}) do TipLine(tt, nm, n .. "x", C_GOLD) end
                 end }
         end
         for label, n in pairs(r.mechCasts or {}) do
@@ -1259,35 +1276,38 @@ local function Redraw()
         table.sort(names, function(a, b) return a.name < b.name end)
         for _, p in ipairs(names) do
             local rr, gg, bb = ClassRGB(p.class)
-            local function Row(what, value, detail)
-                entries[#entries + 1] = { cols = { p.name, what, value, detail or "" }, ratio = 0, r = rr, g = gg, b = bb }
+            local function Row(what, value, detail, num)
+                entries[#entries + 1] = { cols = { p.name, what, value, detail or "" }, ratio = 0, num = num or 0, what = what, r = rr, g = gg, b = bb }
             end
             local sp = p.spells or {}
             if (p.blocks or 0) > 0 then
-                Row("Attacks blocked (shield)", tostring(p.blocks), string.format("of %d melee swings, %s blocked", p.swingsIn or 0, Fmt(p.blockedDmg)))
+                Row("Attacks blocked (shield)", tostring(p.blocks), string.format("of %d melee swings, %s blocked", p.swingsIn or 0, Fmt(p.blockedDmg)), p.blocks)
             end
             local br = sp["Bloodrage"]
-            if br and br.casts > 0 then Row("Bloodrage casts", tostring(br.casts), string.format("%.1f per min", br.casts / (dur / 60))) end
+            if br and br.casts > 0 then Row("Bloodrage casts", tostring(br.casts), string.format("%.1f per min", br.casts / (dur / 60)), br.casts) end
             local es = sp["Earth Shock"]
             if es and (es.casts > 0 or es.damage > 0) then
-                Row("Earth Shock damage", Fmt(es.damage), string.format("%d casts, avg %s", es.casts, es.hits > 0 and Fmt(es.damage / es.hits) or "-"))
+                Row("Earth Shock damage", Fmt(es.damage), string.format("%d casts, avg %s", es.casts, es.hits > 0 and Fmt(es.damage / es.hits) or "-"), es.damage)
             end
             if (p.rockDamage or 0) > 0 then
                 local melee = sp["Melee"]
                 local pct = melee and melee.damage > 0 and (p.rockDamage / melee.damage * 100) or 0
-                Row("Melee damage with Rockbiter", Fmt(p.rockDamage), string.format("%.0f%% of melee, %s", pct, Clock((p.uptime or {})["Rockbiter Weapon"] or 0)))
+                Row("Melee damage with Rockbiter", Fmt(p.rockDamage), string.format("%.0f%% of melee, %s", pct, Clock((p.uptime or {})["Rockbiter Weapon"] or 0)), p.rockDamage)
             end
             local st = sp["Searing Totem"]
             local sb = sp["Totem: Searing Bolt"]
             if (st and st.casts > 0) or sb then
-                Row("Searing Totem", st and (st.casts .. " casts") or "-", sb and (Fmt(sb.damage) .. " damage") or "no damage seen")
+                Row("Searing Totem", st and (st.casts .. " casts") or "-", sb and (Fmt(sb.damage) .. " damage") or "no damage seen", sb and sb.damage or 0)
             end
             local fn = sp["Fire Nova Totem"]
             local fd = sp["Totem: Fire Nova"]
             if (fn and fn.casts > 0) or fd then
-                Row("Fire Nova Totem", fn and (fn.casts .. " casts") or "-", fd and (Fmt(fd.damage) .. " damage") or "no damage seen")
+                Row("Fire Nova Totem", fn and (fn.casts .. " casts") or "-", fd and (Fmt(fd.damage) .. " damage") or "no damage seen", fd and fd.damage or 0)
             end
         end
+        local topBy = {}
+        for _, e in ipairs(entries) do topBy[e.what] = max(topBy[e.what] or 1, e.num or 0) end
+        for _, e in ipairs(entries) do e.ratio = (e.num or 0) / topBy[e.what] end
         if #entries == 0 then
             entries[1] = { cols = { "Nothing yet. Shows shield blocks, Bloodrage, Earth Shock, Rockbiter melee and Searing / Fire Nova Totems." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
         end
@@ -1329,23 +1349,25 @@ local function Redraw()
             if p.interrupts > 0 or p.dispels > 0 or (p.taunts or 0) > 0 or (p.tauntsLanded or 0) > 0 or (p.tauntsMissed or 0) > 0 or p.deaths > 0 then list2[#list2 + 1] = p end
         end
         table.sort(list2, function(a, b) return (a.interrupts + a.dispels) > (b.interrupts + b.dispels) end)
+        local topU = 1
+        for _, p in ipairs(list2) do topU = max(topU, p.interrupts + p.dispels + (p.tauntsLanded or 0)) end
         for _, p in ipairs(list2) do
             local rr, gg, bb = ClassRGB(p.class)
-            entries[#entries + 1] = { ratio = 0.0, r = rr, g = gg, b = bb,
+            entries[#entries + 1] = { ratio = (p.interrupts + p.dispels + (p.tauntsLanded or 0)) / max(1, topU), r = rr, g = gg, b = bb,
                 cols = { p.name, tostring(p.interrupts), tostring(p.dispels), tostring(p.taunts or 0), tostring(p.tauntsLanded or 0), tostring(p.tauntsMissed or 0), tostring(p.deaths) },
                 tip = function(tt)
                     tt:AddLine(p.name, rr, gg, bb)
-                    local function List(title, map)
+                    local function List(title, map, color)
                         if not map or not next(map) then return end
-                        tt:AddLine(title, 1, 0.85, 0.2)
+                        tt:AddLine(title, 1, 0.82, 0.2)
                         local l = {}
                         for k, v in pairs(map) do l[#l + 1] = { k, v } end
                         table.sort(l, function(a, b) return a[2] > b[2] end)
-                        for i = 1, min(8, #l) do tt:AddDoubleLine(l[i][1], tostring(l[i][2]), 1, 1, 1, 1, 1, 1) end
+                        for i = 1, min(8, #l) do TipLine(tt, l[i][1], tostring(l[i][2]), color or C_WHITE) end
                     end
-                    List("Interrupted", p.stopped)
-                    List("Dispelled", p.dispelled)
-                    List("Taunt misses", p.tauntMiss)
+                    List("Interrupted", p.stopped, C_GOLD)
+                    List("Dispelled", p.dispelled, C_HEAL)
+                    List("Taunt misses", p.tauntMiss, C_DMG)
                 end }
         end
     end
@@ -1376,99 +1398,159 @@ local function CyclePlayer(dir)
     if l[1] then view.player = l[1].guid; Redraw() end
 end
 
+local function SaveWindow()
+    if not win then return end
+    local db = DB()
+    local point, _, rel, x, y = win:GetPoint()
+    db.window = { w = floor(win:GetWidth() + 0.5), h = floor(win:GetHeight() + 0.5), point = point, rel = rel, x = x, y = y }
+end
+
+-- called whenever the window changes size: how many rows and fight buttons fit
+local function Layout()
+    if not win then return end
+    local w, h = win:GetWidth(), win:GetHeight()
+    win.rowW = w - (SIDE + 16) - 14
+    win.rowCount = max(5, min(MAXROWS, floor((h - 176) / ROWH)))
+    win.segVisible = max(4, min(#segBtns, floor((h - 300) / 22)))
+    win.sub:SetWidth(w - 60)
+    Redraw()
+end
+
+local function ShowTip(row)
+    if not row.tip then return end
+    GameTooltip:SetOwner(win, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    if (win:GetRight() or 0) + 330 < (UIParent:GetRight() or 10000) then
+        GameTooltip:SetPoint("TOPLEFT", win, "TOPRIGHT", 6, 0)
+    else
+        GameTooltip:SetPoint("TOPRIGHT", win, "TOPLEFT", -6, 0)
+    end
+    GameTooltip:ClearLines()
+    row.tip(GameTooltip)
+    GameTooltip:Show()
+end
+
 local function BuildWindow()
+    local saved = DB().window
     win = CreateFrame("Frame", "CysLogWindow", UIParent)
     CL.win = win
-    win:SetSize(880, 580)
-    win:SetPoint("CENTER")
+    win:SetSize(saved and saved.w or 900, saved and saved.h or 600)
+    if saved and saved.point then
+        win:SetPoint(saved.point, UIParent, saved.rel or saved.point, saved.x or 0, saved.y or 0)
+    else
+        win:SetPoint("CENTER")
+    end
     win:SetFrameStrata("HIGH")
     win:SetMovable(true); win:EnableMouse(true); win:SetClampedToScreen(true)
+    win:SetResizable(true)
+    if win.SetResizeBounds then win:SetResizeBounds(880, 460, 1400, 940)
+    elseif win.SetMinResize then win:SetMinResize(880, 460) end
     win:RegisterForDrag("LeftButton")
     win:SetScript("OnDragStart", win.StartMoving)
-    win:SetScript("OnDragStop", win.StopMovingOrSizing)
-    local bg = W.Texture(win, "BACKGROUND", T.bg); bg:SetAllPoints()
-    W.Border(win, 1, T.border, "BORDER")
+    win:SetScript("OnDragStop", function() win:StopMovingOrSizing(); SaveWindow() end)
+
+    -- flat charcoal panels, one-pixel border
+    local bg = W.Texture(win, "BACKGROUND", PAL.bg); bg:SetAllPoints()
+    local side = W.Texture(win, "BACKGROUND", PAL.side, 1)
+    side:SetPoint("TOPLEFT", 1, -1); side:SetPoint("BOTTOMLEFT", 1, 1); side:SetWidth(SIDE)
+    local div = W.Texture(win, "BORDER", PAL.border)
+    div:SetWidth(1); div:SetPoint("TOPLEFT", SIDE + 1, -1); div:SetPoint("BOTTOMLEFT", SIDE + 1, 1)
+    W.Border(win, 1, PAL.border, "BORDER")
     tinsert(UISpecialFrames, "CysLogWindow")
 
-    win.title = W.Text(win, 15, T.accent); win.title:SetPoint("TOPLEFT", 14, -12)
-    win.sub = W.Text(win, 11, T.desc); win.sub:SetPoint("TOPLEFT", 14, -34)
-    win.sub:SetWidth(840)
+    -- title strip over the right panel
+    win.title = W.Text(win, 15, T.accent); win.title:SetPoint("TOPLEFT", SIDE + 16, -12)
+    win.sub = W.Text(win, 11, T.desc); win.sub:SetPoint("TOPLEFT", SIDE + 16, -34)
     local close = W.Button(win, 22, 22, "x"); close:SetPoint("TOPRIGHT", -8, -8)
     close:SetScript("OnClick", function() win:Hide() end)
 
-    -- left column
-    local lh = W.Text(win, 11, T.accent); lh:SetPoint("TOPLEFT", 14, -62); lh:SetText("Runs")
+    -- left column: runs, then the fights of the chosen run
+    local brand = W.Text(win, 13, T.accent); brand:SetPoint("TOPLEFT", 14, -12); brand:SetText("Cys's logs")
+    local lh = W.Text(win, 10, T.dim); lh:SetPoint("TOPLEFT", 14, -42); lh:SetText("RUNS")
     for i = 1, 8 do
-        local b = W.Button(win, 190, 20, "")
-        b:SetPoint("TOPLEFT", 14, -78 - (i - 1) * 22)
+        local b = W.Button(win, SIDE - 20, 20, "")
+        b:SetPoint("TOPLEFT", 12, -56 - (i - 1) * 22)
         b:SetScript("OnClick", function() view.run = i; view.seg = "all"; view.offset = 0; view.segOffset = 0; view.player = nil; Redraw() end)
         runBtns[i] = b
     end
-    local sh = W.Text(win, 11, T.accent); sh:SetPoint("TOPLEFT", 14, -262); sh:SetText("Fights  (mouse wheel here)")
-    for i = 1, 12 do
-        local b = W.Button(win, 190, 20, "")
-        b:SetPoint("TOPLEFT", 14, -278 - (i - 1) * 22)
+    local sh = W.Text(win, 10, T.dim); sh:SetPoint("TOPLEFT", 14, -244); sh:SetText("FIGHTS  (mouse wheel to scroll)")
+    for i = 1, 30 do
+        local b = W.Button(win, SIDE - 20, 20, "")
+        b:SetPoint("TOPLEFT", 12, -258 - (i - 1) * 22)
         b:SetScript("OnClick", function(s) view.seg = s.seg; view.offset = 0; Redraw() end)
-        segBtns[i] = b
-    end
-    for _, b in ipairs(segBtns) do
         b:EnableMouseWheel(true)
         b:SetScript("OnMouseWheel", function(_, d) view.segOffset = max(0, view.segOffset - d); Redraw() end)
+        segBtns[i] = b
     end
 
-    -- tabs
+    -- tabs across the top of the right panel
     for i, name in ipairs(TABS) do
-        local t = W.Button(win, 70, 22, name)
-        t:SetPoint("TOPLEFT", 222 + (i - 1) * 72, -62)
+        local t = W.Button(win, 72, 22, name)
+        t:SetPoint("TOPLEFT", SIDE + 16 + (i - 1) * 75, -58)
         t.tab = name
         t:SetScript("OnClick", function() view.tab = name; view.offset = 0; Redraw() end)
         tabBtns[i] = t
     end
     win.modeBtn = W.Button(win, 130, 20, "Showing damage")
-    win.modeBtn:SetPoint("TOPLEFT", 222, -90)
+    win.modeBtn:SetPoint("TOPLEFT", SIDE + 16, -88)
     win.modeBtn:SetScript("OnClick", function() view.mode = view.mode == "damage" and "healing" or "damage"; view.offset = 0; Redraw() end)
     win.prevBtn = W.Button(win, 70, 20, "< Prev"); win.prevBtn:SetPoint("LEFT", win.modeBtn, "RIGHT", 8, 0)
     win.prevBtn:SetScript("OnClick", function() CyclePlayer(-1) end)
     win.nextBtn = W.Button(win, 70, 20, "Next >"); win.nextBtn:SetPoint("LEFT", win.prevBtn, "RIGHT", 6, 0)
     win.nextBtn:SetScript("OnClick", function() CyclePlayer(1) end)
 
-    -- table
+    -- column header strip
+    local hb = W.Texture(win, "ARTWORK", PAL.head)
+    hb:SetPoint("TOPLEFT", SIDE + 16, -114); hb:SetPoint("TOPRIGHT", -14, -114); hb:SetHeight(22)
     win.headRow = CreateFrame("Frame", nil, win)
-    win.headRow:SetPoint("TOPLEFT", 222, -116); win.headRow:SetSize(640, 18)
+    win.headRow:SetPoint("TOPLEFT", SIDE + 16, -114); win.headRow:SetPoint("TOPRIGHT", -14, -114); win.headRow:SetHeight(22)
     win.heads = {}
     for i = 1, 7 do
-        local h = W.Text(win.headRow, 11, T.accent)
-        win.heads[i] = h
+        local hfs = W.Text(win.headRow, 11, T.accent)
+        win.heads[i] = hfs
     end
-    local rule = W.Texture(win, "ARTWORK", T.line); rule:SetHeight(1)
-    rule:SetPoint("TOPLEFT", 222, -136); rule:SetPoint("TOPRIGHT", -16, -136)
 
-    for i = 1, ROWS do
+    for i = 1, MAXROWS do
         local row = CreateFrame("Button", nil, win)
-        row:SetSize(642, ROWH - 2)
-        row:SetPoint("TOPLEFT", 222, -140 - (i - 1) * ROWH)
-        row.bar = row:CreateTexture(nil, "BACKGROUND")
+        row:SetHeight(ROWH - 2)
+        row:SetPoint("TOPLEFT", SIDE + 16, -138 - (i - 1) * ROWH)
+        row:SetPoint("TOPRIGHT", -14, -138 - (i - 1) * ROWH)
+        if i % 2 == 0 then local st = W.Texture(row, "BACKGROUND", PAL.stripe); st:SetAllPoints() end
+        row.bar = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+        row.bar:SetTexture(BAR_TEX)
         row.bar:SetPoint("TOPLEFT"); row.bar:SetPoint("BOTTOMLEFT")
+        row.hl = W.Texture(row, "HIGHLIGHT", PAL.hover); row.hl:SetAllPoints()
         row.cols = {}
         for c = 1, 7 do
             local fs = W.Text(row, 12, T.text)
             fs:SetPoint("LEFT", 8, 0)
             row.cols[c] = fs
         end
-        row:SetScript("OnClick", function(s) if s.onClick then s.onClick() end end)
-        row:SetScript("OnEnter", function(s)
-            if s.tip then GameTooltip:SetOwner(s, "ANCHOR_RIGHT"); GameTooltip:ClearLines(); s.tip(GameTooltip); GameTooltip:Show() end
-        end)
+        row:SetScript("OnClick", function(self) if self.onClick then self.onClick() end end)
+        row:SetScript("OnEnter", ShowTip)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)
         row:Hide()
         rowFrames[i] = row
     end
-    win.scrollText = W.Text(win, 10, T.dim); win.scrollText:SetPoint("BOTTOMRIGHT", -16, 10)
+    win.scrollText = W.Text(win, 10, T.dim); win.scrollText:SetPoint("BOTTOMLEFT", SIDE + 16, 10)
+
+    -- resize grip, bottom right
+    local grip = CreateFrame("Button", nil, win)
+    grip:SetSize(16, 16); grip:SetPoint("BOTTOMRIGHT", -3, 3)
+    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    grip:SetScript("OnMouseDown", function() win:StartSizing("BOTTOMRIGHT") end)
+    grip:SetScript("OnMouseUp", function() win:StopMovingOrSizing(); SaveWindow(); Layout() end)
+
     win:EnableMouseWheel(true)
     win:SetScript("OnMouseWheel", function(_, d) view.offset = max(0, view.offset - d * 3); Redraw() end)
-    win:SetScript("OnShow", Redraw)
+    win:SetScript("OnSizeChanged", Layout)
+    win:SetScript("OnShow", Layout)
     win:Hide()
 end
+
+function CL.SetTab(tab) view.tab = tab; view.offset = 0; Redraw() end
 
 function CL.Toggle()
     DB()
@@ -1491,8 +1573,12 @@ SlashCmdList["CYSLOG"] = function(msg)
             if av[id] then av[id] = nil; CUI:Print("Cys's logs: spell " .. id .. " is no longer counted as avoidable.")
             else av[id] = true; CUI:Print("Cys's logs: spell " .. id .. " now counts as avoidable damage.") end
         end
+    elseif msg == "reset" then
+        DB().window = nil
+        if win then win:ClearAllPoints(); win:SetPoint("CENTER"); win:SetSize(900, 600) end
+        CUI:Print("Cys's logs: window put back in the middle at its default size.")
     elseif msg == "clear" then CL.Clear()
-    elseif msg == "help" then CUI:Print("/cuilog (window)  /cuilog start  /cuilog end  /cuilog boss (mark or unmark your target as a boss)  /cuilog avoid <spell id>  /cuilog clear")
+    elseif msg == "help" then CUI:Print("/cuilog (window)  /cuilog start  /cuilog end  /cuilog boss (mark or unmark your target as a boss)  /cuilog avoid <spell id>  /cuilog reset (window)  /cuilog clear")
     else CL.Toggle() end
 end
 
