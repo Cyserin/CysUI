@@ -57,6 +57,14 @@ jobs:
           (cd build && zip -rq "../CysUI-v$v.zip" CysUI)
           ls -l "CysUI-v$v.zip"
 
+          - name: Upload zip to GitHub Release
+            uses: softprops/action-gh-release@v2
+            with:
+              files: CysUI-v*.zip
+              tag_name: ${{ steps.ver.outputs.tag }}
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Stamp version in index.html
         run: |
          VERSION="${{ steps.ver.outputs.version }}"
