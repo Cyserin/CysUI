@@ -1293,13 +1293,13 @@ local function Redraw()
             if (p.blocks or 0) > 0 then
                 local sw = max(p.swingsIn or 0, p.blocks)
                 Row("Shield blocks", p.blocks .. (p.blocks == 1 and " block" or " blocks"),
-                    string.format("%.0f%% of %d melee hits blocked  -  %s damage stopped", p.blocks / sw * 100, sw, Fmt(p.blockedDmg)), p.blocks, p.blocks / sw)
+                    string.format("%.0f%% of %d hits blocked, %s stopped", p.blocks / sw * 100, sw, Fmt(p.blockedDmg)), p.blocks, p.blocks / sw)
             end
             local br = sp["Bloodrage"]
             if br and br.casts > 0 then Row("Bloodrage casts", tostring(br.casts), string.format("%.1f per min", br.casts / (dur / 60)), br.casts) end
             local es = sp["Earth Shock"]
             if es and (es.casts > 0 or es.damage > 0) then
-                Row("Earth Shock damage", Fmt(es.damage), string.format("%d casts, avg %s", es.casts, es.hits > 0 and Fmt(es.damage / es.hits) or "-"), es.damage)
+                Row("Earth Shock damage", Fmt(es.damage), string.format("%d %s, avg %s", es.casts, es.casts == 1 and "cast" or "casts", es.hits > 0 and Fmt(es.damage / es.hits) or "-"), es.damage)
             end
             if (p.rockDamage or 0) > 0 then
                 local melee = sp["Melee"]
@@ -1325,9 +1325,11 @@ local function Redraw()
                 Row("Fire Nova Totem", fn and Plural(fn.casts, "cast") or "-", fFound and (Fmt(fd) .. " damage") or "no damage seen", fd)
             end
         end
-        local topBy = {}
-        for _, e in ipairs(entries) do topBy[e.what] = max(topBy[e.what] or 1, e.num or 0) end
-        for _, e in ipairs(entries) do if not e.fixed then e.ratio = (e.num or 0) / topBy[e.what] end end
+        local topBy, cnt = {}, {}
+        for _, e in ipairs(entries) do topBy[e.what] = max(topBy[e.what] or 1, e.num or 0); cnt[e.what] = (cnt[e.what] or 0) + 1 end
+        for _, e in ipairs(entries) do
+            if not e.fixed then e.ratio = cnt[e.what] > 1 and (e.num or 0) / topBy[e.what] or 0 end -- bars only when players are compared
+        end
         if #entries == 0 then
             entries[1] = { cols = { "Nothing yet. Shows shield blocks, Bloodrage, Earth Shock, Rockbiter melee and Searing / Fire Nova Totems." }, ratio = 0, r = 0.5, g = 0.5, b = 0.5 }
         end
