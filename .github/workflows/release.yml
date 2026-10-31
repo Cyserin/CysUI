@@ -79,6 +79,10 @@ jobs:
 
       # CurseForge and Wago. Skipped until at least one of the two secrets is saved in the repo.
       # (The packager reads the project IDs from the toc and CHANGELOG.md from the repo.)
+      - name: Fetch the new release tag
+        if: steps.ver.outputs.exists == 'false' && (env.CF_API_KEY != '' || env.WAGO_API_TOKEN != '')
+        run: git fetch --tags --force
+
       - name: Upload to CurseForge and Wago
         if: steps.ver.outputs.exists == 'false' && (env.CF_API_KEY != '' || env.WAGO_API_TOKEN != '')
         uses: BigWigsMods/packager@v2
