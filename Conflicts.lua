@@ -120,7 +120,7 @@ local function Build()
     if frame then return frame end
     frame = CreateFrame("Frame", "CysUIConflicts", UIParent)
     frame:SetFrameStrata("DIALOG")
-    frame:SetSize(560, 200)
+    frame:SetSize(620, 200)
     frame:SetPoint("CENTER", 0, 80)
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -138,7 +138,7 @@ local function Build()
 
     frame.intro = W.Text(frame, 11, T.text)
     frame.intro:SetPoint("TOPLEFT", 16, -42)
-    frame.intro:SetWidth(528)
+    frame.intro:SetWidth(588)
     frame.intro:SetJustifyV("TOP")
     frame.intro:SetSpacing(3)
     frame.intro:SetText("These addons do the same job as parts of Cys's UI. Pick one for each so they don't fight. "
@@ -173,7 +173,7 @@ local function Show(found)
         local row = f.rows[i]
         if not row then
             row = CreateFrame("Frame", nil, f)
-            row:SetSize(528, 62)
+            row:SetSize(588, 62)
             W.Texture(row, "BACKGROUND", T.field):SetAllPoints()
             row.edges = W.Border(row, 1, T.line, "BORDER")
             row.name = W.Text(row, 13, T.accent)
@@ -197,10 +197,15 @@ local function Show(found)
         row.cys.label:SetText("Use Cys's version")
         row.theirs.label:SetText("Keep " .. c.label)
         -- buttons fit their text (long addon names), and the description wraps in the space left of them
-        for _, b in ipairs({ row.cys, row.theirs }) do b:SetWidth(math.max(130, math.ceil(b.label:GetStringWidth()) + 24)) end
+        -- measured width, or an estimate from the length when the text hasn't been drawn yet
+        local function Fit(b)
+            local text = b.label:GetText() or ""
+            b:SetWidth(math.max(130, math.ceil(b.label:GetStringWidth() or 0) + 24, #text * 6.6 + 24))
+        end
+        Fit(row.cys); Fit(row.theirs)
         row.cys:ClearAllPoints()
         row.cys:SetPoint("RIGHT", row.theirs, "LEFT", -8, 0)
-        local left = 528 - 10 - row.theirs:GetWidth() - 8 - row.cys:GetWidth() - 20
+        local left = 588 - 10 - row.theirs:GetWidth() - 8 - row.cys:GetWidth() - 20
         row.name:SetWidth(left); row.name:SetJustifyH("LEFT"); row.name:SetWordWrap(false)
         row.info:SetWidth(left)
         row:SetHeight(math.max(62, row.info:GetStringHeight() + 40))
