@@ -35,14 +35,28 @@ if start:
 else:
     print(f"::warning::No What's New entry for {version} in Core.lua - using a placeholder note.")
 
+ICONS = {"added": "✨", "improved": "🔧", "fixed": "🐞"}
+
+
+def short(line):
+    """Discord version of a line: the feature name in bold, then only the first sentence."""
+    name, rest = None, line
+    colon = line.find(": ")
+    if 0 < colon < 60:
+        name, rest = line[:colon], line[colon + 2:]
+    m = re.match(r"(.+?[.!?])(\s|$)", rest)
+    first = m.group(1) if m else rest
+    return f"**{name}:** {first}" if name else first
+
+
 md, dc = [], []
 for key, title in SECTIONS:
     if key in found:
         md.append(f"### {title}")
-        dc.append(f"**{title}**")
+        dc.append(f"{ICONS[key]} __**{title}**__")
         for line in found[key]:
             md.append(f"- {line}")
-            dc.append(f"• {line}")
+            dc.append(f"• {short(line)}")
         md.append("")
         dc.append("")
 
