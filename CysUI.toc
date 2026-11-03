@@ -20,10 +20,12 @@ Welcome.lua
 Profile.lua
 Update.lua
 Interrupt.lua
+Automation.lua
 Waypoints.lua
 Scale.lua
 Conflicts.lua
 Vendor.lua
+Durability.lua
 InfoBar.lua
 Chat.lua
 Tooltip.lua
@@ -65,3 +67,4 @@ Modules\Buffs\CysMissingBuffs.lua
 Modules\CombatLog\CysCombatLog.lua
 Modules\CombatText\CysCombatText.lua
 Modules\Threat\CysThreat.lua
+Modules\Consumables\CysConsumables.lua

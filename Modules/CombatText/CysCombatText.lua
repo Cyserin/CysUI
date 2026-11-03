@@ -24,6 +24,7 @@ local DEFAULTS = {
     pets = true,         -- pet damage (smaller)
     hideBlizzard = true, -- turn the game's own floating numbers off
     size = 20,
+    inPlace = false,     -- pop and fade where they appear instead of rising (for numbers placed on the frames)
 }
 
 local function DB()
@@ -37,7 +38,11 @@ local function DB()
 end
 
 -- the game's own numbers
-local CVARS = { "floatingCombatTextCombatDamage", "floatingCombatTextCombatHealing", "floatingCombatTextDodgeParryMiss" }
+-- the game's own numbers: direct hits, heals, misses, plus the ones that slipped through before
+-- (damage over time, and pet / totem damage)
+local CVARS = { "floatingCombatTextCombatDamage", "floatingCombatTextCombatHealing", "floatingCombatTextDodgeParryMiss",
+    "floatingCombatTextCombatLogPeriodicSpells", "floatingCombatTextPetMeleeDamage", "floatingCombatTextPetSpellDamage",
+    "floatingCombatTextCombatDamageAllAutos" }
 local function ApplyBlizzard()
     local db = DB()
     db.cvarBackup = db.cvarBackup or {}
@@ -63,11 +68,43 @@ local laneCount = {}
 
 local STAGGER = { 0, -16, 16, -32, 32 }
 
-local function Anchor(lane)
+-- Numbers rise inside two boxes you can move in layout mode ("Combat Numbers: you" / "...: target").
+-- Until they are set up, they rise from the top of the player / target frame.
+local holders = {}
+local function UnitFrameFor(lane)
     local UF = CUI.UnitFrames
-    local f
-    if lane == "out" then f = UF and UF.frames and UF.frames.target else f = UF and UF.frames and UF.frames.player end
-    return f or UIParent
+    if lane == "out" then return UF and UF.frames and UF.frames.target end
+    return UF and UF.frames and UF.frames.player
+end
+local function Anchor(lane)
+    local h = holders[lane == "out" and "out" or "in"]
+    if h then return h end
+    return UnitFrameFor(lane) or UIParent
+end
+
+local HOLDER_W, HOLDER_H = 180, 80
+local function MakeHolders()
+    if holders["in"] then return end
+    local uiScale = UIParent:GetEffectiveScale()
+    local function Default(lane, fallbackX)
+        -- start just above the matching unit frame, clear of the bars that usually sit on top of it
+        local uf = UnitFrameFor(lane)
+        if uf and uf.GetCenter and uf:GetCenter() then
+            local s = uf:GetEffectiveScale() / uiScale
+            local cx, top = uf:GetCenter() * s, uf:GetTop() * s
+            return cx - UIParent:GetWidth() / 2, top + 50 + HOLDER_H / 2 - UIParent:GetHeight() / 2
+        end
+        return fallbackX, -60
+    end
+    for _, spec in ipairs({ { "in", "combattext_in", "Combat Numbers: you", -260 },
+                            { "out", "combattext_out", "Combat Numbers: target", 260 } }) do
+        local h = CreateFrame("Frame", "CysCombatNumbers_" .. spec[1], UIParent)
+        h:SetSize(HOLDER_W, HOLDER_H)
+        local x, y = Default(spec[1], spec[4])
+        CUI:RegisterMovable(h, spec[2], spec[3], { point = "CENTER", x = math.floor(x + 0.5), y = math.floor(y + 0.5),
+            resizable = true, minW = 60, maxW = 500, minH = 24, maxH = 300 })
+        holders[spec[1]] = h
+    end
 end
 
 local function Acquire()
@@ -103,13 +140,27 @@ local function Spawn(lane, text, r, g, b, opts)
     e.t = 0
     e.dur = opts.dur or 1.25
     e.rise = opts.rise or 55
+    e.still = db.inPlace and true or false
+    e.y0 = 0
+    if e.still then
+        -- static style: one number per box, dead centre. A new one replaces the one showing.
+        for i = #active, 1, -1 do
+            local o = active[i]
+            if o ~= e and o.anchor == e.anchor then
+                o.on = false
+                o:Hide()
+                table.remove(active, i)
+            end
+        end
+    end
     e.baseScale = opts.scale or 1
     e.pop = opts.pop or 0.35
     e.x0 = STAGGER[laneCount[lane]] + (opts.x or 0)
     e.drift = (opts.drift or 0)
+    if e.still then e.x0, e.drift = 0, 0 end
     e.on = true
-    e:SetScale(e.baseScale * (1 + e.pop))
-    e:SetAlpha(1)
+    e:SetScale(e.baseScale * (e.still and 1 or (1 + e.pop)))
+    e:SetAlpha(e.still and 0 or 1)
     e:Show()
     local seen
     for _, a in ipairs(active) do if a == e then seen = true break end end
@@ -129,14 +180,27 @@ local function Step(_, elapsed)
             e:Hide()
             table.remove(active, i)
         else
-            local rise = e.rise * (1 - (1 - p) * (1 - p))                 -- eases out
-            local x = e.x0 + e.drift * p
-            local pop = e.pop * max(0, 1 - p * 7)                         -- quick pop at the start
+            local rise, x, pop
+            if e.still then
+                rise, x, pop = e.y0, e.x0, 0
+                -- fade in, hold, fade out
+                e:SetAlpha(p < 0.12 and (p / 0.12) or (p < 0.6 and 1 or (1 - (p - 0.6) / 0.4)))
+            else
+                rise = e.rise * (1 - (1 - p) * (1 - p))                 -- eases out
+                x = e.x0 + e.drift * p
+                pop = e.pop * max(0, 1 - p * 7)                         -- quick pop at the start
+                e:SetAlpha(p < 0.55 and 1 or (1 - (p - 0.55) / 0.45))
+            end
             local sc = e.baseScale * (1 + pop)
             e:SetScale(sc)
-            e:SetAlpha(p < 0.55 and 1 or (1 - (p - 0.55) / 0.45))
             e:ClearAllPoints()
-            e:SetPoint("BOTTOM", e.anchor, "TOP", x / sc, (6 + rise) / sc)
+            if holders["in"] and DB().inPlace then
+                e:SetPoint("CENTER", e.anchor, "CENTER", x / sc, rise / sc)          -- pops in the middle of its box
+            elseif holders["in"] then
+                e:SetPoint("BOTTOM", e.anchor, "BOTTOM", x / sc, (4 + rise) / sc)  -- rises inside its box
+            else
+                e:SetPoint("BOTTOM", e.anchor, "TOP", x / sc, (6 + rise) / sc)
+            end
         end
     end
 end
@@ -240,6 +304,8 @@ local function Enable()
         end
     end)
     ApplyBlizzard()
+    -- the boxes take their first position from the unit frames, which are placed at login too
+    C_Timer.After(1, MakeHolders)
 end
 
 local function Example()
@@ -267,7 +333,7 @@ CUI:RegisterPage("Combat Numbers", function(page)
     W.Header(page, "Combat numbers", width):SetPoint("TOPLEFT", 0, -4)
     local intro = W.Text(page, 12, T.text)
     intro:SetPoint("TOPLEFT", 4, -34); intro:SetWidth(width - 8); intro:SetJustifyV("TOP"); intro:SetSpacing(3)
-    intro:SetText("Numbers rise from your player and target frames. Move the frames with /cui layout and the numbers follow.")
+    intro:SetText("Numbers rise near your player and target frames. Each side has its own box in layout mode (Combat Numbers: you / target), so you can put them anywhere, even right on the frames.")
 
     local y = -92
     local function Check(label, key, after)
@@ -289,13 +355,15 @@ CUI:RegisterPage("Combat Numbers", function(page)
     W.Header(page, "Look", width):SetPoint("TOPLEFT", 0, y); y = y - 26
     local st = W.Stepper(page, "Text size", function() return db.size end, function(v) db.size = v end, 12, 36, 2, "")
     st:SetPoint("TOPLEFT", 4, y); y = y - 30
+    Check("Flash in place: no movement, just fade in and out (good when the boxes sit on the frames)", "inPlace")
     Check("Turn off the game's own floating numbers", "hideBlizzard", ApplyBlizzard)
     y = y - 6
     local test = W.Button(page, 150, 22, "Show an example", true)
     test:SetPoint("TOPLEFT", 4, y)
     test:SetScript("OnClick", Example)
     W.Notes(page, 4, y - 40, width, "", {
-        "Damage you take and heals you receive show on the left and right of your player frame; crits pop in bigger with a ! after them.",
+        "Damage you take and heals you receive show on the left and right of your box; crits pop in bigger with a ! after them.",
+        "Use Show an example while layout mode is open to see where they land.",
         "The game's own numbers come back when you untick the last box.",
     })
 end)

@@ -90,14 +90,18 @@ local FILTERS = {
 
 local function CategoryOf(m)
     local key, label = (m.key or ""):lower(), (m.label or ""):lower()
-    if key:find("^bar_") or label:find("action bar") or label:find("stance") or label:find("micro menu") then return "bars" end
+    if key:find("^bar_") or label:find("action bar") or label:find("stance") or label:find("micro menu")
+        or key == "micromenu" or key == "cys_xp_bar" then return "bars" end
+    if key == "raiddebuffs" then return "party" end -- boss debuffs matter in any group, not only raids
     if key:find("^raid") or label:find("raid") then return "raid" end
-    if key == "party" or key == "rolls" or key:find("^grouploot") or key == "lootwindow" or label:find("party") then return "party" end
+    if key == "party" or key == "rolls" or key:find("^grouploot") or key == "lootwindow" or key == "groupcheck"
+        or label:find("party") then return "party" end
     if key == "player" or key == "target" or key == "targettarget" or key == "pet" or key == "focus"
         or key:find("^castbar") or label:find("^player") or label:find("^target") or label:find("^pet")
         or label:find("buff") or key == "killtracker" or key == "totems" or key == "warriorshout"
-        or key == "skills" or key == "waypoint" then return "solo" end
-    return "ui"
+        or key == "shoutremind" or key == "skills" or key == "waypoint" or key == "threat" or key == "taunt"
+        or key == "tremor" or key:find("^combattext") or key == "missingbuffs" then return "solo" end
+    return "ui" -- windows and info: bags, chat, minimap, info bars, friends, durability, level-up box...
 end
 
 local function FilterName(id)
@@ -133,7 +137,7 @@ local function SelectMover(key)
     selected = key
     for k, m in pairs(CUI.movers) do
         local on = (k == key)
-        W.SetBorder(m.moverEdges, on and T.accent or T.border)
+        W.SetBorder(m.moverEdges, on and T.glow or T.border)
         m.moverFill:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], on and 0.38 or 0.2)
     end
     if panel then panel:RefreshAll() end
@@ -372,6 +376,20 @@ local function BuildPanel()
     f.name = W.Text(f, 12, T.text)
     f.name:SetPoint("TOPLEFT", 14, -80)
 
+    -- minimize: shrink to the title bar (with Show and Done) so the screen is easier to see
+    f.mini = W.Button(f, 22, 20, "-")
+    f.mini:SetPoint("RIGHT", f.filter, "LEFT", -6, 0)
+    f.mini:SetScript("OnClick", function()
+        CysUIDB.layoutMinimized = not CysUIDB.layoutMinimized
+        f:RefreshAll()
+    end)
+    f.mini:HookScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_TOP")
+        GameTooltip:AddLine(CysUIDB.layoutMinimized and "Show the full panel" or "Shrink the panel", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    f.mini:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
     local function Edit(fn)
         local m = Current()
         if not m then return end
@@ -414,8 +432,7 @@ local function BuildPanel()
         end, 0, 99999, 2, "", function(m) return m.opts.resizable and not m.opts.keepSquare end)
     AddRow("Scale",
         function() local m = Current(); return m and floor(Scale(m) * 100 + 0.5) or 100 end,
-        function(v) Edit(function(e) e.scale = v / 100 end) end, 50, 200, 5, "%",
-        function(m) return m.opts.scalable ~= false end)
+        function(v) Edit(function(e) e.scale = v / 100 end) end, 50, 200, 5, "%")
 
     -- up to 3 extra rows a module can add for its own element:
     --   opts.extras = { { label = "Buttons per row", get = fn, set = fn(v), min = 1, max = 12 }, ... }
@@ -446,6 +463,20 @@ local function BuildPanel()
 
     function f:RefreshAll()
         local m = Current()
+        local small = CysUIDB.layoutMinimized and true or false
+        self.mini:SetLabel(small and "+" or "-")
+        help:SetShown(not small)
+        self.name:SetShown(not small)
+        self.snap:SetShown(not small)
+        self.showGrid:SetShown(not small)
+        self.resetOne:SetShown(not small)
+        self.resetAll:SetShown(not small)
+        if small then
+            for _, row in ipairs(self.rows) do row:Hide() end
+            self.done:ClearAllPoints(); self.done:SetPoint("TOPRIGHT", -14, -36)
+            self:SetHeight(68)
+            return
+        end
         self.name:SetText(m and ("Editing: |cFFFFD100" .. m.label:gsub("\n", " ") .. "|r") or "|cFF777777Click a box to edit it.|r")
         local y = -106
         for _, row in ipairs(self.rows) do
@@ -627,14 +658,14 @@ function CUI:SetLayoutMode(on)
     panel:SetShown(on)
     self:ApplyLayoutFilter()
     if on then
-        -- remember whether the settings window was open so Done can bring it back
-        self.reopenConfig = CysUIConfigFrame and CysUIConfigFrame:IsShown() or false
         if CysUIConfigFrame then CysUIConfigFrame:Hide() end
         SelectMover(selected or self.moverOrder[1])
-    elseif self.reopenConfig then
-        self.reopenConfig = false
-        if CysUIConfigFrame and not InCombatLockdown() then CysUIConfigFrame:Show() end
+    elseif not InCombatLockdown() and not self.layoutClosedByCombat then
+        -- back to the settings window every time layout mode is closed with Done
+        if CysUIConfigFrame then CysUIConfigFrame:Show()
+        elseif self.OpenConfig then self:OpenConfig() end
     end
+    self.layoutClosedByCombat = nil
 end
 
 function CUI:ToggleLayout() self:SetLayoutMode(not self.layoutMode) end
@@ -644,6 +675,7 @@ local combatWatcher = CreateFrame("Frame")
 combatWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 combatWatcher:SetScript("OnEvent", function()
     if CUI.layoutMode then
+        CUI.layoutClosedByCombat = true
         CUI:SetLayoutMode(false)
         CUI:Print("Layout mode closed because combat started.")
     end

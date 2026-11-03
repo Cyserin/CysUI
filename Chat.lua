@@ -260,7 +260,7 @@ local function SkinWindow(i)
     copy.label = W.Text(copy, 10, T.accent, "CENTER")
     copy.label:SetPoint("CENTER", 0, 0)
     copy.label:SetText("Copy")
-    copy:SetScript("OnEnter", function(s) s:SetAlpha(1); W.SetBorder(s.edges, T.accent) end)
+    copy:SetScript("OnEnter", function(s) s:SetAlpha(1); W.SetBorder(s.edges, T.glow) end)
     copy:SetScript("OnLeave", function(s) s:SetAlpha(0.35); W.SetBorder(s.edges, T.line) end)
     copy:SetScript("OnClick", function() Chat:ShowCopy(i) end)
 end
@@ -481,11 +481,8 @@ CUI:RegisterPage("Chat", function(page)
     Check("Hide the scroll and menu buttons", "hideButtons", -214)
     Check("Chat tabs always visible, above the window border, gold line under the active one", "tabsSolid", -240)
 
-    local move = W.Button(page, 220, 22, "Move and resize (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -280)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
     local copy = W.Button(page, 110, 22, "Copy chat")
-    copy:SetPoint("LEFT", move, "RIGHT", 8, 0)
+    copy:SetPoint("TOPLEFT", 4, -280)
     copy:SetScript("OnClick", function() Chat:ShowCopy(1) end)
 
     local note = W.Notes(page, 4, -318, width, "", {

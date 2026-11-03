@@ -1476,6 +1476,9 @@ function CysBags:CreateFrames()
         GameTooltip:Hide()
     end)
     junkBtn:SetScript("OnClick", function() DeleteCheapestJunk() end)
+    -- picked DropTheCheapestThing over this button in /cui > Conflicts: leave the job to it
+    local cf = CysUIDB and CysUIDB.conflicts
+    if cf and cf.DropTheCheapestThing == "theirs" then junkBtn:Hide() end
 
     ---------------------------------------------------------------- sidebar
     sidebar = CreateFrame("Frame", nil, frame)

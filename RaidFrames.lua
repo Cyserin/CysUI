@@ -641,7 +641,13 @@ local function Build()
         hd:SetAttribute("startingIndex", -4)
         hd:SetAttribute("startingIndex", 1)
     end
-    CUI:RegisterMovable(anchor, "raid", "Raid Frames", { point = "LEFT", x = 40, y = 120 })
+    -- width / height of each player's frame (the same as Width adjust / Height adjust on the Raid Frames page)
+    local function Adj(key, label, lo, hi)
+        return { label = label, min = lo, max = hi, get = function() return DB()[key] or 0 end,
+                 set = function(v) DB()[key] = v; if not InCombatLockdown() then RF:ApplyMode() end end }
+    end
+    CUI:RegisterMovable(anchor, "raid", "Raid Frames", { point = "LEFT", x = 40, y = 120,
+        extras = { Adj("wAdj", "Frame width (+/- px)", -30, 60), Adj("hAdj", "Frame height (+/- px)", -10, 30) } })
     for g = 1, 8 do RF.headers[g]:Show() end
     RF:ApplyMode()
 end
@@ -845,11 +851,8 @@ CUI:RegisterPage("Raid Frames", function(page)
     hstep:SetPoint("TOPLEFT", 4, y - 30)
     y = y - 64
 
-    local move = W.Button(page, 240, 22, "Move (layout mode)")
-    move:SetPoint("TOPLEFT", 4, y)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
     local test = W.Button(page, 240, 22, "Preview a full raid (on / off)")
-    test:SetPoint("TOPLEFT", 252, y)
+    test:SetPoint("TOPLEFT", 4, y)
     test:SetScript("OnClick", function() RF:Test() end)
 
     local foot = W.Notes(page, 4, y - 38, width, "", {

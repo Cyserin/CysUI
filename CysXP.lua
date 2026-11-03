@@ -293,12 +293,8 @@ CUI:RegisterPage("XP Bar", function(page)
     ColorButton(-270, "Rested XP", "restedColor")
     ColorButton(-298, "Completed-quest XP", "questColor")
 
-    local move = W.Button(page, 280, 22, "Move and resize the bar (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -336)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
-
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", 4, -374)
+    note:SetPoint("TOPLEFT", 4, -336)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)

@@ -844,9 +844,6 @@ CUI:RegisterPage("Action Bars", function(page)
     Check("Blue icon when I don't have enough mana, rage or energy", "manaColor")
     Check("Hide Blizzard's gryphons and bar art (needs a /reload)", "art")
 
-    local move = W.Button(page, 240, 22, "Move the bars (layout mode)")
-    move:SetPoint("TOPLEFT", 4, y - 10)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     -- one click to do what a fresh install does: show only the bars the game itself has switched on
     local match = W.Button(page, 330, 22, "Match the game's bars (turns off the rest)")

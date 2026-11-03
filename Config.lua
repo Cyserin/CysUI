@@ -19,9 +19,9 @@ local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a
 -- sidebar grouping: { heading (nil = none), { page titles in order } }
 local GROUPS = {
     { nil,               { "General", "Modules", "Conflicts" } },
-    { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends" } },
+    { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Durability", "Automation" } },
     { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters", "Combat Numbers", "Threat Bar" } },
-    { "Loot & Items",    { "Vendor", "Loot", "Roll Tracker", "Upgrade" } },
+    { "Loot & Items",    { "Vendor", "Consumables", "Loot", "Roll Tracker", "Upgrade" } },
     { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
 }
 
@@ -156,7 +156,7 @@ CUI:RegisterPage("General", function(page)
 
     local layoutHeader = W.Header(page, "Layout", CONTENT_W)
     layoutHeader:SetPoint("TOPLEFT", 0, -112)
-    local unlock = W.Button(page, 200, 22, "Unlock: move and resize")
+    local unlock = W.Button(page, 200, 22, "Layout mode: move and resize")
     unlock:SetPoint("TOPLEFT", 4, -140)
     unlock:SetScript("OnClick", function() CUI:ToggleLayout() end)
     local resetAll = W.Button(page, 140, 22, "Reset all positions")
@@ -274,8 +274,8 @@ end
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "combattext", "threat" } },
-    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale" } },
-    { "Bags & Loot",      { "bags", "bank", "vendor", "grouploot", "rolls", "upgrade" } },
+    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale", "durability", "automation" } },
+    { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "healadvisor", "warrior", "shoutremind" } },
 }
 
@@ -286,7 +286,7 @@ CUI:RegisterPage("Modules", function(page)
     intro:SetText("Untick a module to switch it off - the game's own version takes over again after a reload. Switches are saved for this character only.")
 
     page.rows = {}
-    local y = -34
+    local stack = {} -- headers and cards in display order (placed by Relayout below)
     local allowed, placed = {}, {}
     for _, key in ipairs(CUI.order) do
         if CUI:ClassAllowed(CUI.modules[key]) then allowed[key] = true end -- other classes' modules stay hidden
@@ -313,18 +313,15 @@ CUI:RegisterPage("Modules", function(page)
     for _, item in ipairs(layout) do
       if item.header then
         local h = W.Text(page, 11, T.accent)
-        h:SetPoint("TOPLEFT", 2, y - 8)
         h:SetText(string.upper(item.header))
         local ln = W.Texture(page, "ARTWORK", T.line)
-        ln:SetPoint("TOPLEFT", 0, y - 24)
         ln:SetSize(CONTENT_W, 1)
-        y = y - 32
+        stack[#stack + 1] = { header = h, line = ln }
       else
         local key = item.key
         local def = CUI.modules[key]
         local row = CreateFrame("Frame", nil, page)
         row:SetSize(CONTENT_W, 62)
-        row:SetPoint("TOPLEFT", 0, y)
         row.def = def
 
         W.Texture(row, "BACKGROUND", T.card):SetAllPoints()
@@ -351,10 +348,41 @@ CUI:RegisterPage("Modules", function(page)
         row.open:SetScript("OnClick", function() if def.open then def.open() end end)
 
         page.rows[#page.rows + 1] = row
-        y = y - 68
+        stack[#stack + 1] = { row = row }
       end
     end
-    page.contentHeight = -y + 4
+
+    -- Stack headers and cards top to bottom. Each card grows with its description so long
+    -- text never runs into the next one. Text can only be measured once it is on screen,
+    -- so this runs again every time the page is shown.
+    local function Relayout()
+        local y = -(math.ceil(intro:GetStringHeight() or 12) + 12)
+        for _, it in ipairs(stack) do
+            if it.header then
+                it.header:ClearAllPoints()
+                it.header:SetPoint("TOPLEFT", 2, y - 8)
+                it.line:ClearAllPoints()
+                it.line:SetPoint("TOPLEFT", 0, y - 24)
+                y = y - 32
+            else
+                local row = it.row
+                local h = math.max(62, 28 + math.ceil(row.desc:GetStringHeight() or 0) + 10)
+                row:SetHeight(h)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, y)
+                y = y - h - 6
+            end
+        end
+        page.contentHeight = -y + 4
+        if page:IsShown() and window and window.content then
+            window.content:SetHeight(math.max(VIEW_H, page.contentHeight))
+        end
+    end
+    Relayout()
+    page:HookScript("OnShow", function()
+        Relayout()
+        C_Timer.After(0, Relayout) -- once more after the text has been drawn
+    end)
     RefreshModules(page)
 end, RefreshModules)
 
@@ -439,6 +467,18 @@ local function CreateWindow()
     close:SetScript("OnLeave", function(s) s.text:SetTextColor(1, 1, 1) end)
     close:SetScript("OnClick", function() f:Hide() end)
 
+    -- always-visible way into layout mode; the settings come back when you press Done
+    local layoutBtn = W.Button(header, 110, 22, "Layout mode")
+    layoutBtn:SetPoint("RIGHT", close, "LEFT", -8, 0)
+    layoutBtn:SetScript("OnClick", function() CUI:ToggleLayout() end)
+    layoutBtn:HookScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+        GameTooltip:AddLine("Layout mode", 1, 0.82, 0)
+        GameTooltip:AddLine("Move and resize any Cys's UI frame. Press Done to come back here.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    layoutBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
     -- footer
     local footer = CreateFrame("Frame", nil, f)
     footer:SetPoint("BOTTOMLEFT", 1, 1)
@@ -487,15 +527,19 @@ local function CreateWindow()
         end
         return list
     end
+    -- pages under a heading are listed A to Z by the name shown in the sidebar
+    local function SideName(i) local t = CUI.pages[i].title; return (LABELS[t] or t):lower() end
+    local function AtoZ(list) table.sort(list, function(a, b) return SideName(a) < SideName(b) end); return list end
     local sections = {}
     for _, g in ipairs(GROUPS) do
         local list = Collect(g[2])
+        if g[1] then AtoZ(list) end -- the top three (General, Modules, Conflicts) keep their order
         if #list > 0 then sections[#sections + 1] = { name = g[1], key = g[1], level = 1, pages = list } end
     end
     -- class section: General (tools that work for every class), then every class in its class color (yours first)
     -- with the pages tagged for it. Classes with nothing yet say so, so the section doubles as an overview.
     local _, myClass = UnitClass("player")
-    local general = Collect(CLASS_GENERAL)
+    local general = AtoZ(Collect(CLASS_GENERAL))
     local byClass = {}
     for i, page in ipairs(CUI.pages) do
         if page.class then
@@ -514,12 +558,13 @@ local function CreateWindow()
     for _, c in ipairs(CLASSES) do if c[1] ~= myClass then ordered[#ordered + 1] = c end end
     for _, c in ipairs(ordered) do
         local list = byClass[c[1]] or {}
-        table.sort(list, function(a, b) return CUI.pages[a].title < CUI.pages[b].title end)
+        AtoZ(list)
         sections[#sections + 1] = { name = c[2], key = "Class/" .. c[2], level = 2, pages = list,
             color = { r = c[3], g = c[4], b = c[5] }, empty = #list == 0 }
     end
     local other = {}
     for i in ipairs(CUI.pages) do if not placed[i] then other[#other + 1] = i end end
+    AtoZ(other)
     if #other > 0 then sections[#sections + 1] = { name = "Other", key = "Other", level = 1, pages = other } end
 
     -- headings are buttons: click one to fold or unfold its pages (remembered in the saved settings)

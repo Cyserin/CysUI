@@ -54,33 +54,79 @@ for ci, cat in ipairs(CATEGORIES) do
     end
 end
 
+-- Level each effect becomes available, and for your own character the spells you must have learned.
+-- Talent-based effects (Improved Scorch, Winter's Chill, Improved Shadow Bolt, Insect Swarm) only use the level.
+local LEARN = {
+    [8647]  = { 14, { 8647 } },          -- Expose Armor
+    [7386]  = { 10, { 7386 } },          -- Sunder Armor
+    [770]   = { 18, { 770 } },           -- Faerie Fire
+    [16857] = { 30, { 16857 } },         -- Faerie Fire (Feral), talent
+    [704]   = { 14, { 704 } },           -- Curse of Recklessness
+    [22959] = { 25 },                    -- Fire Vulnerability (Improved Scorch talent)
+    [12579] = { 30 },                    -- Winter's Chill (talent)
+    [17800] = { 10 },                    -- Shadow Vulnerability (Improved Shadow Bolt talent)
+    [1490]  = { 32, { 1490 } },          -- Curse of the Elements
+    [17862] = { 44, { 17862 } },         -- Curse of Shadow
+    [1160]  = { 14, { 1160 } },          -- Demoralizing Shout
+    [99]    = { 10, { 99 } },            -- Demoralizing Roar
+    [702]   = { 4,  { 702 } },           -- Curse of Weakness
+    [6343]  = { 6,  { 6343 } },          -- Thunder Clap
+    [5570]  = { 20 },                    -- Insect Swarm (talent)
+    [1130]  = { 6,  { 1130 } },          -- Hunter's Mark
+    [20186] = { 38, { 20271, 20166 } },  -- Judgement of Wisdom: Judgement + Seal of Wisdom
+    [20185] = { 30, { 20271, 20165 } },  -- Judgement of Light: Judgement + Seal of Light
+    [21183] = { 6,  { 20271, 21082 } },  -- Judgement of the Crusader: Judgement + Seal of the Crusader
+}
+
+local function Knows(id)
+    if IsPlayerSpell and IsPlayerSpell(id) then return true end
+    if IsSpellKnown and IsSpellKnown(id) then return true end
+    local n = GetSpellInfo(id)
+    return n and GetSpellInfo(n) ~= nil or false -- by name: only spells in your spellbook answer
+end
+
 local CLASS_NAMES = {}
 if LOCALIZED_CLASS_NAMES_MALE then for k, v in pairs(LOCALIZED_CLASS_NAMES_MALE) do CLASS_NAMES[k] = v end end
 
 --------------------------------------------------------------------------------
 -- Which classes are in the group (you included)
 --------------------------------------------------------------------------------
-local present = {}
+local present = {}  -- class -> highest level among the OTHER group members of that class
+local myClass
 local function ScanGroup()
     wipe(present)
-    local _, mine = UnitClass("player")
-    if mine then present[mine] = true end
-    if IsInRaid and IsInRaid() then
-        for i = 1, (GetNumGroupMembers and GetNumGroupMembers() or 0) do
-            local _, c = UnitClass("raid" .. i)
-            if c then present[c] = true end
-        end
-    elseif IsInGroup and IsInGroup() then
-        for i = 1, 4 do
-            local _, c = UnitClass("party" .. i)
-            if c then present[c] = true end
-        end
+    myClass = select(2, UnitClass("player"))
+    local function Add(unit)
+        if UnitIsUnit(unit, "player") then return end
+        local _, c = UnitClass(unit)
+        if c then present[c] = max(present[c] or 0, UnitLevel(unit) or 0) end
     end
+    if IsInRaid and IsInRaid() then
+        for i = 1, (GetNumGroupMembers and GetNumGroupMembers() or 0) do Add("raid" .. i) end
+    elseif IsInGroup and IsInGroup() then
+        for i = 1, 4 do if UnitExists("party" .. i) then Add("party" .. i) end end
+    end
+end
+
+-- Can someone in the group put this effect up? You: the level and the spells actually learned.
+-- Others: the game doesn't tell you their spells, so their level decides.
+local function CanApply(sp)
+    local learn = LEARN[sp[1]]
+    local minLevel = learn and learn[1] or 1
+    local lvl = present[sp[3]]
+    if lvl and (lvl <= 0 or lvl >= minLevel) then return true end -- level 0 = unknown (out of range): trust it
+    if sp[3] == myClass and UnitLevel("player") >= minLevel then
+        for _, id in ipairs(learn and learn[2] or {}) do
+            if not Knows(id) then return false end
+        end
+        return true
+    end
+    return false
 end
 
 local function CategoryAvailable(cat)
     if not db.onlyGroupClasses then return true end
-    for _, sp in ipairs(cat.spells) do if present[sp[3]] then return true end end
+    for _, sp in ipairs(cat.spells) do if CanApply(sp) then return true end end
     return false
 end
 
@@ -97,7 +143,14 @@ local function SizeHolder()
     holder:SetSize(perRow * (s + GAP) - GAP, rows * (s + LABEL_H + GAP) - GAP)
 end
 SizeHolder()
-CUI:RegisterMovable(holder, "raiddebuffs", "Raid Debuffs", { point = "CENTER", x = 0, y = -220 })
+local RefreshLater -- set to Refresh below, so layout mode can redraw after a size change
+local function SizeField(key, label, lo, hi)
+    return { label = label, min = lo, max = hi, get = function() return db[key] end,
+             set = function(v) db[key] = v; SizeHolder(); if RefreshLater then RefreshLater() end end }
+end
+CUI:RegisterMovable(holder, "raiddebuffs", "Raid Debuffs", { point = "CENTER", x = 0, y = -220,
+    -- the box's width and height come from the icon size and how many sit in a row
+    extras = { SizeField("iconSize", "Icon size", 22, 56), SizeField("perRow", "Icons per row", 1, 10) } })
 
 local boxes = {}
 local function MakeBox(ci)
@@ -143,7 +196,7 @@ local function MakeBox(ci)
             GameTooltip:AddLine("Not on the target", 0.7, 0.7, 0.7)
             for _, sp in ipairs(cat.spells) do
                 local who = CLASS_NAMES[sp[3]] or sp[3]
-                local have = present[sp[3]]
+                local have = CanApply(sp)
                 GameTooltip:AddLine(sp.name .. " - " .. who, have and 0.4 or 0.5, have and 1 or 0.5, have and 0.4 or 0.5)
             end
         end
@@ -157,7 +210,7 @@ end
 local function IconFor(cat)
     -- the icon shown while the effect is missing: the first spell somebody in the group can cast
     for _, sp in ipairs(cat.spells) do
-        if present[sp[3]] then
+        if CanApply(sp) then
             local tex = GetSpellTexture and GetSpellTexture(sp[1])
             if tex then return tex end
         end
@@ -248,13 +301,15 @@ holder:SetScript("OnUpdate", function(_, elapsed)
 end)
 
 local ev = CreateFrame("Frame")
-for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "PLAYER_TARGET_CHANGED", "UNIT_PET" }) do
+for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "PLAYER_TARGET_CHANGED", "UNIT_PET",
+                    "PLAYER_LEVEL_UP", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 pcall(ev.RegisterUnitEvent, ev, "UNIT_AURA", "target")
 pcall(ev.RegisterEvent, ev, "PLAYER_REGEN_ENABLED")
 pcall(ev.RegisterUnitEvent, ev, "UNIT_HEALTH", "target")
 ev:SetScript("OnEvent", Refresh)
+RefreshLater = Refresh
 Refresh()
 
 --------------------------------------------------------------------------------
@@ -282,14 +337,10 @@ CUI:RegisterPage("Raid Debuffs", function(page)
     W.Stepper(page, "Icons per row", function() return db.perRow end,
         function(v) db.perRow = v; Apply() end, 3, 10, 1, ""):SetPoint("TOPLEFT", 4, -214)
 
-    local move = W.Button(page, 240, 22, "Move it (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -252)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
-
-    W.Header(page, "What is tracked", width):SetPoint("TOPLEFT", 0, -296)
+    W.Header(page, "What is tracked", width):SetPoint("TOPLEFT", 0, -256)
     local G, R = "|cFFFFD100", "|r"
     local list = W.Text(page, 11, T.text)
-    list:SetPoint("TOPLEFT", 4, -326)
+    list:SetPoint("TOPLEFT", 4, -286)
     list:SetWidth(width)
     list:SetJustifyV("TOP")
     list:SetSpacing(4)

@@ -140,10 +140,16 @@ local function ModuleTable()
     return CysUIDB and CysUIDB.modules
 end
 
+-- A module is on unless switched off. Modules registered with defaultOff = true start off
+-- until someone ticks them.
 function CUI:IsModuleEnabled(key)
     local m = ModuleTable()
-    if not m then return true end
-    return m[key] ~= false
+    local v = m and m[key]
+    if v == nil then
+        local def = self.modules[key]
+        return not (def and def.defaultOff)
+    end
+    return v ~= false
 end
 
 function CUI:SetModuleEnabled(key, enabled)

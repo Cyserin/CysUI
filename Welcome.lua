@@ -139,7 +139,7 @@ local function Build()
     local swatches = {}
     local function Refresh()
         local cur = CysUIDB.borderColor or "gold"
-        for key, b in pairs(swatches) do W.SetBorder(b.edges, key == cur and T.accent or T.line) end
+        for key, b in pairs(swatches) do W.SetBorder(b.edges, key == cur and T.glow or T.line) end
     end
     local styles = W.AvailableBorderStyles()
     for i, st in ipairs(styles) do
@@ -160,7 +160,7 @@ local function Build()
             W.ApplyBorderStyle()
             Refresh()
         end)
-        b:SetScript("OnEnter", function() W.SetBorder(b.edges, T.accent) end)
+        b:SetScript("OnEnter", function() W.SetBorder(b.edges, T.glow) end)
         b:SetScript("OnLeave", Refresh)
         swatches[st.key] = b
     end
@@ -211,7 +211,32 @@ local function Build()
     nextb:SetScript("OnClick", function()
         if idx == #pages then f:Hide() else Show(idx + 1) end
     end)
-    skip:SetScript("OnClick", function() f:Hide() end)
+    -- Skip asks first: a panel over the page that says what skipping keeps
+    local confirm = CreateFrame("Frame", nil, f)
+    confirm:SetPoint("TOPLEFT", 1, -41)
+    confirm:SetPoint("BOTTOMRIGHT", -1, 1)
+    confirm:SetFrameLevel(f:GetFrameLevel() + 20)
+    confirm:EnableMouse(true)
+    confirm:Hide()
+    W.Texture(confirm, "BACKGROUND", T.bg):SetAllPoints()
+    local ch = W.Header(confirm, "Skip the setup?", 420)
+    ch:SetPoint("TOPLEFT", 16, -14)
+    local ct = W.Text(confirm, 12, T.text)
+    ct:SetPoint("TOPLEFT", 20, -46)
+    ct:SetWidth(410); ct:SetJustifyV("TOP"); ct:SetSpacing(3)
+    ct:SetText("If you skip, Cys's UI keeps its standard setup:\n\n"
+        .. "|cFFFFD100-|r Cys's action bars (the game's own bars are hidden)\n"
+        .. "|cFFFFD100-|r The game's own UI scale (nothing is resized)\n"
+        .. "|cFFFFD100-|r Gold borders\n\n"
+        .. "Everything can still be changed later in |cFFFFD100/cui|r, and |cFFFFD100/cui welcome|r opens this window again.")
+    local goBack = W.Button(confirm, 110, 24, "Go back")
+    goBack:SetPoint("BOTTOMRIGHT", -16, 13)
+    goBack:SetScript("OnClick", function() confirm:Hide() end)
+    local doSkip = W.Button(confirm, 110, 24, "Skip setup", true)
+    doSkip:SetPoint("RIGHT", goBack, "LEFT", -8, 0)
+    doSkip:SetScript("OnClick", function() confirm:Hide(); f:Hide() end)
+    skip:SetScript("OnClick", function() confirm:Show() end)
+    f:HookScript("OnHide", function() confirm:Hide() end)
     f:SetScript("OnShow", function() Show(1); f.refreshSwatches(); f.refreshScreen() end)
     tinsert(UISpecialFrames, "CysUIWelcomeFrame")
     return f

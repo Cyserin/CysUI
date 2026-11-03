@@ -59,6 +59,153 @@ local ZONE_COLORS = {
 local zoneBar, coordsText
 
 --------------------------------------------------------------------------------
+-- Right-click tracking menu
+--
+-- Classic Era tracking (Find Herbs, Track Beasts...) is a spell, one at a time. Addons can't cast
+-- spells by themselves, so each row is one of the game's secure spell buttons: your click casts it.
+-- Clients with the newer tracking list (C_Minimap tracking types) use that instead.
+--------------------------------------------------------------------------------
+local TRACKING_SPELLS = {
+    2383, 2580, 2481,                       -- Find Herbs, Find Minerals, Find Treasure (Dwarf)
+    1494, 19883, 19884, 19885, 19880,       -- Hunter: Beasts, Humanoids, Undead, Hidden, Elementals
+    19878, 19882, 19879,                    -- Hunter: Demons, Giants, Dragonkin
+    5225, 5502, 5500,                       -- Druid Track Humanoids (cat), Paladin Sense Undead, Warlock Sense Demons
+}
+
+local trackMenu
+local function CloseTracking() if trackMenu then trackMenu:Hide() end end
+
+local function MenuRow(parent, secure)
+    local b = CreateFrame("Button", nil, parent, secure and "SecureActionButtonTemplate" or nil)
+    b:SetSize(200, 22)
+    b:RegisterForClicks("AnyUp", "AnyDown")
+    b.hl = W.Texture(b, "BACKGROUND", { T.brand[1], T.brand[2], T.brand[3], 0.18 })
+    b.hl:SetAllPoints()
+    b.hl:Hide()
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(16, 16)
+    b.icon:SetPoint("LEFT", 6, 0)
+    b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    b.text = W.Text(b, 12, T.text)
+    b.text:SetPoint("LEFT", b.icon, "RIGHT", 8, 0)
+    b.check = W.Text(b, 12, T.accent, "RIGHT")
+    b.check:SetPoint("RIGHT", -8, 0)
+    b:SetScript("OnEnter", function(s) s.hl:Show() end)
+    b:SetScript("OnLeave", function(s) s.hl:Hide() end)
+    return b
+end
+
+local function OpenTracking(anchor)
+    if InCombatLockdown() then CUI:Print("Tracking can be changed once combat ends.") return end
+    if not trackMenu then
+        trackMenu = CreateFrame("Frame", "CysUITrackingMenu", UIParent)
+        trackMenu:SetFrameStrata("DIALOG")
+        trackMenu:SetClampedToScreen(true)
+        trackMenu:EnableMouse(true)
+        W.Texture(trackMenu, "BACKGROUND", T.bg):SetAllPoints()
+        W.Border(trackMenu, 1, T.border, "BORDER")
+        trackMenu.title = W.Text(trackMenu, 12, T.accent)
+        trackMenu.title:SetPoint("TOPLEFT", 10, -8)
+        trackMenu.title:SetText("Tracking")
+        trackMenu.rows = {}
+        trackMenu:Hide()
+        tinsert(UISpecialFrames, "CysUITrackingMenu") -- Escape closes it
+        -- a click anywhere else closes it
+        local watch = CreateFrame("Frame")
+        pcall(watch.RegisterEvent, watch, "GLOBAL_MOUSE_DOWN")
+        watch:SetScript("OnEvent", function()
+            if trackMenu:IsShown() and not trackMenu:IsMouseOver() and not Minimap:IsMouseOver() then
+                C_Timer.After(0.05, CloseTracking)
+            end
+        end)
+    end
+    for _, r in pairs(trackMenu.rows) do r:Hide() end
+
+    local entries = {}
+    local CM = C_Minimap
+    local current = GetTrackingTexture and GetTrackingTexture()
+    -- spell tracking (Find Herbs, Track Beasts...): cast through secure rows
+    if CancelTrackingBuff then
+        entries[#entries + 1] = { name = "None", icon = "Interface\\Minimap\\Tracking\\None", active = current == nil,
+            click = function() CancelTrackingBuff() end }
+        for _, id in ipairs(TRACKING_SPELLS) do
+            if (IsPlayerSpell and IsPlayerSpell(id)) or (IsSpellKnown and IsSpellKnown(id)) then
+                local name, _, icon = GetSpellInfo(id)
+                if name then
+                    entries[#entries + 1] = { name = name, icon = icon, spell = name, active = current == icon }
+                end
+            end
+        end
+    end
+    -- the game's own tracking list, on clients that have one (mailbox, trainers, flight masters,
+    -- innkeepers, auctioneers, banks...): every type it offers, switched on and off like Blizzard's menu
+    if CM and CM.GetNumTrackingTypes then
+        local ok, count = pcall(CM.GetNumTrackingTypes)
+        local town = {}
+        for i = 1, (ok and count or 0) do
+            local info = CM.GetTrackingInfo(i)
+            -- spell types are already listed above when the client tracks with spells
+            if info and not (CancelTrackingBuff and info.type == "spell") then
+                town[#town + 1] = { name = info.name, icon = info.texture, active = info.active,
+                    click = function() CM.SetTracking(i, not info.active) end }
+            end
+        end
+        table.sort(town, function(a, b) return (a.name or "") < (b.name or "") end)
+        if #town > 0 and not CancelTrackingBuff then
+            table.insert(entries, 1, { name = "Uncheck all", icon = "Interface\\Minimap\\Tracking\\None", active = false,
+                click = function() if CM.ClearAllTracking then CM.ClearAllTracking() end end })
+        end
+        for _, e in ipairs(town) do entries[#entries + 1] = e end
+    end
+
+    local y = -28
+    local width = 200
+    for i, e in ipairs(entries) do
+        -- secure rows and plain rows are kept apart (a button can't switch between the two)
+        local key = e.spell and ("s" .. i) or ("p" .. i)
+        trackMenu.rows[key] = trackMenu.rows[key] or MenuRow(trackMenu, e.spell ~= nil)
+        local r = trackMenu.rows[key]
+        r.icon:SetTexture(e.icon)
+        r.text:SetText(e.name)
+        r.check:SetText(e.active and "on" or "")
+        if e.spell then
+            r:SetAttribute("type", "spell")
+            r:SetAttribute("spell", e.spell)
+            if not r.cysHooked then
+                r.cysHooked = true
+                r:HookScript("PostClick", function() C_Timer.After(0.05, CloseTracking) end)
+            end
+        else
+            r:SetScript("OnClick", function() e.click(); CloseTracking() end)
+        end
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", 4, y)
+        width = math.max(width, r.text:GetStringWidth() + 70)
+        r:Show()
+        y = y - 22
+    end
+    if #entries <= 1 then
+        local r = trackMenu.rows.none or MenuRow(trackMenu, false)
+        trackMenu.rows.none = r
+        r.icon:SetTexture(nil)
+        r.text:SetText("You don't know any tracking yet")
+        r.check:SetText("")
+        r:SetScript("OnClick", CloseTracking)
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", 4, y)
+        r:Show()
+        y = y - 22
+    end
+    for _, r in pairs(trackMenu.rows) do if r:IsShown() then r:SetWidth(width - 8) end end
+    trackMenu:SetSize(width, -y + 6)
+    trackMenu:ClearAllPoints()
+    local cx, cy = GetCursorPosition()
+    local s = UIParent:GetEffectiveScale()
+    trackMenu:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", cx / s, cy / s)
+    trackMenu:Show()
+end
+
+--------------------------------------------------------------------------------
 -- Readouts
 --------------------------------------------------------------------------------
 function MM:UpdateZone()
@@ -201,6 +348,15 @@ function MM.Enable()
         zoneBar:SetScript("OnClick", function() if ToggleWorldMap then ToggleWorldMap() end end)
     end)
 
+    -- right-click: tracking menu (left-click still pings)
+    Step("tracking menu", function()
+        Minimap:HookScript("OnMouseUp", function(self, button)
+            if button == "RightButton" then
+                if trackMenu and trackMenu:IsShown() then CloseTracking() else OpenTracking(self) end
+            end
+        end)
+    end)
+
     -- mouse-wheel zoom (the +/- buttons are gone)
     Step("zoom", function()
         Minimap:EnableMouseWheel(true)
@@ -247,11 +403,8 @@ CUI:RegisterPage("Minimap", function(page)
     Check("Zoom with the mouse wheel", "wheelZoom", -86)
     Check("Show Blizzard's clock under the map", "clock", -112)
 
-    local move = W.Button(page, 240, 22, "Move and resize (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -152)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
-
-    local note = W.Notes(page, 4, -192, width, "", {
+    local note = W.Notes(page, 4, -152, width, "", {
+            "Right-click the map for the tracking menu (Find Herbs, Find Minerals, Track Beasts...).",
             "The map stays square when you resize it.",
             "Tracking, mail, battleground and other status icons move to the map's corners. The calendar and zoom buttons are hidden.",
             "If the minimap ever looks wrong, untick Minimap under Modules and reload: the round Blizzard one comes right back.",

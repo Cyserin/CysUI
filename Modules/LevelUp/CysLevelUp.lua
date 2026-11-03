@@ -294,9 +294,14 @@ end
 --------------------------------------------------------------------------------
 -- Trainer scan: saves the trainer's list and checks the guide's levels
 --------------------------------------------------------------------------------
-local function Scan()
+-- quiet = the automatic scan when a class trainer opens: saves without the chat report
+local function Scan(quiet)
     if not (GetNumTrainerServices and GetTrainerServiceInfo) or (GetNumTrainerServices() or 0) == 0 then
-        CUI:Print("Open your class trainer first, then type /cuiscan.")
+        if not quiet then CUI:Print("Open your class trainer first, then type /cuiscan.") end
+        return
+    end
+    if IsTradeskillTrainer and IsTradeskillTrainer() then
+        if not quiet then CUI:Print("That's a profession trainer. Open your class trainer for /cuiscan.") end
         return
     end
     -- make sure the trainer's own filters hide nothing
@@ -325,12 +330,16 @@ local function Scan()
 
     local _, cls = UnitClass("player")
     CysUIDB.trainerScan = CysUIDB.trainerScan or {}
+    local old = CysUIDB.trainerScan[cls]
+    -- keep the fullest list (a trainer can hide spells it doesn't teach yet, depending on filters)
+    if quiet and old and old.rows and #old.rows > #rows and old.build == select(4, GetBuildInfo()) then return end
     CysUIDB.trainerScan[cls] = {
         date = date("%Y-%m-%d"),
         build = select(4, GetBuildInfo()),
         level = UnitLevel("player"),
         rows = rows,
     }
+    if quiet then return end
     CUI:Print("Saved " .. #rows .. " trainer spells for " .. cls .. " (CysUIDB.trainerScan).")
 
     -- compare with the guide
@@ -543,6 +552,8 @@ local function Enable()
                 if not MaybeAsk(lv) then Show(lv, "level") end
             end
         elseif event == "TRAINER_SHOW" then
+            -- record what this class trainer teaches (levels, ranks, costs) for building the guides
+            if db.autoScan ~= false then C_Timer.After(0.2, function() pcall(Scan, true) end) end
             if db.onTrainer then Show(UnitLevel("player"), "trainer") end
         elseif event == "TRAINER_CLOSED" then
             if box and box:IsShown() and shownBy == "trainer" then box:Hide() end
@@ -639,6 +650,10 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     end
     Check("Show the box when I level up", "onLevel")
     Check("Show the box when I open my trainer", "onTrainer")
+    local scan = W.Checkbox(page, "Record what my class trainer teaches (helps build guides for every class)",
+        function() return db.autoScan ~= false end, function(on) db.autoScan = on end)
+    scan:SetPoint("TOPLEFT", 4, y)
+    y = y - 26
 
     -- which guide
     local list, cls = ClassGuides()

@@ -738,9 +738,6 @@ CUI:RegisterPage("Unit Frames", function(page)
         y = y - 26
     end
 
-    local move = W.Button(page, 240, 22, "Move and resize (layout mode)")
-    move:SetPoint("TOPLEFT", 4, y - 14)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     local note = W.Notes(page, 4, y - 52, width, "", {
             "Frames can only be moved or resized out of combat.",

@@ -38,8 +38,9 @@ local T = {
     hover    = Hex("181818"),
     selected = Hex("1E1E1E"),
     border   = Hex("D9A421"), -- frame edge colour: follows the Border color setting (changed in place, see W.ApplyBorderStyle)
-    brand    = Hex("D9A421"), -- fixed gold for fills / thumbs / highlights that must stay visible whatever the border colour
-    accent   = Hex("FFD100"), -- bright gold: active / hover / primary
+    brand    = Hex("D9A421"), -- fills / thumbs / highlights: follows the Border color setting, kept visible (see W.ApplyBorderStyle)
+    glow     = Hex("FFD100"), -- hover and "on" edges, checkmarks: follows the Border color setting
+    accent   = Hex("FFD100"), -- bright gold text: labels, headings, active text
     line     = Hex("2A2A2A"),
     text     = Hex("E0E0E0"),
     dim      = Hex("777777"),
@@ -65,7 +66,12 @@ end
 function W.Texture(parent, layer, color, sublevel)
     local t = parent:CreateTexture(nil, layer or "BACKGROUND", nil, sublevel or 0)
     t:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
-    if color == T.border then W.TrackEdge(t) end
+    if color == T.border then W.TrackEdge(t)
+    elseif color == T.brand or color == T.glow then
+        -- drawn in a theme colour: recoloured with the Border color setting too
+        t.cysTheme = color
+        frameTex[t] = true
+    end
     return t
 end
 
@@ -82,10 +88,12 @@ end
 
 function W.SetBorder(edges, color)
     local isFrame = color == T.border
+    local theme = (color == T.brand or color == T.glow) and color or nil
     for i = 1, #edges do
         edges[i]:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
         edges[i].cysFrame = isFrame
-        if isFrame then frameTex[edges[i]] = true end
+        edges[i].cysTheme = theme
+        if isFrame or theme then frameTex[edges[i]] = true end
     end
 end
 
@@ -128,13 +136,29 @@ end
 local styleCallbacks = {}
 function W.OnBorderStyle(fn) styleCallbacks[#styleCallbacks + 1] = fn end
 
--- Recolour the frame-edge colour and everything already drawn with it.
+-- The highlight and hover colours that go with a border style. They must stay visible on the dark
+-- panels, so Black and Grey use lighter greys; Gold keeps the original golds.
+local function ThemeColors(key, c)
+    if key == "black" then return { 0.42, 0.42, 0.42 }, { 0.78, 0.78, 0.78 } end
+    if key == "grey" then return { 0.55, 0.55, 0.55 }, { 0.85, 0.85, 0.85 } end
+    if key == "gold" or not key then return { 0.851, 0.643, 0.129 }, { 1, 0.82, 0 } end
+    -- class colours / Shaman blue: the colour itself, a touch brighter for hover
+    local function lift(v) return math.min(1, v * 1.2 + 0.08) end
+    return { c[1], c[2], c[3] }, { lift(c[1]), lift(c[2]), lift(c[3]) }
+end
+
+-- Recolour the frame-edge colour, the highlight / hover colours and everything already drawn with them.
+-- (Highlights made from a copy of the colour, e.g. with their own transparency, follow after a /reload.)
 function W.ApplyBorderStyle(key)
     key = key or (CysUIDB and CysUIDB.borderColor) or "gold"
     local c = W.BorderStyleColor(key)
     T.border[1], T.border[2], T.border[3], T.border[4] = c[1], c[2], c[3], 1
+    local fill, glow = ThemeColors(key, c)
+    T.brand[1], T.brand[2], T.brand[3] = fill[1], fill[2], fill[3]
+    T.glow[1], T.glow[2], T.glow[3] = glow[1], glow[2], glow[3]
     for t in pairs(frameTex) do
-        if t.cysFrame then t:SetColorTexture(c[1], c[2], c[3], 1) end
+        if t.cysFrame then t:SetColorTexture(c[1], c[2], c[3], 1)
+        elseif t.cysTheme then t:SetColorTexture(t.cysTheme[1], t.cysTheme[2], t.cysTheme[3], 1) end
     end
     for _, fn in ipairs(styleCallbacks) do pcall(fn) end
 end
@@ -155,31 +179,38 @@ end
 --------------------------------------------------------------------------------
 -- Button: flat, gold text; `primary` = the one gold-filled call-to-action button
 --------------------------------------------------------------------------------
+-- Every button has the same flat dark look with gold text. A "primary" button (the main action, or the
+-- selected choice in a row of options) gets a gold edge and a faint gold tint instead of a solid fill.
+local PRIMARY_TINT = 0.16
+local function PaintButton(b, hover)
+    local base = T.button
+    if b.primary then
+        local br = T.brand
+        -- the button colour with a little gold mixed in
+        b.bg:SetColorTexture(base[1] + (br[1] - base[1]) * PRIMARY_TINT, base[2] + (br[2] - base[2]) * PRIMARY_TINT,
+            base[3] + (br[3] - base[3]) * PRIMARY_TINT, 1)
+        W.SetBorder(b.edges, hover and T.glow or T.border)
+    else
+        b.bg:SetColorTexture(base[1], base[2], base[3], 1)
+        W.SetBorder(b.edges, hover and T.glow or T.line)
+    end
+    b.label:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+end
+
 function W.Button(parent, width, height, label, primary)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(width, height)
     b.primary = primary and true or false
-    b.bg = W.Texture(b, "BACKGROUND", primary and T.brand or T.button)
+    b.bg = W.Texture(b, "BACKGROUND", T.button)
     b.bg:SetAllPoints()
-    b.edges = W.Border(b, 1, primary and T.brand or T.line, "BORDER")
-    b.label = W.Text(b, 11, primary and T.dark or T.accent, "CENTER")
+    b.edges = W.Border(b, 1, T.line, "BORDER")
+    b.label = W.Text(b, 11, T.accent, "CENTER")
     b.label:SetPoint("CENTER", 0, 0)
     b.label:SetText(label or "")
+    PaintButton(b, false)
 
-    b:SetScript("OnEnter", function(s)
-        if s.primary then
-            s.bg:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 1)
-        else
-            W.SetBorder(s.edges, T.accent)
-        end
-    end)
-    b:SetScript("OnLeave", function(s)
-        if s.primary then
-            s.bg:SetColorTexture(T.brand[1], T.brand[2], T.brand[3], 1)
-        else
-            W.SetBorder(s.edges, T.line)
-        end
-    end)
+    b:SetScript("OnEnter", function(s) PaintButton(s, true) end)
+    b:SetScript("OnLeave", function(s) PaintButton(s, false) end)
     b:SetScript("OnMouseDown", function(s) s.label:SetPoint("CENTER", 0, -1) end)
     b:SetScript("OnMouseUp", function(s) s.label:SetPoint("CENTER", 0, 0) end)
 
@@ -188,14 +219,10 @@ function W.Button(parent, width, height, label, primary)
     function b:SetActive(on)
         if on then self:Enable(); self:SetAlpha(1) else self:Disable(); self:SetAlpha(0.4) end
     end
-    -- promote / demote between the gold-filled and flat looks (e.g. "Reload UI" when needed)
+    -- mark as the main / selected button (gold edge) or back to the plain look (e.g. "Reload UI" when needed)
     function b:SetPrimary(on)
         self.primary = on and true or false
-        local fill = self.primary and T.brand or T.button
-        self.bg:SetColorTexture(fill[1], fill[2], fill[3], 1)
-        W.SetBorder(self.edges, self.primary and T.brand or T.line)
-        local c = self.primary and T.dark or T.accent
-        self.label:SetTextColor(c[1], c[2], c[3])
+        PaintButton(self, self:IsMouseOver())
     end
     return b
 end
@@ -212,7 +239,7 @@ function W.Checkbox(parent, label, get, set)
     box:SetPoint("LEFT", 0, 0)
     W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
     c.boxEdges = W.Border(box, 1, T.border, "BORDER")
-    c.check = W.Texture(box, "ARTWORK", T.accent)
+    c.check = W.Texture(box, "ARTWORK", T.glow)
     c.check:SetPoint("TOPLEFT", 4, -4)
     c.check:SetPoint("BOTTOMRIGHT", -4, 4)
 
@@ -224,7 +251,7 @@ function W.Checkbox(parent, label, get, set)
     function c:Refresh()
         local on = get() and true or false
         self.check:SetShown(on)
-        W.SetBorder(self.boxEdges, on and T.accent or T.border)
+        W.SetBorder(self.boxEdges, on and T.glow or T.border)
     end
     function c:SetActive(on)
         if on then self:Enable() else self:Disable() end

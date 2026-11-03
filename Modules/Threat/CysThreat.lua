@@ -154,6 +154,7 @@ end
 CUI:RegisterModule({
     key = "threat",
     name = "Threat Bar",
+    defaultOff = true, -- the nameplates already color by threat; tick it on if you want the bar too
     addon = "CysUI",
     desc = "A flat bar showing how much threat you have on your target. Colors flip for tanks. Move it in /cui layout.",
     onEnable = Enable,

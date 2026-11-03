@@ -40,6 +40,40 @@ local frame, text
 local totalXP, kills = 0, 0
 local LEVEL_CAP = 60
 
+-- Classic Era kill XP for your current target (solo, before group split): the base value for a
+-- same-level mob, more for higher mobs, less for lower ones, nothing for grey mobs, doubled for
+-- elites and by rested XP. Returns nil when there is no attackable mob targeted.
+local function ZeroDiff(lvl)
+    if lvl < 8 then return 5 elseif lvl < 10 then return 6 elseif lvl < 12 then return 7
+    elseif lvl < 16 then return 8 elseif lvl < 20 then return 9 elseif lvl < 30 then return 11
+    elseif lvl < 40 then return 12 elseif lvl < 45 then return 13 elseif lvl < 50 then return 14
+    elseif lvl < 55 then return 15 else return 16 end
+end
+local function GreyLevel(lvl)
+    if lvl <= 5 then return 0 elseif lvl < 40 then return lvl - floor(lvl / 10) - 5 end
+    return lvl - floor(lvl / 5) - 1
+end
+local function TargetXP()
+    if IsInGroup and IsInGroup() then return nil end -- group XP is split; the average covers that case
+    if not UnitExists("target") or UnitIsPlayer("target") or not UnitCanAttack("player", "target")
+        or UnitIsDead("target") or (UnitIsTapDenied and UnitIsTapDenied("target")) then return nil end
+    local me, mob = UnitLevel("player") or 1, UnitLevel("target") or 0
+    if mob <= 0 then return nil end -- ?? level: unknown
+    if mob <= GreyLevel(me) then return 0 end
+    local base = me * 5 + 45
+    local xp
+    if mob >= me then
+        xp = base * (1 + 0.05 * math.min(mob - me, 4))
+    else
+        xp = base * (1 - (me - mob) / ZeroDiff(me))
+    end
+    local c = UnitClassification and UnitClassification("target")
+    if c == "elite" or c == "rareelite" or c == "worldboss" then xp = xp * 2 end
+    xp = floor(xp)
+    local rested = GetXPExhaustion and GetXPExhaustion() or 0
+    return xp + math.min(rested, xp)
+end
+
 local function Refresh()
     if not frame then return end
     local db = DB()
@@ -60,6 +94,14 @@ local function Refresh()
         local fmt = FORMATS[db.format] or FORMATS[1]
         line = fmt.text(needed, floor(avg))
     end
+    -- the next kill finishes the level: from your target if one is selected, else from the average
+    local remaining = (UnitXPMax("player") or 0) - (UnitXP("player") or 0)
+    local tx = TargetXP()
+    if remaining > 0 and tx and tx >= remaining then
+        line = "|cFF4FD66BKilling this target levels you!|r"
+    elseif remaining > 0 and not tx and kills > 0 and totalXP / kills >= remaining then
+        line = "|cFF4FD66BYour next kill should level you!|r"
+    end
     text:SetText(line)
 end
 
@@ -79,7 +121,7 @@ local function OnEvent(_, event, msg)
             kills = kills + 1
             Refresh()
         end
-    elseif event == "PLAYER_XP_UPDATE" then
+    elseif event == "PLAYER_XP_UPDATE" or event == "PLAYER_TARGET_CHANGED" then
         Refresh()
     elseif event == "PLAYER_LEVEL_UP" then
         if DB().resetOnLevel then totalXP, kills = 0, 0 end
@@ -105,6 +147,7 @@ function KT.Enable()
     frame:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN")
     frame:RegisterEvent("PLAYER_XP_UPDATE")
     frame:RegisterEvent("PLAYER_LEVEL_UP")
+    frame:RegisterEvent("PLAYER_TARGET_CHANGED")
     frame:SetScript("OnEvent", OnEvent)
     Refresh()
 end
@@ -143,9 +186,6 @@ CUI:RegisterPage("Kill Tracker", function(page)
     local reset = W.Button(page, 160, 22, "Reset this session")
     reset:SetPoint("TOPLEFT", 4, -158)
     reset:SetScript("OnClick", function() KT:Reset() end)
-    local move = W.Button(page, 240, 22, "Move the tracker (layout mode)")
-    move:SetPoint("LEFT", reset, "RIGHT", 8, 0)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     local note = W.Text(page, 11, T.desc)
     note:SetPoint("TOPLEFT", 4, -196)

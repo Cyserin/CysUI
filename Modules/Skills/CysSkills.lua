@@ -338,9 +338,6 @@ CysUI:RegisterPage("Skill Tracker", function(page)
         buttons[def[1]] = b
     end
     Paint()
-    local move = W.Button(page, 240, 22, "Move the tracker (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -146)
-    move:SetScript("OnClick", function() CysUI:ToggleLayout() end)
 end)
 end,
 })

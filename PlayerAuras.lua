@@ -327,7 +327,4 @@ CUI:RegisterPage("PlayerAuras", function(page)
     AuraStepper("Most buffs shown", "numBuffs", 4, 32, 16)
     AuraStepper("Most debuffs shown", "numDebuffs", 2, 16, 8)
 
-    local move = W.Button(page, 240, 22, "Move buffs and debuffs (layout mode)")
-    move:SetPoint("TOPLEFT", 4, y - 8)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 end)

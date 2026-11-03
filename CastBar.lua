@@ -230,9 +230,6 @@ CUI:RegisterPage("Cast Bar", function(page)
     Check("Your cast bar", "player", -132)
     Check("Target cast bar", "target", -158)
 
-    local move = W.Button(page, 240, 22, "Move and resize (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -198)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     local note = W.Notes(page, 4, -238, width, "", {
             "Blizzard's cast bar is hidden for any bar you turn on.",

@@ -144,9 +144,67 @@ local function UpdateButtons()
 end
 
 --------------------------------------------------------------------------------
+-- Quest rewards: a gold coin on the choice that sells for the most
+--------------------------------------------------------------------------------
+local coins = {}
+local function HideCoins() for _, c in pairs(coins) do c:Hide() end end
+
+local function MarkBestReward(retry)
+    HideCoins()
+    if CysUIDB.vendor.questCoin == false then return end
+    local n = GetNumQuestChoices and GetNumQuestChoices() or 0
+    if n < 2 then return end
+    local best, bestValue, missing = nil, 0, false
+    for i = 1, n do
+        local link = GetQuestItemLink("choice", i)
+        local _, _, count = GetQuestItemInfo("choice", i)
+        local price = link and select(11, GetItemInfo(link))
+        if link and price == nil then missing = true end
+        local value = (price or 0) * math.max(count or 1, 1)
+        if value > bestValue then best, bestValue = i, value end
+    end
+    if missing and not retry then -- item info not cached yet: try again in a moment
+        C_Timer.After(0.4, function() MarkBestReward(true) end)
+    end
+    if not best then return end
+    local rf = QuestInfoRewardsFrame
+    for _, btn in ipairs(rf and rf.RewardButtons or {}) do
+        if btn.type == "choice" and btn:GetID() == best and btn:IsShown() then
+            local c = coins[btn]
+            if not c then
+                c = btn:CreateTexture(nil, "OVERLAY", nil, 7)
+                c:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+                c:SetSize(16, 16)
+                local icon = btn.Icon or _G[(btn:GetName() or "") .. "IconTexture"]
+                c:SetPoint("TOPLEFT", icon or btn, "TOPLEFT", -4, 4)
+                coins[btn] = c
+                btn:HookScript("OnEnter", function()
+                    if c:IsShown() and GameTooltip:IsOwned(btn) then
+                        GameTooltip:AddLine("Sells for the most of these rewards", 1, 0.82, 0)
+                        GameTooltip:Show()
+                    end
+                end)
+            end
+            c:Show()
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 function V.Enable()
+    local q = CreateFrame("Frame")
+    q:RegisterEvent("QUEST_COMPLETE")
+    q:RegisterEvent("QUEST_FINISHED")
+    q:SetScript("OnEvent", function(_, event)
+        if event == "QUEST_COMPLETE" then
+            C_Timer.After(0.05, function() MarkBestReward() end) -- after the window lays out its buttons
+        else
+            HideCoins()
+        end
+    end)
+
     local f = CreateFrame("Frame")
     f:RegisterEvent("MERCHANT_SHOW")
     f:RegisterEvent("MERCHANT_CLOSED")
@@ -198,11 +256,15 @@ CUI:RegisterPage("Vendor", function(page)
     Toggle("Show a Sell Junk button when you're at a vendor", "showButton", -34)
     Toggle("Automatically sell junk when you open a vendor", "autoSell", -64)
     Toggle("Automatically repair your gear when you open a vendor", "autoRepair", -94)
+    local coin = W.Checkbox(page, "Mark the quest reward that sells for the most with a gold coin",
+        function() return db.questCoin ~= false end, function(on) db.questCoin = on end)
+    coin:SetPoint("TOPLEFT", 4, -124)
 
-    local note = W.Notes(page, 4, -134, width, "", {
+    local note = W.Notes(page, 4, -164, width, "", {
             { "Junk", "means grey (poor quality) items that a vendor will buy." },
             "The Sell Junk button shows up on the vendor window and in Cys's Bags.",
             "Auto-repair pays with your own gold and tells you the cost in chat.",
+            "The gold coin only shows when a quest lets you pick one of several rewards.",
             "Turn the whole Vendor module off under Modules if you'd rather do it by hand.",
         })
 end)

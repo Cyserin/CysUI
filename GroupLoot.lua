@@ -543,9 +543,6 @@ CUI:RegisterPage("Loot", function(page)
         bx = bx + 158
     end
     PaintLoot()
-    local moveLoot = W.Button(page, 240, 22, "Move the loot window (layout mode)")
-    moveLoot:SetPoint("TOPLEFT", 4, -88)
-    moveLoot:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     -- group loot (Need / Greed / Pass roll boxes)
     W.Header(page, "Group loot boxes", width):SetPoint("TOPLEFT", 0, -130)
@@ -555,9 +552,6 @@ CUI:RegisterPage("Loot", function(page)
         function(on) db.qualityColors = on; GL.RecolorAll() end)
     cq:SetPoint("TOPLEFT", 4, -186)
 
-    local move = W.Button(page, 240, 22, "Move the group loot boxes (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -220)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     local previewBtn = W.Button(page, 240, 22, "Toggle group loot preview")
     previewBtn:SetPoint("TOPLEFT", 4, -250)

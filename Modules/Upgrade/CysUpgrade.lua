@@ -407,19 +407,65 @@ return slotID, equippedLink, equippedEP
 end
 end
 
+-- Weapons are judged as a whole hand setup:
+--   * a two-hander is compared with main hand + off-hand together (equipping it takes both off)
+--   * a one-hander or off-hand while a two-hander is in use is paired with the best partner in your bags
+--     (an off-hand for a main hand, a main hand for an off-hand) and the pair is compared with the two-hander
+local MAIN_LOCS = { INVTYPE_WEAPON = true, INVTYPE_WEAPONMAINHAND = true }
+local OFF_LOCS  = { INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true, INVTYPE_WEAPONOFFHAND = true }
+
+local function CanDualWield()
+    return (IsPlayerSpell and IsPlayerSpell(674)) or (IsSpellKnown and IsSpellKnown(674)) or false
+end
+
+-- best item for one hand in your bags (usable, right type), by score. The scan is kept for a second so
+-- refreshing every bag arrow doesn't rescan the bags once per weapon.
+local handCache = { [true] = { t = -1 }, [false] = { t = -1 } }
+local function BestInBags(wantMain, weights, exclude)
+    local c = handCache[wantMain]
+    local now = GetTime()
+    if now - c.t > 1 or c.weights ~= weights then
+        c.t, c.weights, c.list = now, weights, {}
+        local myLevel = UnitLevel("player") or 1
+        local dw = CanDualWield()
+        for bag = 0, 4 do
+            for slot = 1, (CC.GetContainerNumSlots(bag) or 0) do
+                local link = CC.GetContainerItemLink(bag, slot)
+                if link and IsItemValidForClass(link) then
+                    local _, _, _, _, minLevel, _, _, _, loc = GetItemInfo(link)
+                    local fits
+                    if wantMain then fits = MAIN_LOCS[loc]
+                    else fits = OFF_LOCS[loc] or (dw and loc == "INVTYPE_WEAPON") end
+                    if fits and (minLevel or 0) <= myLevel then
+                        c.list[#c.list + 1] = { link = link, ep = CysUpgrade:GetItemEP(link, weights) }
+                    end
+                end
+            end
+        end
+        table.sort(c.list, function(a, b) return a.ep > b.ep end)
+    end
+    for _, e in ipairs(c.list) do
+        if e.link ~= exclude then return e.link, e.ep end
+    end
+    return nil, 0
+end
+
 -- What a new item is judged against: the item in the Armory set linked to the active profile (so switching
--- sets never changes a label), or the worn item when no set is linked. Returns slot, link, EP, set name.
+-- sets never changes a label), or the worn item when no set is linked.
+-- Returns slot, link, EP, set name, extra. extra (weapons only):
+--   baseLinks = every item the new one replaces (main hand and off-hand for a two-hander)
+--   partner, partnerEP = the bag item paired with the new one; add partnerEP to the new item's score
 local function GetBaseline(itemLink, weights)
-    local slot, eqLink, eqEP = GetTargetSlotAndEquipped(itemLink, weights)
-    if not slot then return nil end
     local prof = CysUpgrade.activeProfileName or ""
+    local activeProf = string.lower(prof)
+    local isTank = string.find(activeProf, "tank") ~= nil or string.find(activeProf, "mitigation") ~= nil
+    local equipLoc = select(9, GetItemInfo(itemLink))
+
     local setData, setName
     if prof ~= "" and CysArmory and CysArmory.GetSetForProfile then
         local ok, d, n = pcall(CysArmory.GetSetForProfile, CysArmory, prof)
         if ok then setData, setName = d, n end
     end
-    if not setData then return slot, eqLink, eqEP, nil end
-
     local function SetSlotLink(sl)
         local str = setData[sl]
         if not str then return nil end
@@ -429,18 +475,31 @@ local function GetBaseline(itemLink, weights)
         end
         return str
     end
-
-    local equipLoc = select(9, GetItemInfo(itemLink))
-    local cand = SLOT_MAP[equipLoc]
-    local activeProf = string.lower(prof)
-    local isTank = string.find(activeProf, "tank") ~= nil or string.find(activeProf, "mitigation") ~= nil
-    if equipLoc == "INVTYPE_2HWEAPON" then
-        local l1, l2 = SetSlotLink(16), SetSlotLink(17)
-        if not l1 and not l2 then return 16, nil, 0, setName end
-        local e1 = l1 and CysUpgrade:GetItemEP(l1, weights) or 0
-        local e2 = l2 and CysUpgrade:GetItemEP(l2, weights) or 0
-        return 16, l1 or l2, e1 + e2, setName
+    local function Current(sl)
+        if setData then return SetSlotLink(sl) end
+        return GetInventoryItemLink("player", sl)
     end
+    local function EP(l) return l and CysUpgrade:GetItemEP(l, weights) or 0 end
+
+    if IsItemValidForClass(itemLink) and not (isTank and equipLoc == "INVTYPE_2HWEAPON") then
+        local mh, oh = Current(16), Current(17)
+        local mhIs2H = mh and select(9, GetItemInfo(mh)) == "INVTYPE_2HWEAPON"
+        if equipLoc == "INVTYPE_2HWEAPON" then
+            if not mh and not oh then return 16, nil, 0, setName end
+            return 16, mh or oh, EP(mh) + EP(oh), setName, { baseLinks = { mh, oh } }
+        elseif mhIs2H and not isTank and (MAIN_LOCS[equipLoc] or OFF_LOCS[equipLoc]) then
+            local wantMain = OFF_LOCS[equipLoc] and true or false
+            local partner, partnerEP = BestInBags(wantMain, weights, itemLink)
+            return 16, mh, EP(mh), setName, { baseLinks = { mh }, partner = partner, partnerEP = partnerEP,
+                partnerIsMain = wantMain }
+        end
+    end
+
+    local slot, eqLink, eqEP = GetTargetSlotAndEquipped(itemLink, weights)
+    if not slot then return nil end
+    if not setData then return slot, eqLink, eqEP, nil end
+
+    local cand = SLOT_MAP[equipLoc]
     local slots = type(cand) == "table" and cand or { cand }
     if isTank and equipLoc == "INVTYPE_WEAPON" then slots = { 16 } end
     local bestSlot, bestLink, bestEP
@@ -625,7 +684,10 @@ local function OnTooltipItem(tooltip)
         return
     end
 
-    local baseSlot, equippedLink, baseEP, setName = GetBaseline(itemLink, weights)
+    local baseSlot, equippedLink, baseEP, setName, extra = GetBaseline(itemLink, weights)
+    extra = extra or {}
+    local soloScore = itemScore
+    itemScore = itemScore + (extra.partnerEP or 0) -- a one-hander replacing a two-hander counts with its partner
     if not baseSlot then
         tooltip:AddLine(" ")
         tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP", profName, Whole(itemScore)), 1, 1, 1)
@@ -641,28 +703,58 @@ local function OnTooltipItem(tooltip)
     tooltip:AddLine(" ")
     tooltip:AddLine(string.format("|cFFFFD100CysUpgrade Score [%s]:|r %s EP%s |c%s%s|r", profName, Whole(itemScore), detail, LABEL_COLOR[label], LabelText(label, diff or 0)), 1, 1, 1)
 
+    -- the items this one replaces (two for a two-hander over main hand + off-hand)
+    local baseLinks = {}
+    if extra.baseLinks then
+        for i = 1, 2 do if extra.baseLinks[i] then baseLinks[#baseLinks + 1] = extra.baseLinks[i] end end
+    elseif equippedLink then
+        baseLinks[1] = equippedLink
+    end
+
     -- items are scored without enchants and armor kits; say what the swap would take off, and what a kit could add
-    if equippedLink then
-        local ench = GetEnchantStats(equippedLink)
+    for _, bl in ipairs(baseLinks) do
+        local ench = GetEnchantStats(bl)
         if next(ench) ~= nil then
             local enchEP = 0
             for k, v in pairs(ench) do enchEP = enchEP + v * (weights[k] or 0) end
             tooltip:AddLine(string.format("You'd lose: %s (%+.1f EP). Reapply on the new item?",
-                table.concat(GetEnchantNames(equippedLink), ", "), enchEP), 1, 0.6, 0.2)
+                table.concat(GetEnchantNames(bl), ", "), enchEP), 1, 0.6, 0.2)
         end
     end
-    CysUpgrade.AddKitSuggestion(tooltip, itemLink, weights, equippedLink, itemScore, baseEP)
+    CysUpgrade.AddKitSuggestion(tooltip, itemLink, weights, equippedLink, soloScore, baseEP)
 
     if not equippedLink then
         tooltip:AddLine(setName and string.format("Replaces: nothing (empty slot in your %s set)", setName) or "Replaces: nothing (empty slot)", 0.2, 1, 0.2)
         return
     end
 
-    local eqName = GetItemInfo(equippedLink)
-    if eqName then tooltip:AddLine(string.format("Replaces: %s%s", eqName, setName and (" (your " .. setName .. " set)") or ""), 0.8, 0.8, 0.8) end
+    local names = {}
+    for _, bl in ipairs(baseLinks) do names[#names + 1] = GetItemInfo(bl) or "?" end
+    tooltip:AddLine(string.format("Replaces: %s%s", table.concat(names, " + "), setName and (" (your " .. setName .. " set)") or ""), 0.8, 0.8, 0.8)
+    if extra.partner then
+        tooltip:AddLine(string.format("Paired with: %s (best %s in your bags)", GetItemInfo(extra.partner) or "?",
+            extra.partnerIsMain and "main hand" or "off-hand"), 0.8, 0.8, 0.8)
+    elseif extra.partnerEP ~= nil then
+        tooltip:AddLine(string.format("No %s in your bags to pair it with, so this is the item on its own.",
+            extra.partnerIsMain and "main hand" or "off-hand"), 1, 0.6, 0.2)
+    end
 
-    -- only the stats that really differ
-    local newStats, eqStats = GetBaseStats(itemLink), GetBaseStats(equippedLink)
+    -- only the stats that really differ (both hands added up where two items are involved)
+    local function Sum(links)
+        local out = {}
+        for _, l in ipairs(links) do
+            for k, v in pairs(GetBaseStats(l)) do
+                if k ~= "ITEM_MOD_ATTACK_SPEED" then out[k] = (out[k] or 0) + v end
+            end
+        end
+        return out
+    end
+    -- weapon speed: main hand against main hand
+    local newMain = (extra.partner and extra.partnerIsMain) and extra.partner or itemLink
+    local newStats = Sum({ itemLink, extra.partner })
+    local eqStats = Sum(baseLinks)
+    newStats["ITEM_MOD_ATTACK_SPEED"] = GetBaseStats(newMain)["ITEM_MOD_ATTACK_SPEED"]
+    eqStats["ITEM_MOD_ATTACK_SPEED"] = GetBaseStats(baseLinks[1])["ITEM_MOD_ATTACK_SPEED"]
     local keys, changes = {}, {}
     for k in pairs(newStats) do keys[k] = true end
     for k in pairs(eqStats) do keys[k] = true end
@@ -1132,9 +1224,9 @@ if itemLink and IsItemValidForClass(itemLink) then
 UpdateWeightsFromRows()
 local itemScore = CysUpgrade:GetItemEP(itemLink, CysUpgrade.weights)
 if itemScore > 0 then
-local bSlot, eqLink, eqScore = GetBaseline(itemLink, CysUpgrade.weights)
+local bSlot, eqLink, eqScore, _, extra = GetBaseline(itemLink, CysUpgrade.weights)
 if bSlot then
-local lbl = UpgradeLabel(itemScore, eqLink, eqScore or 0)
+local lbl = UpgradeLabel(itemScore + (extra and extra.partnerEP or 0), eqLink, eqScore or 0)
 showUpgrade = (lbl == "Upgrade" or lbl == "Big upgrade")
 end
 end
@@ -1158,9 +1250,9 @@ if itemLink and IsItemValidForClass(itemLink) then
 UpdateWeightsFromRows()
 local itemScore = CysUpgrade:GetItemEP(itemLink, CysUpgrade.weights)
 if itemScore > 0 then
-local bSlot, eqLink, eqScore = GetBaseline(itemLink, CysUpgrade.weights)
+local bSlot, eqLink, eqScore, _, extra = GetBaseline(itemLink, CysUpgrade.weights)
 if bSlot then
-local lbl = UpgradeLabel(itemScore, eqLink, eqScore or 0)
+local lbl = UpgradeLabel(itemScore + (extra and extra.partnerEP or 0), eqLink, eqScore or 0)
 showUpgrade = (lbl == "Upgrade" or lbl == "Big upgrade")
 end
 end
@@ -1327,7 +1419,7 @@ local function BuildUpgradeSettingsPage(page)
         eb:SetTextInsets(6, 6, 0, 0)
         W.Texture(eb, "BACKGROUND", T.field):SetAllPoints()
         eb.edges = W.Border(eb, 1, T.line, "BORDER")
-        eb:SetScript("OnEditFocusGained", function(s) W.SetBorder(s.edges, T.accent) end)
+        eb:SetScript("OnEditFocusGained", function(s) W.SetBorder(s.edges, T.glow) end)
         eb:SetScript("OnEditFocusLost", function(s) W.SetBorder(s.edges, T.line) end)
         eb:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
         eb:SetScript("OnEnterPressed", function(s) s:ClearFocus() end)

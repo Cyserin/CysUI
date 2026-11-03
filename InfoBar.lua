@@ -472,9 +472,6 @@ CUI:RegisterPage("Info Bar", function(page)
         function(on) db.use24h = on; IB:UpdateItem("clock") end)
     h24:SetPoint("TOPLEFT", 4, -60)
 
-    local move = W.Button(page, 280, 22, "Move and resize both bars (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -90)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 
     W.Header(page, "Items - tick to show, pick a bar, reorder with the arrows", width):SetPoint("TOPLEFT", 0, -128)
 

@@ -48,6 +48,10 @@ local LIST = {
     { addon = "SexyMap",            label = "SexyMap",            modules = { "minimap" } },
     { addon = "TipTac",             label = "TipTac",             match = "^TipTac", modules = { "tooltip" } },
     { addon = "TitanClassic",       label = "Titan Panel",        match = "^Titan", modules = { "infobar" } },
+    { addon = "Consumable-Connoisseur", label = "Connoisseur & Restocker", modules = { "consumables" } },
+    -- overlaps one button, not a whole module: "theirs" just hides the bag's Junk button
+    { addon = "DropTheCheapestThing", label = "Drop The Cheapest Thing", modules = {},
+      feature = "the Junk button in Cys's Bags (destroys the cheapest grey item)" },
 }
 
 local function DB()
@@ -65,6 +69,7 @@ local function Found()
 end
 
 local function ModuleNames(c)
+    if c.feature then return c.feature end
     local names = {}
     for _, key in ipairs(c.modules) do
         local def = CUI.modules[key]
@@ -178,17 +183,12 @@ local function Show(found)
             row.info:SetWidth(330)
             row.info:SetJustifyV("TOP")
             row.cys = W.Button(row, 150, 24, "Use Cys's version")
-            row.cys:SetPoint("TOPRIGHT", -170, -8)
             row.theirs = W.Button(row, 150, 24, "Keep theirs")
             row.theirs:SetPoint("TOPRIGHT", -10, -8)
             f.rows[i] = row
         end
         row.name:SetText(c.label)
         row.info:SetText("Replaces Cys's: " .. ModuleNames(c))
-        row:SetHeight(math.max(62, row.info:GetStringHeight() + 40))
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 16, y)
-        y = y - row:GetHeight() - 6
         choice[c.addon] = DB()[c.addon] or "cys"
         local function Paint()
             row.cys:SetPrimary(choice[c.addon] == "cys")
@@ -196,6 +196,17 @@ local function Show(found)
         end
         row.cys.label:SetText("Use Cys's version")
         row.theirs.label:SetText("Keep " .. c.label)
+        -- buttons fit their text (long addon names), and the description wraps in the space left of them
+        for _, b in ipairs({ row.cys, row.theirs }) do b:SetWidth(math.max(130, math.ceil(b.label:GetStringWidth()) + 24)) end
+        row.cys:ClearAllPoints()
+        row.cys:SetPoint("RIGHT", row.theirs, "LEFT", -8, 0)
+        local left = 528 - 10 - row.theirs:GetWidth() - 8 - row.cys:GetWidth() - 20
+        row.name:SetWidth(left); row.name:SetJustifyH("LEFT"); row.name:SetWordWrap(false)
+        row.info:SetWidth(left)
+        row:SetHeight(math.max(62, row.info:GetStringHeight() + 40))
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 16, y)
+        y = y - row:GetHeight() - 6
         row.cys:SetScript("OnClick", function() choice[c.addon] = "cys"; Paint() end)
         row.theirs:SetScript("OnClick", function() choice[c.addon] = "theirs"; Paint() end)
         Paint()

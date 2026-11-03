@@ -53,6 +53,15 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.
 
+## Added in 0.57.0
+- **Consumables**: self-updating Food, Drink, HP Potion, MP Potion, Bandage and Healthstone macros (conjured first), plus a per-character restock list bought at vendors.
+- **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, group level check (LFG listing and inside dungeons).
+- **Durability**: a small movable warning box in place of Blizzard's armor figure.
+- **Minimap tracking menu**: right-click the minimap.
+- **Quest reward coin**, **Kill Tracker** level-up alerts, **Combat Numbers** boxes with a Flash in place style.
+- **Trainer recording** for building level-up guides.
+- Module switches are **per character**; highlights and hover glows follow the **Border color**.
+
 ## Class support
 What each class-dependent module covers today (Classic Era). Guides and class modules are added as they are made.
 
@@ -63,6 +72,6 @@ What each class-dependent module covers today (Classic Era). Guides and class mo
 | Heal Advisor | Shaman, Priest, Druid, Paladin (healing spells) | Paladin Judgement/Holy Shock extras |
 | Tremor Alert | Shaman | |
 | Battle Shout alert | Warrior | |
-| Raid Debuffs, Interrupts, Waypoints, Upgrade, Combat Log, Taunt Alert, Missing Buffs | all classes | |
+| Raid Debuffs, Interrupts, Waypoints, Upgrade, Combat Log, Taunt Alert, Missing Buffs, Consumables, Automation, Durability | all classes | |
 
 WoW Forever: the level-up guides are a work in progress, because no leveling guides for Forever's classes exist yet.

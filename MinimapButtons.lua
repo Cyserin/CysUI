@@ -195,7 +195,7 @@ local function Capture(name, btn)
 
     hooksecurefunc(btn, "Hide", function() e.hidden = true end)
     hooksecurefunc(btn, "Show", function() e.hidden = false end)
-    btn:HookScript("OnEnter", function() W.SetBorder(edges, T.accent) end)
+    btn:HookScript("OnEnter", function() W.SetBorder(edges, T.glow) end)
     btn:HookScript("OnLeave", function() W.SetBorder(edges, T.border) end)
     -- a dropdown or window an addon opens from its button should close the panel first
     btn:HookScript("OnClick", function() if DB().closeOnClick then MB:Toggle(false) end end)
@@ -350,10 +350,7 @@ CUI:RegisterPage("Minimap Button", function(page)
 
     Add(W.Checkbox(page, "Round logo instead of the square one (needs a /reload)",
         function() return db.roundLogo end, function(on) db.roundLogo = on end))
-    local move = W.Button(page, 240, 22, "Move the Cys button (layout mode)")
-    move:SetPoint("TOPLEFT", 4, y)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
-    y = y - 40
+    y = y - 10
 
     W.Header(page, "Keep on the minimap instead of the panel (needs a /reload)", width):SetPoint("TOPLEFT", 0, y)
     y = y - 30

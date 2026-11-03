@@ -181,7 +181,4 @@ CUI:RegisterPage("Micro Menu", function(page)
         function(on) db.hideBlizz = on; if on then MM:HideBlizzard() end end)
     hide:SetPoint("TOPLEFT", 4, -60)
 
-    local move = W.Button(page, 240, 22, "Move micro menu panel (layout mode)")
-    move:SetPoint("TOPLEFT", 4, -96)
-    move:SetScript("OnClick", function() CUI:ToggleLayout() end)
 end)

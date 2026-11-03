@@ -143,7 +143,7 @@ local function FlatButton(b, edge)
     hl:SetPoint("TOPLEFT", 1, -1)
     hl:SetPoint("BOTTOMRIGHT", -1, 1)
     hl:Hide()
-    b:HookScript("OnEnter", function() W.SetBorder(box.edges, T.accent); hl:Show() end)
+    b:HookScript("OnEnter", function() W.SetBorder(box.edges, T.glow); hl:Show() end)
     b:HookScript("OnLeave", function() W.SetBorder(box.edges, edge or T.border); hl:Hide() end)
 end
 
@@ -163,7 +163,7 @@ local function BoxButton(b, insetX, insetY, edge)
     hl:SetPoint("TOPLEFT", 1, -1)
     hl:SetPoint("BOTTOMRIGHT", -1, 1)
     hl:Hide()
-    b:HookScript("OnEnter", function() W.SetBorder(edges, T.accent); hl:Show() end)
+    b:HookScript("OnEnter", function() W.SetBorder(edges, T.glow); hl:Show() end)
     b:HookScript("OnLeave", function() W.SetBorder(edges, edge); hl:Hide() end)
 end
 
@@ -466,7 +466,7 @@ local function SkinSlots(f)
             Blank(b, function(r) return r == icon end)
             if icon and icon.SetTexCoord then icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) end
             b.cysSlotBox = Box(b, T.line, -1, -1) -- the edge sits just outside the icon, which would otherwise cover it
-            b:HookScript("OnEnter", function() W.SetBorder(b.cysSlotBox.edges, T.accent) end)
+            b:HookScript("OnEnter", function() W.SetBorder(b.cysSlotBox.edges, T.glow) end)
             b:HookScript("OnLeave", function() W.SetBorder(b.cysSlotBox.edges, b.cysSlotColor or T.line) end)
         end
         if b and b.cysSlotSkinned then slots[#slots + 1] = b end
@@ -618,7 +618,7 @@ local function PaintSideTabs()
     local function Paint(c)
         if c.cysBox then
             local on = c.GetChecked and c:GetChecked()
-            W.SetBorder(c.cysBox.edges, on and T.accent or T.border)
+            W.SetBorder(c.cysBox.edges, on and T.glow or T.border)
         end
     end
     local function Consider(c)
@@ -632,7 +632,7 @@ local function PaintSideTabs()
             if ch then ch:SetAlpha(0) end
             c.cysBox = Box(c, T.border, -2, -2)
             c.cysBox:SetFrameLevel(max(c:GetFrameLevel() - 1, 0))
-            c:HookScript("OnEnter", function() W.SetBorder(c.cysBox.edges, T.accent) end)
+            c:HookScript("OnEnter", function() W.SetBorder(c.cysBox.edges, T.glow) end)
             c:HookScript("OnLeave", function() Paint(c) end)
             c:HookScript("OnClick", function() PaintSideTabs() end)
         end
@@ -1228,7 +1228,7 @@ local function SkinDropdown(dd, edge)
     Blank(dd, function(r) return r == dd.Arrow end)
     local box = Box(dd, edge or T.border, 0, 0)
     if edge and box and box.edges then
-        dd:HookScript("OnEnter", function() W.SetBorder(box.edges, T.accent) end)
+        dd:HookScript("OnEnter", function() W.SetBorder(box.edges, T.glow) end)
         dd:HookScript("OnLeave", function() W.SetBorder(box.edges, edge) end)
     end
 end
@@ -1417,7 +1417,7 @@ local function SkinCommunities()
                         c.cysEntryBox:SetFrameLevel(max(c:GetFrameLevel() - 1, 0))
                     end
                     local sel = c.Selection and c.Selection:IsShown()
-                    W.SetBorder(c.cysEntryBox.edges, sel and T.accent or T.line)
+                    W.SetBorder(c.cysEntryBox.edges, sel and T.glow or T.line)
                 end
             end
         end
@@ -1452,7 +1452,7 @@ local function SkinCommunities()
         for _, t in ipairs(tabs) do
             if t.cysBox then
                 local on = t.GetChecked and t:GetChecked()
-                W.SetBorder(t.cysBox.edges, on and T.accent or T.border)
+                W.SetBorder(t.cysBox.edges, on and T.glow or T.border)
             end
         end
     end
@@ -1700,7 +1700,7 @@ local function SkinMerchant()
         if b and not b.cysBox then
             b.cysBox = Box(b, T.border, 0, 0)
             b.cysBox:SetFrameLevel(max(b:GetFrameLevel() - 1, 0))
-            b:HookScript("OnEnter", function() W.SetBorder(b.cysBox.edges, T.accent) end)
+            b:HookScript("OnEnter", function() W.SetBorder(b.cysBox.edges, T.glow) end)
             b:HookScript("OnLeave", function() W.SetBorder(b.cysBox.edges, T.border) end)
         end
     end
@@ -1751,7 +1751,7 @@ local function SkinMail()
         if not b or b.cysItemBox then return end
         b.cysItemBox = Box(b, T.line, 0, 0)
         b.cysItemBox:SetFrameLevel(max(b:GetFrameLevel() - 1, 0))
-        b:HookScript("OnEnter", function() W.SetBorder(b.cysItemBox.edges, T.accent) end)
+        b:HookScript("OnEnter", function() W.SetBorder(b.cysItemBox.edges, T.glow) end)
         b:HookScript("OnLeave", function() W.SetBorder(b.cysItemBox.edges, T.line) end)
     end
     -- a gold-tinted title band with a rule under it, so the window isn't one flat slab
@@ -1904,7 +1904,7 @@ local function SkinMail()
                 end
                 local box = Box(cb, T.line, 4, 4)
                 box:SetFrameLevel(max(cb:GetFrameLevel() - 1, 0))
-                cb:HookScript("OnEnter", function() W.SetBorder(box.edges, T.accent) end)
+                cb:HookScript("OnEnter", function() W.SetBorder(box.edges, T.glow) end)
                 cb:HookScript("OnLeave", function() W.SetBorder(box.edges, T.line) end)
                 local ck = cb.GetCheckedTexture and cb:GetCheckedTexture()
                 if ck then ck:SetVertexColor(T.accent[1], T.accent[2], T.accent[3]) end
@@ -2259,7 +2259,7 @@ local function SkinInspect()
             Blank(b, function(r) return r == icon end)
             if icon and icon.SetTexCoord then icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) end
             b.cysSlotBox = Box(b, T.line, -1, -1)
-            b:HookScript("OnEnter", function() W.SetBorder(b.cysSlotBox.edges, T.accent) end)
+            b:HookScript("OnEnter", function() W.SetBorder(b.cysSlotBox.edges, T.glow) end)
             b:HookScript("OnLeave", function() W.SetBorder(b.cysSlotBox.edges, b.cysSlotColor or T.line) end)
         end
         if b and b.cysSlotSkinned then slots[#slots + 1] = b end
@@ -3233,7 +3233,7 @@ CUI:RegisterPage("Skins", function(page)
     local swatches = {}
     local function RefreshSwatches()
         local cur = CysUIDB.borderColor or "gold"
-        for key, b in pairs(swatches) do W.SetBorder(b.edges, key == cur and T.accent or T.line) end
+        for key, b in pairs(swatches) do W.SetBorder(b.edges, key == cur and T.glow or T.line) end
     end
     for i, st in ipairs(W.AvailableBorderStyles()) do
         local b = CreateFrame("Button", nil, page)
@@ -3252,7 +3252,7 @@ CUI:RegisterPage("Skins", function(page)
             W.ApplyBorderStyle()
             RefreshSwatches()
         end)
-        b:SetScript("OnEnter", function() W.SetBorder(b.edges, T.accent) end)
+        b:SetScript("OnEnter", function() W.SetBorder(b.edges, T.glow) end)
         b:SetScript("OnLeave", RefreshSwatches)
         swatches[st.key] = b
     end

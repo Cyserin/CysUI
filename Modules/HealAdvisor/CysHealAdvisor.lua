@@ -55,6 +55,22 @@ local SPELLS = {
     ["Flash of Light"]      = { cast = 1.5, levels = { 20, 26, 34, 42, 50, 58 } },
 }
 
+-- Spell ID of each rank (Classic Era), used to find ranks the spellbook hides
+local RANK_IDS = {
+    ["Healing Wave"]        = { 331, 332, 547, 913, 939, 959, 8005, 10395, 10396, 25357 },
+    ["Lesser Healing Wave"] = { 8004, 8008, 8010, 10466, 10467, 10468 },
+    ["Chain Heal"]          = { 1064, 10622, 10623 },
+    ["Lesser Heal"]         = { 2050, 2052, 2053 },
+    ["Heal"]                = { 2054, 2055, 6063, 6064 },
+    ["Greater Heal"]        = { 2060, 10963, 10964, 10965, 25314 },
+    ["Flash Heal"]          = { 2061, 9472, 9473, 9474, 10915, 10916, 10917 },
+    ["Prayer of Healing"]   = { 596, 996, 10960, 10961, 25316 },
+    ["Healing Touch"]       = { 5185, 5186, 5187, 5188, 5189, 6778, 8903, 9758, 9888, 9889, 25297 },
+    ["Regrowth"]            = { 8936, 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 },
+    ["Holy Light"]          = { 635, 639, 647, 1026, 1042, 3472, 10328, 10329, 25292 },
+    ["Flash of Light"]      = { 19750, 19939, 19940, 19941, 19942, 19943 },
+}
+
 -- main = the heals compared for everyday use; fast = the quick expensive heal; group = the group heal
 local FAMILY = {
     -- main = the slow, efficient single-target ladder (one ladder even when it holds several spells)
@@ -107,6 +123,17 @@ local function BookRanks()
             local rank = tonumber((sub or ""):match("(%d+)")) or 1
             out[name] = out[name] or {}
             if id then out[name][rank] = id end
+        end
+    end
+    -- With the spellbook's "Show all spell ranks" box unticked, only the top rank is listed there.
+    -- Ask the game about every rank's spell ID directly so the lower ranks are always found.
+    for name in pairs(want) do
+        for rank, rid in ipairs(RANK_IDS[name] or {}) do
+            local known = (IsSpellKnown and IsSpellKnown(rid)) or (IsPlayerSpell and IsPlayerSpell(rid))
+            if known then
+                out[name] = out[name] or {}
+                out[name][rank] = out[name][rank] or rid
+            end
         end
     end
     return out
@@ -186,9 +213,50 @@ end
 -- talents that look like they change the numbers but do not (Illumination refunds mana on a crit)
 local IGNORE = { ["Illumination"] = true }
 
+-- Backup for when a talent's tooltip comes back empty (it can before the talent window has ever been
+-- opened): the healing talents of every class by name. per = value for each point;
+-- scope = the spells it changes (nil = all heals).
+local KNOWN = {
+    -- Shaman
+    ["Improved Healing Wave"]  = { kind = "cast", per = 0.1, scope = { "Healing Wave" } },
+    ["Tidal Focus"]            = { kind = "cost", per = 1 },
+    ["Purification"]           = { kind = "heal", per = 2 },
+    ["Healing Way"]            = { kind = "other", text = "Healing Wave can leave a buff that makes the next Healing Waves on that target heal more." },
+    ["Ancestral Healing"]      = { kind = "other", text = "A critical heal raises the target's armor for 15 sec." },
+    ["Healing Focus"]          = { kind = "other", text = "Less pushback when you are hit while casting a heal." },
+    ["Nature's Swiftness"]     = { kind = "other", text = "Your next Nature spell is instant." },
+    -- Priest
+    ["Spiritual Healing"]      = { kind = "heal", per = 2 },
+    ["Improved Healing"]       = { kind = "cost", per = 5, scope = { "Lesser Heal", "Heal", "Greater Heal" } },
+    ["Divine Fury"]            = { kind = "cast", per = 0.1, scope = { "Heal", "Greater Heal" } },
+    ["Improved Renew"]         = { kind = "other", text = "Renew heals more (over time, not counted here)." },
+    ["Holy Specialization"]    = { kind = "other", text = "More critical heals." },
+    -- Druid
+    ["Improved Healing Touch"] = { kind = "cast", per = 0.1, scope = { "Healing Touch" } },
+    ["Gift of Nature"]         = { kind = "heal", per = 2 },
+    ["Tranquil Spirit"]        = { kind = "cost", per = 2, scope = { "Healing Touch" } },
+    ["Moonglow"]               = { kind = "cost", per = 3 },
+    ["Improved Regrowth"]      = { kind = "other", text = "More critical Regrowths." },
+    ["Improved Rejuvenation"]  = { kind = "other", text = "Rejuvenation heals more (over time, not counted here)." },
+    -- Paladin
+    ["Healing Light"]          = { kind = "heal", per = 4, scope = { "Holy Light", "Flash of Light" } },
+}
+local function KnownText(k, rank)
+    if k.text then return k.text end
+    local v = k.per * rank
+    local what = k.scope and table.concat(k.scope, " and ") or "your healing spells"
+    if k.kind == "cast" then return string.format("Reduces the casting time of %s by %.1f sec.", what, v) end
+    if k.kind == "cost" then return string.format("Reduces the mana cost of %s by %d%%.", what, v) end
+    return string.format("Increases the healing done by %s by %d%%.", what, v)
+end
+
 local function ReadTalents()
     local t = { list = {}, points = {} }
     if not (GetNumTalentTabs and GetTalentInfo) then return t end
+    -- the talent tooltips read best once the game's talent window has been loaded
+    local loaded = (C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded)
+    local load = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+    if loaded and load and not loaded("Blizzard_TalentUI") and not InCombatLockdown() then pcall(load, "Blizzard_TalentUI") end
     local okTabs, tabs = pcall(GetNumTalentTabs)
     if not okTabs or not tabs then return t end
     for tab = 1, tabs do
@@ -200,10 +268,20 @@ local function ReadTalents()
                 t.points[tab] = t.points[tab] + rank
                 local text = TalentText(tab, i)
                 local kind, value, scope, all = Classify(text)
+                local known = KNOWN[name]
+                -- empty tooltip, or a sentence the reader couldn't place: use the known effect instead
+                if known and (text == "" or (kind == "other" and known.kind ~= "other")) then
+                    if text == "" then text = KnownText(known, rank) end
+                    kind = known.kind
+                    value = known.per and known.per * rank or nil
+                    scope = {}
+                    for _, n in ipairs(known.scope or {}) do scope[n] = true end
+                    all = known.scope == nil
+                end
                 if IGNORE[name] then kind, value = "other", nil end
                 local lower = text:lower()
                 local healing = lower:find("heal") or lower:find("mana cost") or lower:find("casting time")
-                if healing or name == "Nature's Swiftness" then
+                if healing or known or name == "Nature's Swiftness" then
                     t.list[#t.list + 1] = { name = name, rank = rank, max = maxRank, text = text, kind = kind, value = value, scope = scope, all = all }
                 end
             end
