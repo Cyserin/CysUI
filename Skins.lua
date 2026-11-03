@@ -148,8 +148,9 @@ local function FlatButton(b, edge)
 end
 
 -- Any button at all (even text-only ones like the Esc menu's): flat box, gold edge, lit on hover
-local function BoxButton(b, insetX, insetY)
+local function BoxButton(b, insetX, insetY, edge)
     if not b or b.cysBoxed then return end
+    edge = edge or T.border
     b.cysBoxed = true
     if HasStoneParts(b) then b.cysSkinned = true; BlankButtonArt(b) end
     local box = Own(CreateFrame("Frame", nil, b))
@@ -157,13 +158,13 @@ local function BoxButton(b, insetX, insetY)
     box:SetPoint("BOTTOMRIGHT", -(insetX or 0), insetY or 0)
     box:SetFrameLevel(b:GetFrameLevel())
     W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
-    local edges = W.Border(box, 1, T.border, "BORDER")
+    local edges = W.Border(box, 1, edge, "BORDER")
     local hl = W.Texture(box, "ARTWORK", { T.brand[1], T.brand[2], T.brand[3], 0.22 })
     hl:SetPoint("TOPLEFT", 1, -1)
     hl:SetPoint("BOTTOMRIGHT", -1, 1)
     hl:Hide()
     b:HookScript("OnEnter", function() W.SetBorder(edges, T.accent); hl:Show() end)
-    b:HookScript("OnLeave", function() W.SetBorder(edges, T.border); hl:Hide() end)
+    b:HookScript("OnLeave", function() W.SetBorder(edges, edge); hl:Hide() end)
 end
 
 -- The red-X close button becomes a plain "X" in the panel's corner
@@ -1207,7 +1208,7 @@ function SkinMinimalScrollBar(sb)
     local th = tr.Thumb
     if th then
         Blank(th)
-        local mine = W.Texture(th, "OVERLAY", { T.brand[1], T.brand[2], T.brand[3], 0.75 })
+        local mine = W.Texture(th, "OVERLAY", { T.brand[1], T.brand[2], T.brand[3], 1 })
         mine.cysOwn = true
         mine:SetAllPoints()
     end
@@ -1220,11 +1221,16 @@ function SkinMinimalScrollBar(sb)
     end
 end
 
-local function SkinDropdown(dd)
+-- edge: border color (default gold). A softer edge also lights up gold on hover.
+local function SkinDropdown(dd, edge)
     if not dd or dd.cysSkinned then return end
     dd.cysSkinned = true
     Blank(dd, function(r) return r == dd.Arrow end)
-    Box(dd, T.border, 0, 0)
+    local box = Box(dd, edge or T.border, 0, 0)
+    if edge and box and box.edges then
+        dd:HookScript("OnEnter", function() W.SetBorder(box.edges, T.accent) end)
+        dd:HookScript("OnLeave", function() W.SetBorder(box.edges, edge) end)
+    end
 end
 
 local function SkinCommunities()
@@ -2801,6 +2807,7 @@ local function SkinCombatLogBar()
 end
 
 -- Looking For Group (Blizzard_GroupFinder_VanillaStyle): the eye window with Create Listing / Group Browser tabs
+local LFG_EXTRA_WIDTH = 60 -- extra width on the Group Browser tab
 local function SkinLFG()
     local f = Get("LFGParentFrame")
     if not f then return end
@@ -2882,7 +2889,7 @@ local function SkinLFG()
                 if not b.cysBoxed then
                     if b.Cover then b.Cover:SetAlpha(0) end
                     if b.Icon then b.Icon:SetAlpha(0.3) end
-                    Safe(BoxButton, b, 0, 0)
+                    Safe(BoxButton, b, 0, 0, T.line)
                 end
             end
         end
@@ -2892,10 +2899,40 @@ local function SkinLFG()
 
     local browse = Get("LFGBrowseFrame")
     if browse then
-        Safe(SkinDropdown, browse.CategoryDropdown)
-        Safe(SkinDropdown, browse.ActivityDropdown)
-        if browse.RefreshButton then Safe(BoxButton, browse.RefreshButton, 0, 0) end
+        -- thin grey edges that light up gold on hover (the gold boxes looked heavy here)
+        Safe(SkinDropdown, browse.CategoryDropdown, T.line)
+        Safe(SkinDropdown, browse.ActivityDropdown, T.line)
+        local rb = browse.RefreshButton
+        if rb then
+            for _, get in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetDisabledTexture" }) do
+                local t = rb[get] and rb[get](rb)
+                if t then t:SetAlpha(0) end
+            end
+            Safe(BoxButton, rb, 4, 4, T.line)
+        end
         if browse.ScrollBar then Safe(SkinMinimalScrollBar, browse.ScrollBar) end
+
+        -- Group Browser is wider than Blizzard's window so name, level, class and roles fit on
+        -- one line. The list ends above the Send Message / Group Invite buttons and the scroll
+        -- bar sits inside the border. The Create Listing tab keeps the normal width.
+        local box, sb = browse.ScrollBox, browse.ScrollBar
+        if box and sb and not browse.cysWide then
+            browse.cysWide = true
+            f.cysBaseW = f.cysBaseW or f:GetWidth()
+            local function Widen(on)
+                f:SetWidth(f.cysBaseW + (on and LFG_EXTRA_WIDTH or 0))
+            end
+            local sbW = (sb.GetWidth and sb:GetWidth() or 0)
+            if sbW < 8 then sbW = 12 end
+            -- window width - border space on the right (30) - left margin (22) - scroll bar - gaps
+            box:SetSize(f.cysBaseW + LFG_EXTRA_WIDTH - 30 - 22 - sbW - 10, 272)
+            sb:ClearAllPoints()
+            sb:SetPoint("TOPLEFT", box, "TOPRIGHT", 4, 0)
+            sb:SetPoint("BOTTOMLEFT", box, "BOTTOMRIGHT", 4, 0)
+            browse:HookScript("OnShow", function() Widen(true) end)
+            browse:HookScript("OnHide", function() Widen(false) end)
+            Widen(browse:IsShown())
+        end
         -- the painted result bars: flatten as rows are created
         if browse.ScrollBox and ScrollUtil and ScrollUtil.AddAcquiredFrameCallback then
             pcall(ScrollUtil.AddAcquiredFrameCallback, browse.ScrollBox, function(_, row)

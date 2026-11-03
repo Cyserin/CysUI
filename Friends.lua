@@ -195,15 +195,34 @@ end
 --------------------------------------------------------------------------------
 -- Actions
 --------------------------------------------------------------------------------
+-- Opens the chat box straight into a whisper. The chat type and target are set on the box
+-- itself instead of typing "/w name", so Battle.net names (which the "/w" parser can't read
+-- back) still open a Battle.net whisper instead of falling back to /say or the last /r target.
+local function OpenWhisper(chatType, target)
+    local eb = ChatEdit_ChooseBoxForSend and ChatEdit_ChooseBoxForSend()
+    if not (eb and ChatEdit_UpdateHeader) then
+        ChatFrame_OpenChat("/w " .. target .. " ")
+        return
+    end
+    if eb ~= (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then
+        ChatFrame_OpenChat("", eb.chatFrame)
+    end
+    eb:SetText("")
+    eb:SetAttribute("chatType", chatType)
+    eb:SetAttribute("tellTarget", target)
+    ChatEdit_UpdateHeader(eb)
+    eb:SetFocus()
+end
+
 local function Whisper(e)
     if not e or e.kind == "ignore" then return end
     if not e.online then Print((e.name or "That friend") .. " is offline.") return end
     if e.kind == "bnet" then
         local target = e.account or e.tag
         if not target then return end
-        if ChatFrame_SendBNetTell then ChatFrame_SendBNetTell(target) else ChatFrame_OpenChat("/w " .. target .. " ") end
+        OpenWhisper("BN_WHISPER", target)
     else
-        if ChatFrame_SendTell then ChatFrame_SendTell(e.name) else ChatFrame_OpenChat("/w " .. e.name .. " ") end
+        OpenWhisper("WHISPER", e.name)
     end
 end
 

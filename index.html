@@ -381,15 +381,25 @@
             const data = await response.json();
             
             releases = Array.isArray(data) ? data.map(release => {
-                const lines = (release.body || '').split('\n').filter(Boolean);
-                const changes = lines.map(line => {
-                    const cleanLine = line.replace(/^[-*]\s*/, '');
-                    const isFix = cleanLine.toLowerCase().includes('fix');
-                    return {
+                // Release text: "### Added / Improved / Fixed" headings, then "- Name: what changed" lines.
+                // Everything after a "---" line (install help) is left out.
+                const body = (release.body || '').split(/\r?\n---/)[0];
+                let section = '';
+                const changes = [];
+                body.split(/\r?\n/).forEach(raw => {
+                    const line = raw.trim();
+                    if (!line) return;
+                    const heading = line.match(/^#+\s*(.+)$/);
+                    if (heading) { section = heading[1].toLowerCase(); return; }
+                    const cleanLine = line.replace(/^[-*•]\s*/, '').replace(/\*\*/g, '');
+                    const isFix = section ? section.startsWith('fix') : cleanLine.toLowerCase().includes('fix');
+                    const colon = cleanLine.indexOf(':');
+                    const hasTitle = colon > 0 && colon < 60;
+                    changes.push({
                         type: isFix ? 'fix' : 'feature',
-                        title: cleanLine.includes(':') ? cleanLine.split(':')[0].replace(/\*\*/g, '') : 'Update',
-                        desc: cleanLine.includes(':') ? cleanLine.split(':').slice(1).join(':').trim() : cleanLine
-                    };
+                        title: hasTitle ? cleanLine.slice(0, colon) : (section ? section.charAt(0).toUpperCase() + section.slice(1) : 'Update'),
+                        desc: hasTitle ? cleanLine.slice(colon + 1).trim() : cleanLine
+                    });
                 });
 
                 return {
@@ -457,7 +467,7 @@
                             <span class="release-title">${rel.title || ''}</span>
                         </div>
                         <div class="release-actions" onclick="event.stopPropagation()">
-                            <button class="copy-discord-btn" onclick="copyDiscordMarkdown('${rel.version || ''}', '${rel.title || ''}', this)">
+                            <button class="copy-discord-btn" onclick="copyDiscordMarkdown(${index}, this)">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                                 Copy Discord
                             </button>
@@ -494,8 +504,8 @@
         document.querySelectorAll('.release-card').forEach(c => c.classList.remove('expanded'));
     }
 
-    function copyDiscordMarkdown(version, title, btn) {
-        const rel = releases.find(r => r.version === version);
+    function copyDiscordMarkdown(index, btn) {
+        const rel = releases[index];
         if (!rel) return;
         let text = `✨ **${rel.version} — ${rel.title}**\n`;
         (rel.changes || []).forEach(c => {

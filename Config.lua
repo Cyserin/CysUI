@@ -283,7 +283,7 @@ CUI:RegisterPage("Modules", function(page)
     local intro = W.Text(page, 11, T.desc)
     intro:SetPoint("TOPLEFT", 0, -4)
     intro:SetWidth(CONTENT_W)
-    intro:SetText("Untick a module to switch it off - the game's own version takes over again after a reload.")
+    intro:SetText("Untick a module to switch it off - the game's own version takes over again after a reload. Switches are saved for this character only.")
 
     page.rows = {}
     local y = -34

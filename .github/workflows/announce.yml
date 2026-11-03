@@ -1,5 +1,9 @@
 name: Release Announcement
 
+# Only for releases you publish by hand on the GitHub website.
+# Releases made by release.yml post to Discord themselves (GitHub does not let one
+# workflow's release start another workflow, so this file never sees those).
+
 on:
   release:
     types: [published]
@@ -7,36 +11,34 @@ on:
 jobs:
   announce:
     runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      TAG_NAME: ${{ github.event.release.tag_name }}
+      RELEASE_NAME: ${{ github.event.release.name }}
+      RELEASE_URL: ${{ github.event.release.html_url }}
+      BODY: ${{ github.event.release.body }}
     steps:
-      - name: Send Discord Announcement
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Send Discord announcement
+        if: env.DISCORD_WEBHOOK != ''
         run: |
-          TAG_NAME="${{ github.event.release.tag_name }}"
-          RELEASE_NAME="${{ github.event.release.name }}"
-          BODY="${{ github.event.release.body }}"
-          
-          # Clean markdown quotes for JSON payload
-          CLEAN_BODY=$(echo "$BODY" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-
-          PAYLOAD=$(cat <<EOF
-          {
-            "username": "CysUI Updates",
-            "avatar_url": "https://raw.githubusercontent.com/Cyserin/CysUI/main/Media/logo.png",
-            "embeds": [{
-              "title": "✨ CysUI ${TAG_NAME} Released!",
-              "description": "${RELEASE_NAME}\\n\\n${CLEAN_BODY}",
-              "color": 13081710,
-              "fields": [
-                {
-                  "name": "🌐 Interactive Changelog",
-                  "value": "[View Web Changelog & Features](https://Cyserin.github.io/CysUI/)",
-                  "inline": false
-                }
-              ]
-            }]
-          }
-          EOF
-          )
-
-          curl -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+          desc=$(printf '%s' "$BODY" | sed '/^---/,$d' | head -c 3800)
+          jq -n \
+            --arg title "✨ CysUI $TAG_NAME released" \
+            --arg name "$RELEASE_NAME" \
+            --arg url "$RELEASE_URL" \
+            --arg desc "$desc" \
+            '{
+              username: "CysUI Updates",
+              avatar_url: "https://cyserin.github.io/CysUI/assets/preview.png",
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: ($name + "\n\n" + $desc),
+                color: 13081710,
+                fields: [{
+                  name: "🌐 Interactive Changelog",
+                  value: "[View Web Changelog & Features](https://cyserin.github.io/CysUI/)",
+                  inline: false
+                }]
+              }]
+            }' | curl -sS --fail -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK"

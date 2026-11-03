@@ -180,7 +180,11 @@ end
 
 function CUI:ExportProfile()
     local out = {}
-    Ser(CysUIDB or {}, out, 0)
+    -- the module switches in the string are this character's
+    local copy = {}
+    for k, v in pairs(CysUIDB or {}) do copy[k] = v end
+    copy.modules = CUI:GetModuleSwitches()
+    Ser(copy, out, 0)
     return "CYS1:" .. Enc(table.concat(out))
 end
 
@@ -194,6 +198,7 @@ function CUI:ImportProfile(str)
     if not ok or type(tbl) ~= "table" then return false, "The settings string is damaged or cut short." end
     for k in pairs(CysUIDB) do CysUIDB[k] = nil end
     for k, v in pairs(tbl) do CysUIDB[k] = v end
+    CUI:SetModuleSwitches(tbl.modules) -- imported switches apply to this character
     return true
 end
 
@@ -206,6 +211,7 @@ StaticPopupDialogs["CYSUI_RESET_ALL"] = {
     button2 = "Cancel",
     OnAccept = function()
         for k in pairs(CysUIDB) do CysUIDB[k] = nil end
+        CUI:SetModuleSwitches({}) -- this character: every module back on
         ReloadUI()
     end,
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,

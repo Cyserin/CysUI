@@ -132,15 +132,38 @@ end
 --------------------------------------------------------------------------------
 -- Modules
 --------------------------------------------------------------------------------
+-- Module switches are saved per character (CysUICharDB.modules). The account-wide table
+-- (CysUIDB.modules) is only the starting point a character copies on its first login.
+local function ModuleTable()
+    local c = CysUICharDB
+    if c and type(c.modules) == "table" then return c.modules end
+    return CysUIDB and CysUIDB.modules
+end
+
 function CUI:IsModuleEnabled(key)
-    local db = CysUIDB
-    if not (db and db.modules) then return true end
-    return db.modules[key] ~= false
+    local m = ModuleTable()
+    if not m then return true end
+    return m[key] ~= false
 end
 
 function CUI:SetModuleEnabled(key, enabled)
-    if not (CysUIDB and CysUIDB.modules) then return end
-    CysUIDB.modules[key] = enabled and true or false
+    local m = ModuleTable()
+    if not m then return end
+    m[key] = enabled and true or false
+end
+
+-- This character's switches as a plain copy (used by Export settings)
+function CUI:GetModuleSwitches()
+    local out = {}
+    for k, v in pairs(ModuleTable() or {}) do out[k] = v end
+    return out
+end
+
+-- Replace this character's switches (used by Import settings and Reset everything)
+function CUI:SetModuleSwitches(tbl)
+    CysUICharDB = CysUICharDB or {}
+    CysUICharDB.modules = {}
+    for k, v in pairs(tbl or {}) do CysUICharDB.modules[k] = v end
 end
 
 -- def: key, name, desc, addon (the addon folder), requires (another module key),
@@ -245,6 +268,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
         CysUIDB = CysUIDB or {}
         CopyDefaults(CysUIDB, DEFAULTS)
         CUI.db = CysUIDB
+        -- per-character module switches; a character's first login copies the account-wide ones
+        CysUICharDB = CysUICharDB or {}
+        if type(CysUICharDB.modules) ~= "table" then CUI:SetModuleSwitches(CysUIDB.modules) end
         if CUI.W and CUI.W.ApplyBorderStyle then CUI.W.ApplyBorderStyle() end
         CUI:ApplyShamanColor()
         -- modules registered before the settings existed (the ones living in this addon)
