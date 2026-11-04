@@ -46,11 +46,16 @@ end
 -- Reading a cast
 --------------------------------------------------------------------------------
 -- name, icon, start, end (seconds), isChannel
+-- WoW Forever: other units' casts are locked (your own and your pet's are not); a locked cast counts as none
+local Secret = CysUICompat.Secret
+local function Locked(name, startMS, endMS) return Secret(name) or Secret(startMS) or Secret(endMS) end
 local function CastInfo(unit)
     if not UnitExists(unit) then return end
     local name, _, texture, startMS, endMS = UnitCastingInfo(unit)
+    if Locked(name, startMS, endMS) then return end
     if name and startMS and endMS then return name, texture, startMS / 1000, endMS / 1000, false end
     name, _, texture, startMS, endMS = UnitChannelInfo(unit)
+    if Locked(name, startMS, endMS) then return end
     if name and startMS and endMS then return name, texture, startMS / 1000, endMS / 1000, true end
 end
 

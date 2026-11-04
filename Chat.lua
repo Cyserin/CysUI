@@ -170,6 +170,8 @@ local function SkinWindow(i)
     buffers[i] = {}
     hooksecurefunc(cf, "AddMessage", function(_, text)
         local buf = buffers[i]
+        -- WoW Forever: chat in instances reaches addons locked; it still shows in chat, just not in the Copy window
+        if CysUICompat.Secret(text) then text = "(a line the game keeps from addons)" end
         buf[#buf + 1] = tostring(text)
         if #buf > COPY_LINES then table.remove(buf, 1) end
     end)

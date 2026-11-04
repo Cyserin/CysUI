@@ -24,17 +24,52 @@ end
 
 local holder
 
+-- Newer clients (Forever) replaced the old spellbook, talent and quest log windows. The Era way is tried
+-- first, so Era behaves exactly as before; otherwise the newer call, and last of all a click on Blizzard's
+-- own (hidden) micro button, which still opens the right window.
+local function ClickBlizz(...)
+    for i = 1, select("#", ...) do
+        local b = _G[select(i, ...)]
+        if b and b.Click then b:Click() return true end
+    end
+    return false
+end
+
+local function OpenSpells()
+    if SpellBookFrame then ToggleFrame(SpellBookFrame) return end
+    if PlayerSpellsUtil and PlayerSpellsUtil.ToggleSpellBookFrame then PlayerSpellsUtil.ToggleSpellBookFrame() return end
+    if ClickBlizz("SpellbookMicroButton", "PlayerSpellsMicroButton") then return end
+    if ToggleSpellBook then ToggleSpellBook(BOOKTYPE_SPELL or "spell") end
+end
+
+local function OpenTalents()
+    if ToggleTalentFrame then ToggleTalentFrame() return end
+    if PlayerSpellsUtil and PlayerSpellsUtil.ToggleClassTalentOrSpecFrame then PlayerSpellsUtil.ToggleClassTalentOrSpecFrame() return end
+    ClickBlizz("TalentMicroButton", "PlayerSpellsMicroButton")
+end
+
+local function OpenQuests()
+    if QuestLogFrame then ToggleFrame(QuestLogFrame) return end
+    if ToggleQuestLog then ToggleQuestLog() return end
+    ClickBlizz("QuestLogMicroButton")
+end
+
+local function OpenMenu()
+    if GameMenuFrame then ToggleFrame(GameMenuFrame) return end
+    ClickBlizz("MainMenuMicroButton")
+end
+
 local buttons = {
     { text = "Character", func = function() ToggleCharacter("PaperDollFrame") end },
-    { text = "Spells",    func = function() ToggleFrame(SpellBookFrame) end },
-    { text = "Talents",   func = function() ToggleTalentFrame() end },
-    { text = "Quests",    func = function() ToggleFrame(QuestLogFrame) end },
+    { text = "Spells",    func = OpenSpells },
+    { text = "Talents",   func = OpenTalents },
+    { text = "Quests",    func = OpenQuests },
     { text = "Social",    func = function()
         if CysUI.Friends and CysUI.Friends.IsActive and CysUI.Friends.IsActive() then CysUI.Friends:Toggle() else ToggleFriendsFrame() end
     end },
     { text = "Guild",     func = function() ToggleGuildFrame() end },
     { text = "Bags",      func = function() ToggleAllBags() end },
-    { text = "Menu",      func = function() ToggleFrame(GameMenuFrame) end },
+    { text = "Menu",      func = OpenMenu },
 }
 
 -- Blizzard's own micro buttons (Character, Spellbook, Talents, Quests, Social, Guild / Communities,

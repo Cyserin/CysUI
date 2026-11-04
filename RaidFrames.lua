@@ -19,6 +19,10 @@ local W = CUI.W
 local T = W.T
 
 local format, floor, max, min = string.format, math.floor, math.max, math.min
+local Secret, Guard = CysUICompat.Secret, CysUICompat.Guard -- WoW Forever locked values (no-ops on Era)
+-- The raid headers size new buttons with an initialConfigFunction snippet. The WoW Forever beta client can't run
+-- those snippets (Blizzard bug), so there the snippet is skipped and the buttons are sized directly instead.
+local USE_INIT_CONFIG = not CUI.isForever
 
 local RF = {}
 CUI.RaidFrames = RF
@@ -72,7 +76,7 @@ end
 
 local function GetAura(unit, index, filter)
     if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        local a = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
+        local a = CysUICompat.AuraData(unit, index, filter)
         if a then return a.name, a.icon, a.applications, a.dispelName end
         return
     end
@@ -155,6 +159,14 @@ local function UpdateHealth(b)
     if not unit or not UnitExists(unit) then return end
     local db = DB()
     local cur, mx = UnitHealth(unit), UnitHealthMax(unit)
+    if Secret(cur) or Secret(mx) then
+        -- WoW Forever: this unit's health is locked. The bar can still show it; the math and text can't run.
+        pcall(b.health.SetMinMaxValues, b.health, 0, mx)
+        pcall(b.health.SetValue, b.health, cur)
+        b.healBar:Hide()
+        b.healthText:SetText("")
+        return
+    end
     b.health:SetMinMaxValues(0, max(mx, 1))
     b.health:SetValue(cur)
 
@@ -316,6 +328,7 @@ local function Refresh(b)
     UpdateMarks(b)
     UpdateRole(b)
 end
+Refresh = Guard("Raid frames", Refresh) -- WoW Forever: a locked value skips one update instead of erroring
 
 local function UpdateRange(b)
     local unit = b.unit
@@ -328,6 +341,7 @@ local function UpdateRange(b)
     if UnitIsConnected and not UnitIsConnected(unit) then alpha = min(alpha, 0.5) end
     b:SetAlpha(alpha)
 end
+UpdateRange = Guard("Raid range", UpdateRange)
 
 --------------------------------------------------------------------------------
 -- Dressing up a header-created button (called from the XML template)
@@ -581,7 +595,9 @@ function RF:ApplyMode()
             local on = g <= m.groups
             hd:SetAttribute("showRaid", on)
             hd:SetAttribute("yOffset", -gap)
-            hd:SetAttribute("initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d)", w, h))
+            if USE_INIT_CONFIG then
+                hd:SetAttribute("initialConfigFunction", format("self:SetWidth(%d); self:SetHeight(%d)", w, h))
+            end
             hd:ClearAllPoints()
             hd:SetPoint("TOPLEFT", anchor, "TOPLEFT", ((g - 1) % cols) * colW, -floor((g - 1) / cols) * blockH)
             for i = 1, 5 do
@@ -630,7 +646,7 @@ local function Build()
         hd:SetAttribute("unitsPerColumn", 5)
         hd:SetAttribute("maxColumns", 1)
         hd:SetAttribute("columnAnchorPoint", "LEFT")
-        hd:SetAttribute("initialConfigFunction", "self:SetWidth(94); self:SetHeight(30)")
+        if USE_INIT_CONFIG then hd:SetAttribute("initialConfigFunction", "self:SetWidth(94); self:SetHeight(30)") end
         RF.headers[g] = hd
     end
     RF.mode = ChosenMode()
@@ -641,6 +657,8 @@ local function Build()
         hd:SetAttribute("startingIndex", -4)
         hd:SetAttribute("startingIndex", 1)
     end
+    -- without the snippet (WoW Forever) the new buttons start unsized; size and lay them out now
+    if not USE_INIT_CONFIG then RF:ApplyMode() end
     -- width / height of each player's frame (the same as Width adjust / Height adjust on the Raid Frames page)
     local function Adj(key, label, lo, hi)
         return { label = label, min = lo, max = hi, get = function() return DB()[key] or 0 end,
@@ -704,6 +722,7 @@ local function OnEvent(_, event, unit)
         if pendingMode then RF:ApplyMode() end
     end
 end
+OnEvent = Guard("Raid frames", OnEvent) -- WoW Forever: a locked value skips one update instead of erroring
 
 function RF.Enable()
     if InCombatLockdown() then

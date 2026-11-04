@@ -441,6 +441,7 @@ CUI:RegisterModule({
     name = "Tremor Alert",
     addon = "CysUI",
     class = "SHAMAN",
+    forever = false, -- reads the combat log, which addons can't see on WoW Forever
     desc = "Shaman only: shows a Tremor Totem icon with the mob and its ability when a mob that fears, charms or sleeps is in the pack. Dungeon list included; new mobs are learned (NPCs only, never in PvP).",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Tremor Alert") end,
@@ -451,6 +452,7 @@ CUI:RegisterModule({
 --------------------------------------------------------------------------------
 SLASH_CYSTREMOR1 = "/cuitremor"
 SlashCmdList["CYSTREMOR"] = function(msg)
+    if CUI.isForever then CUI:Print("The Tremor alert needs the combat log, which addons can't read on WoW Forever.") return end
     msg = strtrim((msg or ""):lower())
     local db = DB()
     if msg == "list" then

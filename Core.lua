@@ -184,7 +184,10 @@ function CUI:RegisterModule(def)
 end
 
 -- A module can be limited to a class: class = "SHAMAN" (or a list of class tokens).
+-- It can also be left out of WoW Forever with forever = false (Forever has its own version built in).
+-- Every place that hides other classes' modules uses this, so those modules are hidden and never load there.
 function CUI:ClassAllowed(def)
+    if def and def.forever == false and CUI.isForever then return false end
     local want = def and def.class
     if not want then return true end
     local _, mine = UnitClass("player")
@@ -205,7 +208,13 @@ end
 
 -- Settings pages for the /cui window: build(parent) runs the first time the page is shown.
 -- class (optional, a class token like "SHAMAN"): the page is listed under Class > that class.
+-- Pages for modules that never run on WoW Forever (they read the combat log) are left out there.
+local FOREVER_HIDDEN_PAGES = {
+    ["Interrupts"] = true, ["Taunt Alert"] = true, ["Tremor Alert"] = true,
+    ["Combat Log"] = true, ["Combat Numbers"] = true,
+}
 function CUI:RegisterPage(title, build, onShow, class)
+    if CUI.isForever and FOREVER_HIDDEN_PAGES[title] then return end
     self.pages[#self.pages + 1] = { title = title, build = build, onShow = onShow, class = class }
 end
 
@@ -242,6 +251,17 @@ function CUI:DebugLines()
     L[#L + 1] = "  missing: " .. (#missing > 0 and table.concat(missing, ", ") or "none")
     local sh = CysUICompat and CysUICompat.shimmed or {}
     L[#L + 1] = "  filled in by Compat.lua: " .. (#sh > 0 and table.concat(sh, ", ") or "nothing (all old functions exist)")
+    -- WoW Forever: what is switched off there, and anything the safety net caught (each error once)
+    if self.isForever then
+        local off = {}
+        for _, key in ipairs(self.order) do
+            if self.modules[key].forever == false then off[#off + 1] = key end
+        end
+        L[#L + 1] = "  off on Forever: " .. (#off > 0 and table.concat(off, ", ") or "none")
+        local errs = CysUICompat and CysUICompat.errors or {}
+        L[#L + 1] = format("  caught on Forever (%d):", #errs)
+        for _, e in ipairs(errs) do L[#L + 1] = "    " .. e end
+    end
     -- which other addons are loaded (clashes are often visible here)
     local names = {}
     local getNum = (C_AddOns and C_AddOns.GetNumAddOns) or GetNumAddOns
@@ -301,7 +321,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         if CUI.W and CUI.W.ApplyBorderStyle then CUI.W.ApplyBorderStyle() end -- the class is known by now
         for _, key in ipairs(CUI.order) do
             local def = CUI.modules[key]
-            if def.onEnable and def.loadedEnabled then
+            if def.onEnable and def.loadedEnabled and not (def.forever == false and CUI.isForever) then
                 local ok, err = pcall(def.onEnable)
                 if not ok then CUI:Print("|cFFFF4040" .. key .. " failed to start:|r " .. tostring(err)) end
             end
@@ -316,7 +336,7 @@ SlashCmdList["CYSUI"] = function(msg)
     if msg == "debug" then
         CUI:Debug()
     elseif msg == "reload" then
-        ReloadUI()
+        CysUICompat.Reload()
     elseif msg == "hit" then
         -- which frame is under the mouse? Hover the button that won't react, then wait 4 seconds
         CUI:Print("Put the mouse over the thing that won't react. Reading in 4 seconds...")

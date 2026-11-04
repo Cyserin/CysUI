@@ -89,6 +89,7 @@ CUI:RegisterModule({
     key = "interrupt",
     name = "Interrupt Announcer",
     addon = "CysUI",
+    forever = false, -- reads the combat log, which addons can't see on WoW Forever
     desc = "Says when you interrupt an enemy cast (to your party or raid, or just to you). Works for every class.",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Interrupts") end,

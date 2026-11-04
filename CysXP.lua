@@ -103,6 +103,21 @@ end
 
 -- XP from completed quests in your log (the selected quest is put back afterwards)
 local function QuestLogXP()
+    -- newer clients (Forever): the old quest log calls are gone, but each quest's XP can be read by its ID,
+    -- so nothing has to be selected
+    if not GetNumQuestLogEntries and C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo
+        and GetQuestLogRewardXP then
+        local total = 0
+        for i = 1, (C_QuestLog.GetNumQuestLogEntries() or 0) do
+            local info = C_QuestLog.GetInfo(i)
+            if info and not info.isHeader and info.questID and C_QuestLog.IsComplete
+                and C_QuestLog.IsComplete(info.questID) then
+                local ok, xp = pcall(GetQuestLogRewardXP, info.questID)
+                if ok and xp then total = total + xp end
+            end
+        end
+        return total
+    end
     if not (GetNumQuestLogEntries and GetQuestLogRewardXP and SelectQuestLogEntry) then return 0 end
     local total = 0
     local selected = GetQuestLogSelection and GetQuestLogSelection()

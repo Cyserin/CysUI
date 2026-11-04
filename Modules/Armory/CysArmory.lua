@@ -7,6 +7,7 @@
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "armory", name = "Cys's Armory",
+    forever = false, -- Forever has Blizzard's own Equipment Manager
     desc = "Save your gear as named sets and put them back on in one click.",
     open = function()
         if CharacterFrame and not CharacterFrame:IsShown() then ToggleCharacter("PaperDollFrame") end

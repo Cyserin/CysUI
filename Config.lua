@@ -494,7 +494,7 @@ local function CreateWindow()
     f.hint:SetPoint("RIGHT", -120, 0)
     f.reload = W.Button(footer, 100, 24, "Reload UI")
     f.reload:SetPoint("RIGHT", -10, 0)
-    f.reload:SetScript("OnClick", function() ReloadUI() end)
+    f.reload:SetScript("OnClick", function() CysUICompat.Reload() end)
 
     -- sidebar
     local sidebar = CreateFrame("Frame", nil, f)

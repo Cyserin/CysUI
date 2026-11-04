@@ -19,6 +19,7 @@ local W = CUI.W
 local T = W.T
 
 local format, floor, max, min = string.format, math.floor, math.max, math.min
+local Secret, Guard = CysUICompat.Secret, CysUICompat.Guard -- WoW Forever locked values (no-ops on Era)
 
 local NP = {}
 CUI.Nameplates = NP
@@ -126,7 +127,7 @@ end
 --------------------------------------------------------------------------------
 local function GetAura(unit, index, filter)
     if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        local a = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
+        local a = CysUICompat.AuraData(unit, index, filter)
         if a then return a.name, a.icon, a.applications, a.dispelName, a.duration, a.expirationTime end
         return
     end
@@ -197,8 +198,12 @@ local function UpdateCast(p)
     local unit = p.unit
     local name, _, texture, startMS, endMS = UnitCastingInfo(unit)
     local channel = false
+    -- WoW Forever: other units' casts are locked, so the cast bar stays hidden there
+    local function Locked() return Secret(name) or Secret(startMS) or Secret(endMS) end
+    if Locked() then bar:Hide(); bar:SetScript("OnUpdate", nil); return end
     if not name then
         name, _, texture, startMS, endMS = UnitChannelInfo(unit)
+        if Locked() then bar:Hide(); bar:SetScript("OnUpdate", nil); return end
         channel = name ~= nil
     end
     if name and startMS and endMS then
@@ -214,6 +219,7 @@ local function UpdateCast(p)
         bar:SetScript("OnUpdate", nil)
     end
 end
+UpdateCast = Guard("Nameplate cast bar", UpdateCast)
 
 --------------------------------------------------------------------------------
 -- A plate
@@ -311,20 +317,34 @@ function NP:Update(p)
     if p.base.UnitFrame then p.base.UnitFrame:SetAlpha(0) end
 
     local cur, mx = UnitHealth(unit), UnitHealthMax(unit)
-    p.health:SetMinMaxValues(0, max(mx, 1))
-    p.health:SetValue(cur)
+    -- WoW Forever: other units' health is locked. The bar can still show it; the percent text can't be worked out.
+    local locked = Secret(cur) or Secret(mx)
+    if locked then
+        pcall(p.health.SetMinMaxValues, p.health, 0, mx)
+        pcall(p.health.SetValue, p.health, cur)
+    else
+        p.health:SetMinMaxValues(0, max(mx, 1))
+        p.health:SetValue(cur)
+    end
     local r, g, b = ThreatColor(unit)
     if not r then r, g, b = BaseColor(unit) end
     p.health:SetStatusBarColor(r, g, b)
 
-    if db.healthText and mx > 0 then
+    if db.healthText and not locked and mx > 0 then
         p.healthText:SetText(format("%d%%", mx <= 100 and cur or floor(cur / mx * 100 + 0.5)))
     else
         p.healthText:SetText("")
     end
 
-    local name = UnitName(unit) or ""
-    if db.showLevel then
+    local name = UnitName(unit)
+    if Secret(name) then
+        -- WoW Forever: creature names are locked in instances; show the name as it is, without the level in front
+        p.name:SetText(name)
+        name = nil
+    else
+        name = name or ""
+    end
+    if name and db.showLevel then
         local level = UnitLevel(unit)
         if level and level > 0 then
             local lc = GetLevelColor(unit)
@@ -334,7 +354,7 @@ function NP:Update(p)
             name = format("|cFFCCCCCC??|r %s", name)
         end
     end
-    p.name:SetText(name)
+    if name then p.name:SetText(name) end
     local nr, ng, nb = BaseColor(unit)
     p.name:SetTextColor(nr, ng, nb)
 
@@ -354,6 +374,7 @@ function NP:Update(p)
 
     UpdateAuras(p)
 end
+NP.Update = Guard("Nameplates", NP.Update) -- WoW Forever: a locked value skips one update instead of erroring
 
 -- The game fades its own plate in and out (distance, target, combat) by setting its alpha again and again,
 -- which let its bar flash through under ours. Keep its alpha at zero for good.

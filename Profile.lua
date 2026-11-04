@@ -212,7 +212,7 @@ StaticPopupDialogs["CYSUI_RESET_ALL"] = {
     OnAccept = function()
         for k in pairs(CysUIDB) do CysUIDB[k] = nil end
         CUI:SetModuleSwitches({}) -- this character: every module back on
-        ReloadUI()
+        CysUICompat.Reload()
     end,
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
 }
@@ -231,6 +231,6 @@ function CUI:ShowImportBox()
     self:ShowTextBox("Import settings", "Paste a settings string here (Ctrl+V), then press Import. This replaces your current settings and reloads the UI.",
         "", { acceptLabel = "Import and reload", onAccept = function(text)
             local ok, err = CUI:ImportProfile(text)
-            if ok then ReloadUI() else CUI:Print("|cFFFF4040Import failed:|r " .. err) end
+            if ok then CysUICompat.Reload() else CUI:Print("|cFFFF4040Import failed:|r " .. err) end
         end })
 end

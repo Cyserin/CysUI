@@ -45,21 +45,26 @@ local function IsTank()
     return false
 end
 
+-- WoW Forever can hand any of these back as a locked ("secret") value. Plain() turns a locked value into nil and
+-- Flag() a locked true/false into false, so nothing below tests or does math on one. On Era both pass through.
+local Plain, Flag = CysUICompat.Plain, CysUICompat.Flag
+
 -- returns percent (0-100 or nil), status (0-3 or nil), tanking (bool)
 local function Read()
-    if not UnitExists("target") or not UnitCanAttack("player", "target") or UnitIsDead("target") then return nil end
+    if not Flag(UnitExists("target")) or not Flag(UnitCanAttack("player", "target")) or Flag(UnitIsDead("target")) then return nil end
     if UnitDetailedThreatSituation then
         local tanking, status, scaled = UnitDetailedThreatSituation("player", "target")
+        tanking, status, scaled = Flag(tanking), Plain(status), Plain(scaled)
         if status ~= nil or scaled ~= nil then
-            return scaled, status or 0, tanking and true or false
+            return scaled, status or 0, tanking
         end
     end
     if UnitThreatSituation then
-        local status = UnitThreatSituation("player", "target")
+        local status = Plain(UnitThreatSituation("player", "target"))
         if status ~= nil then return nil, status, status >= 2 end
     end
     -- last resort: is the target looking at me
-    local tt = UnitExists("targettarget") and UnitIsUnit("targettarget", "player")
+    local tt = Flag(UnitExists("targettarget")) and Flag(UnitIsUnit("targettarget", "player"))
     return nil, tt and 3 or 0, tt and true or false
 end
 
@@ -103,6 +108,7 @@ local function Update()
     end
     frame:Show()
 end
+Update = CysUICompat.Guard("Threat bar", Update) -- WoW Forever: a locked value skips one update instead of erroring
 
 local function Build()
     if frame then return end

@@ -121,6 +121,7 @@ CUI:RegisterModule({
     key = "taunt",
     name = "Taunt Alert",
     addon = "CysUI",
+    forever = false, -- reads the combat log, which addons can't see on WoW Forever
     desc = "Tells you when someone else (or a pet) taunts a mob you were tanking, and when your own taunt is resisted. Works for every class.",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Taunt Alert") end,

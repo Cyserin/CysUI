@@ -19,6 +19,7 @@
 
 CysUI:RegisterModule({
     key = "flyout", name = "Equipment Flyout",
+    forever = false, -- Forever's character window has Blizzard's own equipment flyout
     desc = "Hold Alt over a slot on the character frame to see the items in your bags that fit it.",
     body = function(...)
 CysFlyout = CysFlyout or {}

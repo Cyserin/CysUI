@@ -201,6 +201,8 @@ local function OnUnit(tip)
     end
     tip:Show()
 end
+-- WoW Forever: creature names and tooltip lines can be locked in instances; skip the extras instead of erroring
+OnUnit = CysUICompat.Guard("Tooltip", OnUnit)
 
 local function SkinHealthBar()
     local bar = GameTooltipStatusBar

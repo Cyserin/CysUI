@@ -100,7 +100,7 @@ local function GetSortedAuras(auraType)
     while true do
         local name, icon, count, dispelName, duration, expirationTime
         if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-            local aura = C_UnitAuras.GetAuraDataByIndex("player", auraIndex, auraType)
+            local aura = CysUICompat.AuraData("player", auraIndex, auraType)
             if not aura then break end
             name, icon, count, dispelName, duration, expirationTime =
                 aura.name, aura.icon, aura.applications, aura.dispelName, aura.duration, aura.expirationTime
@@ -177,6 +177,9 @@ local function UpdateAuras()
     if not db.enabled then buffHolder:Hide(); debuffHolder:Hide() return end
     buffHolder:Show()
     debuffHolder:Show()
+    -- WoW Forever: auras are locked in combat. Keep what was showing (the timers keep counting) and catch up
+    -- when combat ends, instead of emptying the bar.
+    if CysUICompat.AurasLocked() then return end
     Fill(activeBuffIcons, buffHolder, GetSortedAuras("HELPFUL"), db.numBuffs, false)
     Fill(activeDebuffIcons, debuffHolder, GetSortedAuras("HARMFUL"), db.numDebuffs, true)
 end
@@ -271,7 +274,9 @@ function PlayerAuras.Enable()
     ev:RegisterEvent("UNIT_AURA")
     ev:RegisterEvent("UNIT_INVENTORY_CHANGED")
     ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    if CUI.isForever then ev:RegisterEvent("PLAYER_REGEN_ENABLED") end -- catch up after the in-combat aura lock
     ev:SetScript("OnEvent", function(_, event, unit)
+        if event == "PLAYER_REGEN_ENABLED" then C_Timer.After(1, UpdateAuras) return end -- the lock lifts just after
         if event ~= "UNIT_AURA" and event ~= "UNIT_INVENTORY_CHANGED" or unit == "player" then UpdateAuras() end
     end)
 

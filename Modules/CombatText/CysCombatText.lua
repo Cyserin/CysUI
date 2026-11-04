@@ -322,6 +322,7 @@ CUI:RegisterModule({
     key = "combattext",
     name = "Combat Numbers",
     addon = "CysUI",
+    forever = false, -- reads the combat log, which addons can't see on WoW Forever (Blizzard's own floating text is there)
     desc = "Floating numbers on your own frames: damage taken, healing received and Miss / Dodge / Parry / Block on the player frame; your damage, heals and misses on the target frame.",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Combat Numbers") end,

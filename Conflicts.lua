@@ -108,7 +108,7 @@ local function Apply(found, choice)
         end
     end
     for key in pairs(covered) do CUI:SetModuleEnabled(key, not off[key]) end
-    ReloadUI()
+    CysUICompat.Reload()
 end
 
 --------------------------------------------------------------------------------

@@ -1639,6 +1639,7 @@ end
 SLASH_CYSLOG1 = "/cuilog"
 SLASH_CYSLOG2 = "/cyslog"
 SlashCmdList["CYSLOG"] = function(msg)
+    if CUI.isForever then CUI:Print("Cys's logs need the combat log, which addons can't read on WoW Forever. Warcraft Logs still works (/combatlog).") return end
     msg = (msg or ""):lower():match("^%s*(.-)%s*$")
     if msg == "start" then CL.StartManual()
     elseif msg == "end" then CL.EndRun()
@@ -1699,6 +1700,7 @@ CUI:RegisterModule({
     key = "combatlog",
     name = "Combat Log (Cys's logs)",
     addon = "CysUI",
+    forever = false, -- reads the combat log, which addons can't see on WoW Forever
     desc = "Records whole dungeon and raid runs (bosses, trash, every player's damage, healing, casts and deaths with a recap) and keeps the last few. View them with /cuilog.",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Combat Log") end,

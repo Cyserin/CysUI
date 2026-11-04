@@ -18,6 +18,7 @@ local W = CUI.W
 local T = W.T
 
 local format, floor, max, min = string.format, math.floor, math.max, math.min
+local Secret, Guard = CysUICompat.Secret, CysUICompat.Guard -- WoW Forever locked values (no-ops on Era)
 
 local UF = {}
 CUI.UnitFrames = UF
@@ -77,7 +78,7 @@ end
 --------------------------------------------------------------------------------
 local function GetAura(unit, index, filter)
     if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        local a = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
+        local a = CysUICompat.AuraData(unit, index, filter)
         if a then return a.name, a.icon, a.applications, a.dispelName, a.duration, a.expirationTime end
         return
     end
@@ -244,6 +245,14 @@ local function UpdateHealth(f)
     local unit = f.unit
     if not UnitExists(unit) then return end
     local cur, mx = UnitHealth(unit), UnitHealthMax(unit)
+    if Secret(cur) or Secret(mx) then
+        -- WoW Forever: this unit's health is locked. The bar can still show it; the math and text can't run.
+        pcall(f.health.SetMinMaxValues, f.health, 0, mx)
+        pcall(f.health.SetValue, f.health, cur)
+        if f.healTex then f.healTex:Hide(); f.overhealTex:Hide() end
+        f.healthText:SetText("")
+        return
+    end
     f.health:SetMinMaxValues(0, max(mx, 1))
     f.health:SetValue(cur)
 
@@ -384,6 +393,7 @@ function UF:Update(f)
     UpdateAuras(f)
     UpdateCombo(f)
 end
+UF.Update = Guard("Unit frames", UF.Update) -- WoW Forever: a locked value skips one update instead of erroring
 
 --------------------------------------------------------------------------------
 -- Building a frame & Click-Casting / Clique Registration
@@ -610,8 +620,11 @@ local function BuildParty()
         local f = CreateUnitFrame({ unit = "party" .. i, name = "CysUIPartyFrame" .. i, w = 180, h = 38, power = true,
             fontSize = 10, party = true })
         f:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(i - 1) * 44)
-        -- a party, not a raid: shown while that party member exists
-        RegisterStateDriver(f, "visibility", format("[group:raid] hide; [@party%d,exists] show; hide", i))
+        -- a party, not a raid: shown while that party member exists. If the state driver is refused (a known
+        -- WoW Forever beta bug), fall back to showing it whenever that party member exists.
+        if not pcall(RegisterStateDriver, f, "visibility", format("[group:raid] hide; [@party%d,exists] show; hide", i)) then
+            RegisterUnitWatch(f)
+        end
         UF.party[i] = f
         UF.frames["party" .. i] = f
     end
@@ -640,7 +653,7 @@ end
 -- party members out of range fade; a player you target shows a rough distance
 function UF.StartRangeCheck()
     if UF.rangeTicker then return end
-    UF.rangeTicker = C_Timer.NewTicker(0.4, function()
+    UF.rangeTicker = C_Timer.NewTicker(0.4, Guard("Unit frame range", function()
         local db = DB()
         for unit, f in pairs(UF.frames) do
             if f.IsShown and f:IsShown() then
@@ -669,7 +682,7 @@ function UF.StartRangeCheck()
             end
             tf.rangeText:SetText(txt)
         end
-    end)
+    end))
 end
 
 CUI:RegisterModule({

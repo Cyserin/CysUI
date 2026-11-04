@@ -822,7 +822,8 @@ f:RegisterEvent("PLAYER_LEVEL_UP")
 f:RegisterEvent("SPELLS_CHANGED")
 f:RegisterEvent("UNIT_AURA")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
-f:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+-- the combat log only times the Searing Totem pulse; addons can't see it on WoW Forever, so the bar runs without it there
+if not CysUI.isForever then f:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED") end
 f:SetScript("OnEvent", function(self, event, unit, _, spellID)
 if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SPELLS_CHANGED" then
 ApplyChoices()
