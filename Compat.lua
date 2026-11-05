@@ -233,3 +233,135 @@ function Compat.Reload()
     end
     ReloadUI()
 end
+
+--------------------------------------------------------------------------------
+-- Locked casts (WoW Forever): other units' cast name, icon and times are locked for addons, so no math on them.
+-- What still works: the name and icon go straight onto a FontString / Texture, and the bar runs off the game's own
+-- cast duration object (UnitCastingDuration / UnitChannelDuration + StatusBar:SetTimerDuration).
+--------------------------------------------------------------------------------
+-- kind ("cast" or "channel"), name, texture, duration object - only when the unit is casting and it is locked
+function Compat.LockedCast(unit)
+    if not Compat.isForever or not unit then return end
+    local name, _, texture = UnitCastingInfo(unit)
+    local kind
+    if Secret(name) then
+        kind = "cast"
+    elseif name ~= nil then
+        return -- a plain readable cast: the normal code handles it
+    elseif UnitChannelInfo then
+        name, _, texture = UnitChannelInfo(unit)
+        if Secret(name) then kind = "channel" end
+    end
+    if not kind then return end
+    local getDur = (kind == "cast") and UnitCastingDuration or UnitChannelDuration
+    local dur
+    if getDur then
+        local ok, d = pcall(getDur, unit)
+        if ok then dur = d end
+    end
+    return kind, name, texture, dur
+end
+
+-- run a StatusBar off a locked cast's duration; a full bar when the game gives no duration
+function Compat.RunLockedCastBar(bar, kind, dur)
+    local ok = false
+    if dur and bar.SetTimerDuration then
+        local E = Enum or {}
+        local interp = (E.StatusBarInterpolation and E.StatusBarInterpolation.Immediate) or 0
+        local dirs = E.StatusBarTimerDirection or {}
+        local dir = (kind == "channel") and (dirs.RemainingTime or 1) or (dirs.ElapsedTime or 0)
+        ok = pcall(bar.SetTimerDuration, bar, dur, interp, dir)
+    end
+    if not ok then
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(1)
+    end
+    return ok
+end
+
+-- "1.4" time-left text for a locked cast (the number stays locked; the FontString formats it)
+function Compat.LockedCastTime(fs, dur)
+    if not (fs and dur and dur.GetRemainingDuration) then if fs then fs:SetText("") end; return end
+    local ok, left = pcall(dur.GetRemainingDuration, dur)
+    if not ok or not pcall(fs.SetFormattedText, fs, "%.1f", left) then fs:SetText("") end
+end
+
+--------------------------------------------------------------------------------
+-- Locked health / power text (WoW Forever): UnitHealth / UnitPower are locked even for you, so the text is made
+-- by the game: UnitHealthPercent / UnitPowerPercent scaled to 0-100 by a curve, AbbreviateNumbers for the
+-- numbers, and FontString:SetFormattedText to put them together (all of these take locked values).
+--------------------------------------------------------------------------------
+local pctCurve
+local function PercentCurve()
+    if pctCurve ~= nil then return pctCurve or nil end
+    if CurveConstants and CurveConstants.ScaleTo100 then pctCurve = CurveConstants.ScaleTo100; return pctCurve end
+    local ok, c = pcall(function()
+        local curve = C_CurveUtil.CreateCurve()
+        curve:AddPoint(0, 0)
+        curve:AddPoint(1, 100)
+        return curve
+    end)
+    pctCurve = ok and c or false
+    return pctCurve or nil
+end
+local function Abbrev(v)
+    if AbbreviateNumbers then
+        local ok, txt = pcall(AbbreviateNumbers, v)
+        if ok then return txt end
+    end
+    return v
+end
+
+-- kind: "health" or "power"; mode: "percent", "value" / "current", "both" (value + percent) or "max" (current / max)
+function Compat.LockedUnitText(fs, unit, kind, mode)
+    if not fs then return end
+    local ok = pcall(function()
+        local pct
+        local curve = PercentCurve()
+        if kind == "health" then
+            if UnitHealthPercent and curve then pct = UnitHealthPercent(unit, true, curve) end
+        else
+            if UnitPowerPercent and curve then pct = UnitPowerPercent(unit, nil, false, curve) end
+        end
+        local cur = (kind == "health") and UnitHealth(unit) or UnitPower(unit)
+        if mode == "percent" then
+            if pct == nil then error("no percent") end
+            fs:SetFormattedText("%.0f%%", pct)
+        elseif mode == "both" and kind == "health" then
+            if pct == nil then fs:SetText(Abbrev(cur)) else fs:SetFormattedText("%s  |cFFFFD100%.0f%%|r", Abbrev(cur), pct) end
+        elseif mode == "both" or mode == "max" then
+            local mx = (kind == "health") and UnitHealthMax(unit) or UnitPowerMax(unit)
+            fs:SetFormattedText("%s / %s", Abbrev(cur), Abbrev(mx))
+        else
+            fs:SetText(Abbrev(cur))
+        end
+    end)
+    if not ok then fs:SetText("") end
+end
+
+-- Mana cost preview on a locked mana bar: a reverse-filled StatusBar pinned to the end of the mana fill. Its range
+-- is the (locked) max mana and its value the spell's cost, so the game sizes the segment; no math on locked values.
+function Compat.LockedCostBar(f, cost)
+    local bar = f.power
+    if not bar then return end
+    local cb = f.cysCostBar
+    if not cb then
+        cb = CreateFrame("StatusBar", nil, bar)
+        cb:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        cb:SetStatusBarColor(1, 1, 1, 0.85)
+        cb:SetReverseFill(true)
+        cb:SetFrameLevel(bar:GetFrameLevel() + 2)
+        cb:SetPoint("TOPRIGHT", bar:GetStatusBarTexture(), "TOPRIGHT", 0, 0)
+        cb:SetPoint("BOTTOMRIGHT", bar:GetStatusBarTexture(), "BOTTOMRIGHT", 0, 0)
+        pcall(bar.SetClipsChildren, bar, true) -- a cost bigger than your mana stops at the bar's left edge
+        f.cysCostBar = cb
+    end
+    if not cost or cost <= 0 then cb:Hide(); return end
+    cb:SetWidth(bar:GetWidth())
+    local ok = pcall(function()
+        cb:SetMinMaxValues(0, UnitPowerMax("player"))
+        cb:SetValue(cost)
+    end)
+    cb:SetShown(ok)
+end
+

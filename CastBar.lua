@@ -8,6 +8,7 @@
 --
 -- Classic doesn't report other players' and monsters' casts on every client. The target
 -- bar simply shows whatever the game gives it, and stays hidden when there's nothing.
+-- On WoW Forever the target's cast is locked, so the bar runs off the game's own cast timer.
 --------------------------------------------------------------------------------
 local CUI = CysUI
 local W = CUI.W
@@ -101,12 +102,36 @@ local function OnUpdate(f)
     f.time:SetText(format("%.1f", max(0, f.endT - now)))
 end
 
+-- WoW Forever: a locked cast runs off the game's duration object instead of start/end times
+local function LockedOnUpdate(f)
+    if f.failedUntil then
+        if GetTime() >= f.failedUntil then Stop(f) end
+        return
+    end
+    if DB().time then CysUICompat.LockedCastTime(f.time, f.lockedDur) end
+end
+
 local function Refresh(f)
     local name, texture, startT, endT, channel = CastInfo(f.unit)
     if not name then
+        local kind, lname, ltex, dur = CysUICompat.LockedCast(f.unit)
+        if kind then
+            f.casting, f.channel, f.failedUntil, f.lockedDur = true, kind == "channel", nil, dur
+            local c = f.channel and COLOR_CHANNEL or COLOR_CAST
+            f.bar:SetStatusBarColor(c[1], c[2], c[3])
+            f.icon:SetTexture(ltex)
+            f.text:SetText(lname)
+            f.time:SetText("")
+            CysUICompat.RunLockedCastBar(f.bar, kind, dur)
+            f:Show()
+            f:SetScript("OnUpdate", LockedOnUpdate)
+            LockedOnUpdate(f)
+            return
+        end
         if not f.failedUntil then Stop(f) end
         return
     end
+    f.lockedDur = nil
     f.casting, f.channel, f.startT, f.endT, f.failedUntil = true, channel, startT, endT, nil
     local c = channel and COLOR_CHANNEL or COLOR_CAST
     f.bar:SetStatusBarColor(c[1], c[2], c[3])
@@ -118,7 +143,7 @@ local function Refresh(f)
 end
 
 local function Fail(f, label)
-    f.casting = false
+    f.casting, f.lockedDur = false, nil
     f.failedUntil = GetTime() + 0.6
     f.bar:SetMinMaxValues(0, 1)
     f.bar:SetValue(1)
@@ -179,7 +204,7 @@ local function Create(key, unit, label, w, h, point, x, y)
             if self:IsShown() then Fail(self, "Interrupted") end
         elseif event == "UNIT_SPELLCAST_FAILED" then
             -- a failed second attempt shouldn't hide the cast that's still going
-            if self:IsShown() and not CastInfo(self.unit) then Fail(self, "Failed") end
+            if self:IsShown() and not CastInfo(self.unit) and not CysUICompat.LockedCast(self.unit) then Fail(self, "Failed") end
         elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
             if not self.failedUntil then Refresh(self) end
         else

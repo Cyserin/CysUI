@@ -11,6 +11,7 @@
 
 CysUI:RegisterModule({
     key = "bank", name = "Cys's Bank", requires = "bags",
+    forever = false, -- WoW Forever has the rebuilt retail bank (different slots and functions); Blizzard's bank is used there
     desc = "Your whole bank in one categorized window with its own bag bar. Opens at any banker.",
     open = function() if CysBank and CysBank.Toggle then CysBank:Toggle() end end,
     body = function(...)
@@ -757,7 +758,8 @@ function CysBank:CreateFrames()
         CysBank.bagFilter = nil
         if CysBank.interacting then -- closed by the player: end the banker conversation too
             CysBank.interacting = false
-            CloseBankFrame()
+            local close = CloseBankFrame or (C_Bank and C_Bank.CloseBankFrame)
+            if close then pcall(close) end
         end
     end)
     frame:SetScript("OnUpdate", function()
@@ -815,7 +817,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         if BankFrame and BankFrame.UnregisterAllEvents then pcall(BankFrame.UnregisterAllEvents, BankFrame) end
         for _, e in ipairs({ "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "BAG_UPDATE", "PLAYERBANKSLOTS_CHANGED",
                              "PLAYERBANKBAGSLOTS_CHANGED", "ITEM_LOCK_CHANGED", "PLAYER_MONEY" }) do
-            pcall(events.RegisterEvent, events, e) -- WoW Forever lacks some bank events (PLAYERBANKBAGSLOTS_CHANGED)
+            events:RegisterEvent(e)
         end
     elseif event == "BANKFRAME_OPENED" then
         CysBank.interacting = true

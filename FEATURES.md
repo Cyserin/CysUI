@@ -53,6 +53,13 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.
 
+## Added in 0.58.1
+- **Forever map and quest log** fully skinned; **weapon imbue timer** on the Totem Bar; **Rockbiter counts as tank** for nameplate threat colors.
+- **Upgrade leveling profiles (Forever only)** for every spec, shown only for your class, that switch by level; **Follow my talents** picks the set for your main talent tree. **Expertise** and **Armor Penetration** stats added.
+- **Forever unit frames**: health and mana numbers and percentages, plus the **mana cost** of the spell you are casting.
+- **Forever cast bars**: target and nameplate cast bars run off the game's own cast timer.
+- **Kill Tracker** and **dropped totems** work in combat on Forever; skin errors link to **GitHub issues** with a click-to-copy box; settings search forgives longer words.
+
 ## Added in 0.58.0
 - **WoW Forever support**: runs on the Forever client; modules that need the combat log (hidden from addons there) switch themselves off, and everything else works around Forever's locked values.
 - **Forever skins**: the new character window and Blizzard's built-in damage meter, plus Forever's right-click menus.

@@ -81,13 +81,46 @@ local function HasBuffNamed(spellID)
     end
     return false
 end
+-- Shaman tanks (Earth Warden) keep Rockbiter Weapon on: read the main-hand weapon's tooltip for it
+local _, playerClass = UnitClass("player")
+local rbScan
+local function HasRockbiter()
+    if playerClass ~= "SHAMAN" or not GetWeaponEnchantInfo then return false end
+    local hasMain = GetWeaponEnchantInfo()
+    if not hasMain then return false end
+    local want = (GetSpellInfo and GetSpellInfo(8017)) or "Rockbiter" -- Rockbiter Weapon, in your game's language
+    want = want:gsub(" Weapon$", "")
+    -- newer clients (WoW Forever): tooltip data without a tooltip frame
+    if C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
+        local ok, data = pcall(C_TooltipInfo.GetInventoryItem, "player", 16)
+        if ok and data and data.lines then
+            for _, line in ipairs(data.lines) do
+                local t = line.leftText
+                if type(t) == "string" and t:find(want, 1, true) then return true end
+            end
+            return false
+        end
+    end
+    if not rbScan then rbScan = CreateFrame("GameTooltip", "CysUINameplateRBScan", nil, "GameTooltipTemplate") end
+    rbScan:SetOwner(UIParent, "ANCHOR_NONE")
+    rbScan:ClearLines()
+    rbScan:SetInventoryItem("player", 16)
+    for i = 1, rbScan:NumLines() do
+        local fs = _G["CysUINameplateRBScanTextLeft" .. i]
+        local t = fs and fs:GetText()
+        if type(t) == "string" and t:find(want, 1, true) then rbScan:Hide() return true end
+    end
+    rbScan:Hide()
+    return false
+end
+
 local function DetectRole()
     -- 1. the role you picked for your group (Group Finder / right-click a party member > Set Role)
-    if UnitGroupRolesAssigned then
-        local r = UnitGroupRolesAssigned("player")
-        if r == "TANK" then return "tank", "your group role is Tank" end
-        if r == "DAMAGER" or r == "HEALER" then return "dps", "your group role is " .. (r == "HEALER" and "Healer" or "Damage") end
-    end
+    local r = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
+    if r == "TANK" then return "tank", "your group role is Tank" end
+    -- 2. a Shaman with Rockbiter Weapon on is tanking (unless you set Damage or Healer for the group)
+    if r ~= "DAMAGER" and r ~= "HEALER" and HasRockbiter() then return "tank", "Rockbiter Weapon is on" end
+    if r == "DAMAGER" or r == "HEALER" then return "dps", "your group role is " .. (r == "HEALER" and "Healer" or "Damage") end
     return "dps", "no group role set"
 end
 function NP.RefreshRole()
@@ -99,7 +132,7 @@ end
 do
     local ev = CreateFrame("Frame")
     for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "UPDATE_SHAPESHIFT_FORM", "PLAYER_EQUIPMENT_CHANGED", "CHARACTER_POINTS_CHANGED",
-                         "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ACTIVE_TALENT_GROUP_CHANGED" }) do
+                         "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ACTIVE_TALENT_GROUP_CHANGED", "UNIT_INVENTORY_CHANGED" }) do
         pcall(ev.RegisterEvent, ev, e)
     end
     pcall(ev.RegisterUnitEvent, ev, "UNIT_AURA", "player")
@@ -199,9 +232,19 @@ local function UpdateCast(p)
     local unit = p.unit
     local name, _, texture, startMS, endMS = UnitCastingInfo(unit)
     local channel = false
-    -- WoW Forever: other units' casts are locked, so the cast bar stays hidden there
+    -- WoW Forever: other units' casts are locked, so the bar runs off the game's own cast timer
     local function Locked() return Secret(name) or Secret(startMS) or Secret(endMS) end
-    if Locked() then bar:Hide(); bar:SetScript("OnUpdate", nil); return end
+    if Locked() or (name == nil and CysUICompat.LockedCast(unit)) then
+        local kind, lname, ltex, dur = CysUICompat.LockedCast(unit)
+        bar:SetScript("OnUpdate", nil)
+        if not kind then bar:Hide(); return end
+        bar.icon:SetTexture(ltex)
+        bar.text:SetText(lname)
+        if kind == "channel" then bar:SetStatusBarColor(0.3, 0.6, 1) else bar:SetStatusBarColor(T.accent[1], T.accent[2], T.accent[3]) end
+        CysUICompat.RunLockedCastBar(bar, kind, dur)
+        bar:Show()
+        return
+    end
     if not name then
         name, _, texture, startMS, endMS = UnitChannelInfo(unit)
         if Locked() then bar:Hide(); bar:SetScript("OnUpdate", nil); return end
@@ -540,6 +583,7 @@ CUI:RegisterPage("Nameplates", function(page)
         { "Tank", "green when you hold the mob, orange when it is loose" },
         { "Damage", "orange when a mob is on you" },
         { "Healer", "the same as Damage: healers don't hold threat, so a mob on you is the warning that matters" },
+        { "Shaman with Rockbiter Weapon on", "Tank, unless you set Damage or Healer for your group" },
         { "No role set", "the same as Damage" },
     }
     local rows = {}

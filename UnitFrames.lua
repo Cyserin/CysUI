@@ -265,7 +265,18 @@ local function UpdateHealth(f)
             f.healTex:Hide(); f.overhealTex:Hide()
             if CysUICompat.isForever then CysUICompat.ForeverHealBar(f, f.health, unit) end
         end
-        f.healthText:SetText("")
+        -- the text is made by the game instead (Compat.LockedUnitText)
+        local dead = CysUICompat.Plain(UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit))
+        local online = CysUICompat.Plain(UnitIsConnected and UnitIsConnected(unit))
+        if dead then
+            f.healthText:SetText("|cFF999999Dead|r")
+        elseif online == false then
+            f.healthText:SetText("|cFF999999Offline|r")
+        elseif f.noHealthText then
+            f.healthText:SetText("")
+        else
+            CysUICompat.LockedUnitText(f.healthText, unit, "health", DB().healthText or "both")
+        end
         return
     end
     f.health:SetMinMaxValues(0, max(mx, 1))
@@ -317,6 +328,31 @@ local function UpdateHealth(f)
     end
 end
 
+-- the mana / rage / energy the spell you're casting will cost (0 when nothing is being cast)
+local function CastCostNow(unit)
+    local cost = 0
+    if unit == "player" and UnitCastingInfo then
+        local ok, name, _, _, _, _, _, _, _, spellID = pcall(UnitCastingInfo, "player")
+        if ok and name and not Secret(name) then
+            if not spellID and GetSpellInfo then
+                local _, _, _, _, _, _, id = GetSpellInfo(name)
+                spellID = id
+            end
+            if spellID and GetSpellPowerCost then
+                local okc, costs = pcall(GetSpellPowerCost, spellID)
+                if okc and type(costs) == "table" then
+                    local pt = UnitPowerType(unit)
+                    for _, c in ipairs(costs) do
+                        local cc = CysUICompat.Plain(c.cost)
+                        if c.type == pt and cc and cc > 0 then cost = cc break end
+                    end
+                end
+            end
+        end
+    end
+    return cost
+end
+
 local function UpdatePower(f)
     if not f.power then return end
     local unit = f.unit
@@ -329,8 +365,18 @@ local function UpdatePower(f)
         -- WoW Forever: this unit's power is locked. The bar can still show it; the math and text can't run.
         pcall(f.power.SetMinMaxValues, f.power, 0, mx)
         pcall(f.power.SetValue, f.power, pcur)
-        if f.powerText then f.powerText:SetText("") end
-        if f.costTex then f.costTex:Hide() end
+        if f.powerText then
+            local mode = DB().manaText or "current"
+            if mode == "off" then
+                f.powerText:SetText("")
+            else
+                CysUICompat.LockedUnitText(f.powerText, unit, "power", mode == "both" and "max" or mode)
+            end
+        end
+        if f.costTex then
+            f.costTex:Hide()
+            CysUICompat.LockedCostBar(f, CastCostNow(unit))
+        end
         return
     end
     f.power:SetMinMaxValues(0, max(mx, 1))
@@ -353,25 +399,8 @@ local function UpdatePower(f)
 
     -- Cast cost preview (player only): a white segment at the end of the bar covering the mana the spell being cast will use
     if f.costTex then
-        local cost = 0
-        if unit == "player" and UnitCastingInfo then
-            local ok, name, _, _, _, _, _, _, _, spellID = pcall(UnitCastingInfo, "player")
-            if ok and name then
-                if not spellID and GetSpellInfo then
-                    local _, _, _, _, _, _, id = GetSpellInfo(name)
-                    spellID = id
-                end
-                if spellID and GetSpellPowerCost then
-                    local okc, costs = pcall(GetSpellPowerCost, spellID)
-                    if okc and type(costs) == "table" then
-                        local pt = UnitPowerType(unit)
-                        for _, c in ipairs(costs) do
-                            if c.type == pt and (c.cost or 0) > 0 then cost = c.cost break end
-                        end
-                    end
-                end
-            end
-        end
+        if f.cysCostBar then f.cysCostBar:Hide() end
+        local cost = CastCostNow(unit)
         local cur = UnitPower(unit)
         local width = f.power:GetWidth()
         if cost > 0 and mx > 0 and cur > 0 and width and width > 0 then
@@ -738,7 +767,8 @@ function UF.StartRangeCheck()
             end
             local txt = ""
             if db.targetRange ~= false and UnitExists("target") and UnitIsPlayer("target") and not UnitIsUnit("target", "player")
-                and not UnitIsDead("target") and CheckInteractDistance then
+                and not UnitIsDead("target") and CheckInteractDistance
+                and not (CysUICompat.isForever and InCombatLockdown()) then -- Forever blocks it in combat
                 if CheckInteractDistance("target", 3) then txt = "10 yd"
                 elseif CheckInteractDistance("target", 1) then txt = "28 yd"
                 else txt = "28+ yd" end

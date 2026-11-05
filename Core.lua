@@ -73,6 +73,92 @@ function CUI:Print(msg)
 end
 
 --------------------------------------------------------------------------------
+-- Click-to-copy links in chat: CUI:CopyLink(text) gives a chat link; clicking it opens a small box with the text
+-- selected, ready for Ctrl+C (the game can't put text on the clipboard for an addon).
+--------------------------------------------------------------------------------
+CUI.ISSUES_URL = "https://github.com/Cyserin/CysUI/issues"
+local copyTexts, copyBox = {}, nil
+local function ShowCopyBox(text)
+    if not copyBox then
+        local f = CreateFrame("Frame", "CysUICopyBox", UIParent)
+        f:SetSize(420, 74)
+        f:SetPoint("CENTER", 0, 160)
+        f:SetFrameStrata("DIALOG")
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.06, 0.06, 0.07, 0.95)
+        for _, side in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 },
+                                { "TOPLEFT", "BOTTOMLEFT", 1, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 1, nil } }) do
+            local t = f:CreateTexture(nil, "BORDER")
+            t:SetColorTexture(1, 0.82, 0, 0.6)
+            t:SetPoint(side[1]); t:SetPoint(side[2])
+            if side[3] then t:SetWidth(side[3]) else t:SetHeight(side[4]) end
+        end
+        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("TOPLEFT", 10, -8)
+        title:SetText("Press Ctrl+C to copy, then Escape to close")
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", 2, 2)
+        close:SetScale(0.8)
+        local eb = CreateFrame("EditBox", nil, f)
+        eb:SetPoint("BOTTOMLEFT", 10, 12)
+        eb:SetPoint("BOTTOMRIGHT", -10, 12)
+        eb:SetHeight(24)
+        eb:SetFontObject(ChatFontNormal)
+        eb:SetAutoFocus(true)
+        local ebg = eb:CreateTexture(nil, "BACKGROUND")
+        ebg:SetPoint("TOPLEFT", -4, 0); ebg:SetPoint("BOTTOMRIGHT", 4, 0)
+        ebg:SetColorTexture(0, 0, 0, 0.6)
+        eb:SetScript("OnEscapePressed", function() f:Hide() end)
+        eb:SetScript("OnEnterPressed", function() f:Hide() end)
+        -- typing can't change it: put the text back and select it again
+        eb:SetScript("OnTextChanged", function(self, user)
+            if user and f.text then self:SetText(f.text); self:HighlightText() end
+        end)
+        eb:SetScript("OnKeyUp", function(self, key)
+            if IsControlKeyDown() and (key == "C" or key == "X") then
+                CUI:Print("Copied. Paste it into your browser.")
+                f:Hide()
+            end
+        end)
+        f.eb = eb
+        f:SetScript("OnShow", function() eb:SetFocus(); eb:HighlightText() end)
+        f:SetScript("OnHide", function() eb:ClearFocus() end)
+        tinsert(UISpecialFrames, "CysUICopyBox")
+        copyBox = f
+    end
+    copyBox.text = text
+    copyBox.eb:SetText(text)
+    copyBox:Show()
+    copyBox.eb:SetFocus()
+    copyBox.eb:HighlightText()
+end
+CUI.ShowCopyBox = function(_, text) ShowCopyBox(text) end
+
+function CUI:CopyLink(text, label)
+    copyTexts[#copyTexts + 1] = text
+    return string.format("|cFF4FC3F7|Haddon:CysUI:copy:%d|h[%s]|h|r", #copyTexts, label or text)
+end
+
+local function OnLinkClicked(link)
+    if type(link) ~= "string" then return end
+    local id = string.match(link, "^addon:CysUI:copy:(%d+)")
+    if id and copyTexts[tonumber(id)] then ShowCopyBox(copyTexts[tonumber(id)]) end
+end
+-- newer clients send addon links through the "SetItemRef" event; older ones through SetItemRef itself
+if EventRegistry and EventRegistry.RegisterCallback then
+    EventRegistry:RegisterCallback("SetItemRef", function(_, link) OnLinkClicked(link) end, CUI)
+end
+if not (LinkUtil and LinkUtil.RegisterLinkHandler and LinkTypes and LinkTypes.AddOn) and SetItemRef then
+    hooksecurefunc("SetItemRef", function(link) OnLinkClicked(link) end)
+end
+
+--------------------------------------------------------------------------------
 -- Saved settings
 --------------------------------------------------------------------------------
 local DEFAULTS = {
@@ -374,9 +460,29 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.1",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.1", date = "2026-11-04",
+              improved = {
+                  "Upgrade: new Expertise and Armor Penetration stats for Forever gear, and Spell Pierce is read as Spell Penetration.",
+                  "World map: on Forever the whole Map and Quest Log window gets the dark look, with flat zone headers, a flat zone bar joined to the window and a flat search box.",
+                  "Totem Bar: the weapon imbue button shows its time left and a green edge while the imbue is on.",
+                  "Upgrade (Forever only): ready-made leveling profiles for every spec, shown only for your own class, that switch by your level: Shaman (Earth Warden tank, Enhancement, Elemental, Restoration), Warrior, Paladin, Hunter, Rogue, Priest, Mage, Warlock and Druid. Follow my talents picks the set for your main talent tree. Add them from the Upgrade page. The weights come from Forever beta advice and will change.",
+                  "Nameplates: a Shaman with Rockbiter Weapon on counts as a tank for threat colors, unless you set Damage or Healer for your group.",
+                  "Gossip and guild charter windows: on Forever, dark text is easy to read and the panel wraps the buttons and scroll bar.",
+                  "Cys's Bank: turned off on Forever, which has the rebuilt bank; Blizzard's bank is used there.",
+              },
+              fixed = {
+                  "Target range text no longer causes a blocked action in combat on Forever.",
+                  "Closing the bank no longer throws an error on Forever.",
+                  "Totem Bar: dropped totems show in combat on Forever again, with their icon, edge, swipe and time left.",
+                  "Kill Tracker: kills in combat on Forever are counted from your XP bar when the game hides the kill message.",
+                  "Unit frames: health and mana numbers and percentages show on Forever again, and so does the mana cost of the spell you are casting.",
+                  "Settings search: a longer word still finds the setting (percentage finds percent).",
+                  "Cast bars: the target cast bar and nameplate cast bars work on Forever again, running off the game's own cast timer.",
+              },
+            },
             { version = "0.58.0", date = "2026-11-04",
               added = {
                   "WoW Forever: Cys's UI runs on the new WoW Forever client. Anything Forever does not allow (it hides the combat log from addons) turns itself off there: Interrupt Announcer, Taunt Alert, Tremor Alert, Cys's Combat Log, Combat Numbers, Cys's Armory, the Equipment Flyout, the Skill Tracker and the heal test.",

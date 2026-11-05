@@ -783,12 +783,23 @@ local function CreateWindow()
         end
         if not index then BuildIndex() end
         local hits, first, count = {}, nil, 0
-        for i in ipairs(CUI.pages) do
-            if pageButtons[i] and Matches(i, q) then
-                hits[i] = true
-                count = count + 1
-                first = first or i
+        local function Scan(term)
+            for i in ipairs(CUI.pages) do
+                if pageButtons[i] and Matches(i, term) then
+                    hits[i] = true
+                    count = count + 1
+                    first = first or i
+                end
             end
+        end
+        Scan(q)
+        -- nothing found: forgive a longer word ("percentage" finds "percent") by trimming up to 4 letters
+        local cut = 0
+        while count == 0 and cut < 4 and #q - cut - 1 >= 4 do
+            cut = cut + 1
+            local shorter = q:sub(1, #q - cut)
+            Scan(shorter)
+            if count > 0 then q = shorter end
         end
         f.searchHits, f.searchText = hits, q
         noHits:SetShown(count == 0)

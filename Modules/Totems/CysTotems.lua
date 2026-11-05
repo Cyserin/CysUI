@@ -21,6 +21,50 @@ local f = CreateFrame("Frame", "CysTotemsFrame", UIParent)
 -- WoW Forever locks totem info like auras. TotemInfo returns plain values, or nils plus
 -- locked = true (and the raw start/duration, which the cooldown swipe can still take).
 local IsSecret = (CysUICompat and CysUICompat.Secret) or function() return false end
+-- WoW Forever, in combat: draw a locked totem straight onto the slot. The game lets a locked icon go onto a
+-- texture and a locked "is it down" flag set an alpha, and GetTotemDuration gives a timer the swipe can run from.
+-- Its own countdown number shows the time (ours needs math on the time, which the lock forbids).
+local function ShowLockedTotem(box, slot)
+    local _, _, _, _, icon = GetTotemInfo(slot)
+    local have = GetTotemInfo(slot)
+    if not box.liveIcon then
+        box.liveIcon = box.icon:GetParent():CreateTexture(nil, "ARTWORK", nil, 2)
+        box.liveIcon:SetAllPoints(box.icon)
+        box.liveIcon:SetTexCoord(box.icon:GetTexCoord())
+        local edge = CreateFrame("Frame", nil, box)
+        edge:SetAllPoints(box)
+        edge:SetFrameLevel(box:GetFrameLevel() + 2)
+        local c = box.data and box.data.color or { 1, 1, 1 }
+        for _, side in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true },
+            { "TOPLEFT", "BOTTOMLEFT", false }, { "TOPRIGHT", "BOTTOMRIGHT", false } }) do
+            local t = edge:CreateTexture(nil, "OVERLAY")
+            t:SetColorTexture(c[1], c[2], c[3], 1)
+            t:SetPoint(side[1]); t:SetPoint(side[2])
+            if side[3] then t:SetHeight(2) else t:SetWidth(2) end
+        end
+        box.liveEdge = edge
+    end
+    pcall(box.liveIcon.SetTexture, box.liveIcon, icon)
+    pcall(box.liveIcon.SetAlphaFromBoolean, box.liveIcon, have, 1, 0)
+    pcall(box.liveEdge.SetAlphaFromBoolean, box.liveEdge, have, 1, 0)
+    if GetTotemDuration and box.cd.SetCooldownFromDurationObject then
+        local okD, d = pcall(GetTotemDuration, slot)
+        if okD and d then
+            if box.cd.SetHideCountdownNumbers then box.cd:SetHideCountdownNumbers(false) end
+            if CysUICompat and CysUICompat.SmallCooldownText and not box.cysCdText then
+                box.cysCdText = true
+                CysUICompat.SmallCooldownText(box.cd, 26)
+            end
+            pcall(box.cd.SetCooldownFromDurationObject, box.cd, d, true)
+        end
+    end
+    box.timer:SetText("")
+end
+local function HideLockedTotem(box)
+    if box.liveIcon then box.liveIcon:SetAlpha(0); box.liveEdge:SetAlpha(0) end
+    if box.cysCdText and box.cd.SetHideCountdownNumbers then box.cd:SetHideCountdownNumbers(true) end
+end
+
 local function TotemInfo(slot)
     local have, name, start, dur, icon = GetTotemInfo(slot)
     if IsSecret(have) or IsSecret(name) or IsSecret(start) or IsSecret(dur) then
@@ -170,6 +214,16 @@ imbueBox.cd = CreateFrame("Cooldown", nil, imbueBox, "CooldownFrameTemplate")
 if imbueBox.cd.SetHideCountdownNumbers then imbueBox.cd:SetHideCountdownNumbers(true) end
 imbueBox.cd:SetAllPoints(imbueBox.icon)
 imbueBox.cd:SetDrawEdge(false)
+-- time left on the weapon imbue, drawn over the icon like the totem slots' timers
+do
+    local top = CreateFrame("Frame", nil, imbueBox)
+    top:SetAllPoints()
+    top:SetFrameLevel(imbueBox:GetFrameLevel() + 3)
+    imbueBox.timer = top:CreateFontString(nil, "OVERLAY")
+    imbueBox.timer:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+    imbueBox.timer:SetPoint("CENTER", 0, 0)
+    imbueBox.timer:SetTextColor(1, 1, 1)
+end
 
 imbueBox.label = imbueBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 imbueBox.label:SetPoint("TOP", imbueBox, "BOTTOM", 0, -7)
@@ -600,10 +654,10 @@ local function UpdateTimersAndAlerts()
         local have, name, start, dur, icon, locked, rawStart, rawDur = TotemInfo(data.elementID)
         local active = have and name and name ~= "" and dur and dur > 0
         if locked then
-            -- WoW Forever: no timer text or alerts while totem info is locked; the swipe still runs
-            box.timer:SetText("")
-            pcall(box.cd.SetCooldown, box.cd, rawStart, rawDur)
+            -- WoW Forever in combat: no alerts while totem info is locked; the slot still shows the totem
+            pcall(ShowLockedTotem, box, data.elementID)
         elseif active then
+            HideLockedTotem(box)
             local endTime = start + dur
             local rem = endTime - now
             if rem < 0 then rem = 0 end
@@ -621,6 +675,7 @@ local function UpdateTimersAndAlerts()
                 pcall(PlaySound, 8959)
             end
         else
+            HideLockedTotem(box)
             box.timer:SetText("")
             box.cd:Clear()
             if st.name then
@@ -743,7 +798,7 @@ local function UpdateLayoutAndTotems()
         local data = box.data
 
         if locked then
-            -- WoW Forever: totem info locked; keep the slot as it was
+            -- WoW Forever in combat: the timer loop draws the locked totem over the slot (ShowLockedTotem)
         elseif haveTotem and name ~= "" and duration > 0 then
             box.icon:SetTexture(icon)
             box.icon:SetDesaturated(false)
@@ -819,6 +874,11 @@ local function UpdateImbue()
         imbueBox.icon:SetDesaturated(false)
         local durationSec = floor((mainHandExpiration or 0) / 1000)
         local startTime = GetTime() - (1800 - durationSec)
+        if imbueBox.timer then
+            local t = durationSec >= 60 and string.format("%dm", math.ceil(durationSec / 60)) or tostring(durationSec)
+            imbueBox.timer:SetText(durationSec > 0 and t or "")
+            if durationSec <= 60 then imbueBox.timer:SetTextColor(1, 0.3, 0.2) else imbueBox.timer:SetTextColor(1, 1, 1) end
+        end
         
         if imbueBox.cd then 
             imbueBox.cd:SetCooldown(startTime, 1800)
@@ -841,7 +901,7 @@ local function UpdateImbue()
         else
             -- Normal Active State (More than 1 minute remaining)
             imbueBox.icon:SetVertexColor(1, 1, 1)
-            imbueBox.border:SetColorTexture(0.0, 0.8, 1.0, 1) -- Static blue active border
+            imbueBox.border:SetColorTexture(0.25, 0.85, 0.35, 1) -- green while the imbue is on (blue blends in with Shaman-blue borders)
             
             if durationSec > 60 then
                 imbueBox.warnedThisCycle = false
@@ -853,10 +913,12 @@ local function UpdateImbue()
         imbueBox.icon:SetVertexColor(1, 0.4, 0.4)
         imbueBox.border:SetColorTexture(1.0, 0.1, 0.1, 1) -- Solid red when completely missing
         if imbueBox.cd then imbueBox.cd:Clear() end
+        if imbueBox.timer then imbueBox.timer:SetText("") end
         imbueBox.warnedThisCycle = false
     end
 end
 _G.CysTotemsUpdateImbueVisual = UpdateImbue
+C_Timer.NewTicker(1, function() pcall(UpdateImbue) end) -- keeps the imbue timer counting down
 
 -- WoW Forever has Blizzard's own (Wrath-style) totem bar, MultiCastActionBarFrame, which shows up once you learn
 -- a totem. This bar does the same job, so Blizzard's is faded out and stops taking clicks. Only alpha and mouse

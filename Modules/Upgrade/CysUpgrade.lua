@@ -12,6 +12,220 @@ CysUpgrade:RegisterEvent("PLAYER_LOGIN")
 CysUpgrade:RegisterEvent("PLAYER_LOGOUT")
 CysUpgrade:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 CysUpgrade:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+CysUpgrade:RegisterEvent("PLAYER_LEVEL_UP")
+pcall(CysUpgrade.RegisterEvent, CysUpgrade, "CHARACTER_POINTS_CHANGED")
+pcall(CysUpgrade.RegisterEvent, CysUpgrade, "PLAYER_TALENT_UPDATE")
+
+-- Ready-made leveling sets: one profile per level range, picked by your level when "Switch by level" is on.
+-- WoW FOREVER ONLY: the page shows them and the switch uses them only on the Forever client (Era is untouched).
+-- ALL OF THESE come from WoW Forever beta advice (level 30 cap, Nov 2026 guides: wow.gg, Warcraft Tavern, the
+-- shaman tank guide). Expect them to change as the game is tuned and the level cap rises; revisit at 60.
+-- Earth Warden (Shaman tank), from the WoW Forever shaman tank guide's weights (Conquest Capped, level 30 beta
+-- testing) and its talent order: fast weapon until Stormstrike (~25), slow after; spell power climbs with
+-- Spirit Weapons and Fire Nova at 30. Starting points, meant to be tuned.
+local LEVEL_SETS = {
+    ["Earth Warden"] = {
+        class = "SHAMAN", label = "Earth Warden", tree = 2,
+        { min = 1, max = 24, name = "Earth Warden tank 1-24", rows = {
+            { key = "ITEM_MOD_STAMINA_SHORT", weight = 4.5 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 4 },
+            { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2.5 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 1.5 },
+            { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 3 },
+            { key = "ITEM_MOD_ATTACK_SPEED", weight = -5 } } },
+        { min = 25, max = 29, name = "Earth Warden tank 25-29", rows = {
+            { key = "ITEM_MOD_STAMINA_SHORT", weight = 4.5 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 4 },
+            { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 2 },
+            { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 2.5 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 3 },
+            { key = "ITEM_MOD_ATTACK_SPEED", weight = 5 } } },
+        { min = 30, max = 60, name = "Earth Warden tank 30+", rows = {
+            { key = "ITEM_MOD_STAMINA_SHORT", weight = 4.5 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 4 },
+            { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 4 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 },
+            { key = "ITEM_MOD_INTELLECT_SHORT", weight = 2 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 4 },
+            { key = "ITEM_MOD_ATTACK_SPEED", weight = 5 } } },
+    },
+    -- Enhancement: slow two-hander throughout; Windfury at 30 makes weapon damage and Hit lead, Intellect climbs.
+    -- Expertise is weighted as if items list it in % like Hit; adjust once real Forever items show it. Attack Power = 1.
+    ["Enhancement"] = {
+        class = "SHAMAN", label = "Enhancement", tree = 2,
+        { min = 1, max = 29, name = "Enhancement 1-29", rows = { { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_WEAPON_DPS", weight = 12 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1.2 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 }, { key = "ITEM_MOD_ATTACK_SPEED", weight = 5 } } },
+        { min = 30, max = 60, name = "Enhancement 30+", rows = { { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_WEAPON_DPS", weight = 16 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 14 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 1 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 0.5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 }, { key = "ITEM_MOD_ATTACK_SPEED", weight = 8 } } },
+    },
+    -- Elemental: Spell Power and Intellect lead while leveling (mobs at your level); Haste and Spell Pierce join at 30.
+    -- Spell Damage = 1.
+    ["Elemental"] = {
+        class = "SHAMAN", label = "Elemental", tree = 1,
+        { min = 1, max = 29, name = "Elemental 1-29", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.3 } } },
+        { min = 30, max = 60, name = "Elemental 30+", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 9 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 9 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_SPELL_PENETRATION_SHORT", weight = 0.8 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.3 } } },
+    },
+    -- Restoration: solo leveling keeps some spell damage; from 30 it's dungeon healing:
+    -- Healing Power > Intellect > Haste > MP5 > Spirit > Crit. Healing = 1.
+    ["Restoration"] = {
+        class = "SHAMAN", label = "Restoration", tree = 3,
+        { min = 1, max = 29, name = "Restoration 1-29", rows = { { key = "ITEM_MOD_SPELL_HEALING_DONE_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 0.6 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1.5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 6 } } },
+        { min = 30, max = 60, name = "Restoration 30+", rows = { { key = "ITEM_MOD_SPELL_HEALING_DONE_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.8 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1.8 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.3 } } },
+    },
+    -- Arms (wow.gg): Weapon Damage > Hit > Crit > Strength > Agility > Stamina; strongest slow 2H. AP = 1.
+    ["Warrior Arms"] = {
+        class = "WARRIOR", label = "Arms", tree = 1,
+            { min = 1, max = 60, name = "Arms", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 14 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 11 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1.2 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 }, { key = "ITEM_MOD_ATTACK_SPEED", weight = 4 } } },
+    },
+    -- Fury (wow.gg): Weapon Damage > Hit > Crit > Strength > Agility > Stamina; dual wield after Dual Wield Specialization, so no speed preference.
+    ["Warrior Fury"] = {
+        class = "WARRIOR", label = "Fury", tree = 2,
+            { min = 1, max = 60, name = "Fury", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 14 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 13 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1.2 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 } } },
+    },
+    -- Protection (wow.gg): Weapon Damage > Hit > Strength > Agility > Armor > Stamina > Crit; shield + 1H.
+    ["Warrior Tank"] = {
+        class = "WARRIOR", label = "Protection", tree = 3,
+            { min = 1, max = 60, name = "Protection tank", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 10 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1.5 }, { key = "RESISTANCE0_NAME", weight = 0.1 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 1.5 }, { key = "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", weight = 1.5 }, { key = "ITEM_MOD_DODGE_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_PARRY_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_BLOCK_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_BLOCK_VALUE_SHORT", weight = 0.5 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 4 } } },
+    },
+    -- Holy (wow.gg): Healing Power > Intellect > MP5 > Spirit > Crit (dungeon healing).
+    ["Paladin Holy"] = {
+        class = "PALADIN", label = "Holy", tree = 1,
+            { min = 1, max = 60, name = "Holy", rows = { { key = "ITEM_MOD_SPELL_HEALING_DONE_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.8 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.3 } } },
+    },
+    -- Protection (wow.gg): Weapon Damage > Hit > Strength > Intellect > Spell Power > Stamina > Armor; needs a shield.
+    ["Paladin Prot"] = {
+        class = "PALADIN", label = "Protection", tree = 2,
+            { min = 1, max = 60, name = "Protection tank", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 10 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 0.8 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 1.5 }, { key = "RESISTANCE0_NAME", weight = 0.1 }, { key = "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", weight = 1.5 }, { key = "ITEM_MOD_BLOCK_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_BLOCK_VALUE_SHORT", weight = 0.5 } } },
+    },
+    -- Retribution (wow.gg): Weapon Damage > Hit/Expertise > Crit > Strength > Spell Power > Intellect > Agility; 2H.
+    ["Paladin Ret"] = {
+        class = "PALADIN", label = "Retribution", tree = 3,
+            { min = 1, max = 60, name = "Retribution", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 14 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 11 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 0.7 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 0.8 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 }, { key = "ITEM_MOD_ATTACK_SPEED", weight = 4 } } },
+    },
+    -- Beast Mastery (wow.gg): ranged Weapon Damage > Agility > Spirit > Intellect > Stamina > Hit > Crit. Ranged AP = 1.
+    ["Hunter BM"] = {
+        class = "HUNTER", label = "Beast Mastery", tree = 1,
+            { min = 1, max = 60, name = "Beast Mastery", rows = { { key = "ITEM_MOD_RANGED_DPS", weight = 14 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 2 }, { key = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.6 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 6 } } },
+    },
+    -- Marksmanship: the shared Hunter stats (Warcraft Tavern: Agility, Hit, Attack Power, Crit, Haste) leaning on Hit and Crit; 9% hit cap vs bosses at 60.
+    ["Hunter MM"] = {
+        class = "HUNTER", label = "Marksmanship", tree = 2,
+            { min = 1, max = 60, name = "Marksmanship", rows = { { key = "ITEM_MOD_RANGED_DPS", weight = 14 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 2 }, { key = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 } } },
+    },
+    -- Survival: the shared Hunter stats with more Agility and some melee weapon damage.
+    ["Hunter SV"] = {
+        class = "HUNTER", label = "Survival", tree = 3,
+            { min = 1, max = 60, name = "Survival", rows = { { key = "ITEM_MOD_RANGED_DPS", weight = 12 }, { key = "ITEM_MOD_WEAPON_DPS", weight = 5 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 2.3 }, { key = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 0.5 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 } } },
+    },
+    -- Assassination: Rogue stats (wow.gg / Warcraft Tavern) leaning on Crit for poisons and Hit.
+    ["Rogue Assassination"] = {
+        class = "ROGUE", label = "Assassination", tree = 1,
+            { min = 1, max = 60, name = "Assassination", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 13 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 2 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 1 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 } } },
+    },
+    -- Combat (wow.gg): Weapon Damage > Hit > Agility > Crit > Strength > Stamina. AP = 1.
+    ["Rogue Combat"] = {
+        class = "ROGUE", label = "Combat", tree = 2,
+            { min = 1, max = 60, name = "Combat", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 14 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 2.2 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 11 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 1 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 } } },
+    },
+    -- Subtlety: Rogue stats leaning on Agility (Warcraft Tavern: Agility is the core Rogue stat).
+    ["Rogue Subtlety"] = {
+        class = "ROGUE", label = "Subtlety", tree = 3,
+            { min = 1, max = 60, name = "Subtlety", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 13 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 2.4 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 11 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 11 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 1 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 } } },
+    },
+    -- Discipline (Warcraft Tavern): Healing Power > Intellect > MP5 > Spirit > Crit.
+    ["Priest Disc"] = {
+        class = "PRIEST", label = "Discipline", tree = 1,
+            { min = 1, max = 60, name = "Discipline", rows = { { key = "ITEM_MOD_SPELL_HEALING_DONE_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.9 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.3 } } },
+    },
+    -- Holy (Warcraft Tavern): Healing Power > Intellect > MP5 > Spirit > Crit.
+    ["Priest Holy"] = {
+        class = "PRIEST", label = "Holy", tree = 2,
+            { min = 1, max = 60, name = "Holy priest", rows = { { key = "ITEM_MOD_SPELL_HEALING_DONE_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.8 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.7 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.3 } } },
+    },
+    -- Shadow: leveling (wow.gg) Spell Power > Crit > Hit > Intellect > Stamina; level 30+ (Warcraft Tavern) Hit > Spell Power > Crit > Intellect > Spirit.
+    ["Priest Shadow"] = {
+        class = "PRIEST", label = "Shadow", tree = 3,
+            { min = 1, max = 29, name = "Shadow 1-29", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_SHADOW_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 } } },
+            { min = 30, max = 60, name = "Shadow 30+", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_SHADOW_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.3 } } },
+    },
+    -- Arcane (Warcraft Tavern): Spell Power/Arcane > Hit > Haste > Intellect > Crit > Spirit > MP5; Hit is rare while leveling.
+    ["Mage Arcane"] = {
+        class = "MAGE", label = "Arcane", tree = 1,
+            { min = 1, max = 29, name = "Arcane 1-29", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_ARCANE_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.7 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 } } },
+            { min = 30, max = 60, name = "Arcane 30+", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_ARCANE_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 0.6 } } },
+    },
+    -- Fire (Warcraft Tavern): Spell Power/Fire > Hit > Crit > Haste > Spirit > MP5; Crit matters most before Pyroblast is reliable at 30.
+    ["Mage Fire"] = {
+        class = "MAGE", label = "Fire", tree = 2,
+            { min = 1, max = 29, name = "Fire 1-29", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_FIRE_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 } } },
+            { min = 30, max = 60, name = "Fire 30+", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_FIRE_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 0.6 } } },
+    },
+    -- Frost: leveling (wow.gg) Hit > Spell Power > Spirit > Intellect > Crit > Stamina; 30+ (Warcraft Tavern) Spell Power/Frost > Hit > Haste > Crit > Intellect.
+    ["Mage Frost"] = {
+        class = "MAGE", label = "Frost", tree = 3,
+            { min = 1, max = 29, name = "Frost 1-29", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_FROST_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 } } },
+            { min = 30, max = 60, name = "Frost 30+", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_FROST_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 0.6 } } },
+    },
+    -- Affliction: leveling (wow.gg) Spell Power > Hit > Intellect > Spirit > Crit > Stamina > Haste; 30+ (Warcraft Tavern) Spell Power/Shadow > Crit > Hit.
+    ["Warlock Affliction"] = {
+        class = "WARLOCK", label = "Affliction", tree = 1,
+            { min = 1, max = 29, name = "Affliction 1-29", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_SHADOW_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 3 } } },
+            { min = 30, max = 60, name = "Affliction 30+", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_SHADOW_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 2 } } },
+    },
+    -- Demonology (Warcraft Tavern): Spell Power > Fire/Shadow Damage > Hit > Crit.
+    ["Warlock Demonology"] = {
+        class = "WARLOCK", label = "Demonology", tree = 2,
+            { min = 1, max = 60, name = "Demonology", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_SHADOW_DAMAGE_SHORT", weight = 0.8 }, { key = "ITEM_MOD_SPELL_FIRE_DAMAGE_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 9 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.6 } } },
+    },
+    -- Destruction (Warcraft Tavern): Spell Power/Fire > Crit > Hit.
+    ["Warlock Destruction"] = {
+        class = "WARLOCK", label = "Destruction", tree = 3,
+            { min = 1, max = 60, name = "Destruction", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_FIRE_DAMAGE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_SHADOW_DAMAGE_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 9 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.4 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 } } },
+    },
+    -- Balance (wow.gg): Spell Power > Intellect > Crit > Haste > Spirit.
+    ["Druid Balance"] = {
+        class = "DRUID", label = "Balance", tree = 1,
+            { min = 1, max = 60, name = "Balance", rows = { { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.6 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 7 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 6 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPELL_HIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.4 } } },
+    },
+    -- Feral (wow.gg, cat and bear alike): Weapon Damage > Hit/Expertise > Crit > Strength > Agility > Stamina; weapon speed doesn't matter in forms.
+    ["Druid Feral"] = {
+        class = "DRUID", label = "Cat", tree = 2,
+            { min = 1, max = 60, name = "Feral cat", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 14 }, { key = "ITEM_MOD_FERAL_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 12 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 11 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 2 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1.5 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 0.5 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.3 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.2 } } },
+    },
+    -- Bear: the same Feral list leaning on Stamina, Agility and Armor (not named 'tank' so staves stay allowed).
+    ["Druid Bear"] = {
+        class = "DRUID", label = "Bear", tree = 2,
+            { min = 1, max = 60, name = "Feral bear", rows = { { key = "ITEM_MOD_WEAPON_DPS", weight = 10 }, { key = "ITEM_MOD_FERAL_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_ATTACK_POWER_SHORT", weight = 1 }, { key = "ITEM_MOD_HIT_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_EXPERTISE_RATING_SHORT", weight = 8 }, { key = "ITEM_MOD_STAMINA_SHORT", weight = 1.5 }, { key = "ITEM_MOD_AGILITY_SHORT", weight = 1.8 }, { key = "RESISTANCE0_NAME", weight = 0.1 }, { key = "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", weight = 1.5 }, { key = "ITEM_MOD_DODGE_RATING_SHORT", weight = 10 }, { key = "ITEM_MOD_STRENGTH_SHORT", weight = 1.5 }, { key = "ITEM_MOD_CRIT_RATING_SHORT", weight = 4 } } },
+    },
+    -- Restoration (wow.gg): Spell Power > Intellect > Spirit > Crit > Haste (healing counted first).
+    ["Druid Resto"] = {
+        class = "DRUID", label = "Restoration", tree = 3,
+            { min = 1, max = 60, name = "Druid restoration", rows = { { key = "ITEM_MOD_SPELL_HEALING_DONE_SHORT", weight = 1 }, { key = "ITEM_MOD_SPELL_POWER_SHORT", weight = 0.4 }, { key = "ITEM_MOD_INTELLECT_SHORT", weight = 0.8 }, { key = "ITEM_MOD_SPIRIT_SHORT", weight = 0.8 }, { key = "ITEM_MOD_SPELL_CRIT_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_HASTE_RATING_SHORT", weight = 5 }, { key = "ITEM_MOD_POWER_REGEN0_SHORT", weight = 1.2 } } },
+    },
+}
+CysUpgrade.LEVEL_SETS = LEVEL_SETS
+
+-- the talent tree (1-3, in talent window order) with the most points, nil before any are spent
+local function TopTalentTree()
+    if not GetNumTalentTabs or not GetNumTalents or not GetTalentInfo then return nil end
+    local okTabs, tabs = pcall(GetNumTalentTabs)
+    if not okTabs or type(tabs) ~= "number" then return nil end
+    local best, bestPts = nil, 0
+    for tab = 1, tabs do
+        local pts = 0
+        local okN, n = pcall(GetNumTalents, tab)
+        for i = 1, (okN and tonumber(n) or 0) do
+            local ok, _, _, _, _, rank = pcall(GetTalentInfo, tab, i)
+            if ok and type(rank) == "number" then pts = pts + rank end
+        end
+        if pts > bestPts then best, bestPts = tab, pts end
+    end
+    return best
+end
+CysUpgrade.TopTalentTree = TopTalentTree
+-- the order the buttons appear in
+local LEVEL_SET_ORDER = {
+    "Earth Warden", "Enhancement", "Elemental", "Restoration", "Warrior Arms", "Warrior Fury", "Warrior Tank", "Paladin Holy", "Paladin Prot", "Paladin Ret", "Hunter BM", "Hunter MM", "Hunter SV", "Rogue Assassination", "Rogue Combat", "Rogue Subtlety", "Priest Disc", "Priest Holy", "Priest Shadow", "Mage Arcane", "Mage Fire", "Mage Frost", "Warlock Affliction", "Warlock Demonology", "Warlock Destruction", "Druid Balance", "Druid Feral", "Druid Bear", "Druid Resto",
+}
+local function LevelSetProfileName(setName, level)
+    local set = LEVEL_SETS[setName]
+    if not set then return nil end
+    level = level or UnitLevel("player") or 1
+    for _, stage in ipairs(set) do
+        if level >= stage.min and level <= stage.max then return stage.name end
+    end
+end
 
 local CalculateItemScore
 local GetTargetSlotAndEquipped
@@ -64,6 +278,24 @@ local EQUIP_LINES = {
     { "^increases the block value of your shield by (%d+)", "ITEM_MOD_BLOCK_VALUE" },
     { "^increased defense %+(%d+)", "ITEM_MOD_DEFENSE_SKILL_RATING" },
     { "^decreases the magical resistances of your spell targets by (%d+)", "ITEM_MOD_SPELL_PENETRATION" },
+    -- WoW Forever stats (wording not confirmed yet; the game's own GetItemStats also fills these in)
+    { "^increases your expertise[%a ]- by (%d+)", "ITEM_MOD_EXPERTISE_RATING" },
+    { "^increases expertise[%a ]- by (%d+)", "ITEM_MOD_EXPERTISE_RATING" },
+    { "^your attacks ignore (%d+) of your opponent's armor", "ITEM_MOD_ARMOR_PENETRATION_RATING" },
+    { "^increases your armor penetration[%a ]- by (%d+)", "ITEM_MOD_ARMOR_PENETRATION_RATING" },
+    { "^increases your spell pierce[%a ]- by (%d+)", "ITEM_MOD_SPELL_PENETRATION" },
+    { "^increases spell pierce[%a ]- by (%d+)", "ITEM_MOD_SPELL_PENETRATION" },
+    { "^increases your spell penetration[%a ]- by (%d+)", "ITEM_MOD_SPELL_PENETRATION" },
+    { "^increases your haste[%a ]- by (%d+)", "ITEM_MOD_HASTE_RATING" },
+    { "^improves haste[%a ]- by (%d+)", "ITEM_MOD_HASTE_RATING" },
+    { "^increases your attack and casting speed by (%d+)", "ITEM_MOD_HASTE_RATING" },
+}
+-- green "+12 Expertise" style lines (WoW Forever)
+local RATING_WORDS = {
+    ["expertise"] = "ITEM_MOD_EXPERTISE_RATING", ["expertise rating"] = "ITEM_MOD_EXPERTISE_RATING",
+    ["armor penetration"] = "ITEM_MOD_ARMOR_PENETRATION_RATING", ["armor penetration rating"] = "ITEM_MOD_ARMOR_PENETRATION_RATING",
+    ["spell pierce"] = "ITEM_MOD_SPELL_PENETRATION", ["spell penetration"] = "ITEM_MOD_SPELL_PENETRATION",
+    ["haste"] = "ITEM_MOD_HASTE_RATING", ["haste rating"] = "ITEM_MOD_HASTE_RATING",
 }
 
 local function GetDetailedItemStats(itemLink)
@@ -115,6 +347,8 @@ local function GetDetailedItemStats(itemLink)
             if not isGreen then
                 local n, word = string.match(plain, "^([%+%-]%d+) (%a+)$")
                 if n and PRIMARY[word] then Add(PRIMARY[word], n) end
+                local rn3, rword = string.match(plain, "^%+(%d+)%%? ([%a ]+)$")
+                if rn3 and RATING_WORDS[rword] then Add(RATING_WORDS[rword], rn3) end
                 local armor = string.match(plain, "^(%d+) armor$")
                 if armor then Add("RESISTANCE0_NAME", armor) end
                 -- a shield's base "13 Block" line is its Block Value (the site calls it "Block Value (Base)")
@@ -533,13 +767,36 @@ local function LabelText(label, diff)
 end
 local LABEL_COLOR = { ["Big upgrade"] = "ff40ffff", ["Upgrade"] = "ff20ff20", ["Sidegrade"] = "ffffd100", ["Downgrade"] = "ffff2020" }
 
-CheckAutoProfileSwitch = function(event)
+CheckAutoProfileSwitch = function(event, levelArg)
 local charKey = (UnitName("player") or "Unknown") .. " - " .. (GetRealmName() or "Unknown")
 if not CysUIDB or not CysUIDB.upgrade or not CysUIDB.upgrade.charProfiles or not CysUIDB.upgrade.charProfiles[charKey] then return end
 local charDB = CysUIDB.upgrade.charProfiles[charKey]
 charDB.specBindings = charDB.specBindings or {}
 local activeSpec = GetActiveTalentGroup and GetActiveTalentGroup() or 1
 local targetProfile = charDB.specBindings[activeSpec]
+-- leveling sets are WoW Forever only; on Era a saved level set is ignored
+local levelSetsOn = CysUICompat and CysUICompat.isForever
+-- "Follow my talents": the leveling set for your main talent tree (only sets you have added)
+if levelSetsOn and charDB.levelSet and charDB.levelSetByTalents then
+local tree = TopTalentTree()
+local _, myClass = UnitClass("player")
+if tree then
+local pick
+for _, key in ipairs(LEVEL_SET_ORDER) do
+local set = LEVEL_SETS[key]
+if set and set.class == myClass and (set.tree == tree or set.tree2 == tree) and set[1] and charDB.profiles[set[1].name] then
+if key == charDB.lastLevelSet or key == charDB.levelSet then pick = key; break end
+pick = pick or key
+end
+end
+if pick then charDB.levelSet = pick end
+end
+end
+-- a leveling set picks the profile for your level (and wins over the talent spec binding)
+if levelSetsOn and charDB.levelSet then
+local byLevel = LevelSetProfileName(charDB.levelSet, (event == "PLAYER_LEVEL_UP" and tonumber(levelArg)) or nil)
+if byLevel and charDB.profiles[byLevel] then targetProfile = byLevel end
+end
 -- a worn Armory set that is linked to a profile wins over the talent spec
 if CysArmory and CysArmory.GetEquippedSetProfile then
 local okSet, setProfile = pcall(CysArmory.GetEquippedSetProfile, CysArmory)
@@ -562,6 +819,7 @@ local FRIENDLY = {
     ITEM_MOD_RANGED_ATTACK_POWER = "Ranged Attack Power", ITEM_MOD_FERAL_ATTACK_POWER = "Feral Attack Power",
     ITEM_MOD_WEAPON_DPS = "Weapon DPS", ITEM_MOD_RANGED_DPS = "Ranged DPS", ITEM_MOD_HIT_RATING = "Hit Chance",
     ITEM_MOD_CRIT_RATING = "Crit Chance", ITEM_MOD_HASTE_RATING = "Haste", RESISTANCE0_NAME = "Armor",
+    ITEM_MOD_EXPERTISE_RATING = "Expertise", ITEM_MOD_ARMOR_PENETRATION_RATING = "Armor Penetration",
     ITEM_MOD_DEFENSE_SKILL_RATING = "Defense", ITEM_MOD_DODGE_RATING = "Dodge Chance",
     ITEM_MOD_PARRY_RATING = "Parry Chance", ITEM_MOD_BLOCK_RATING = "Block Chance", ITEM_MOD_BLOCK_VALUE = "Block Value (Base)",
     ITEM_MOD_WEAPON_DAMAGE_MIN = "Weapon Damage (Min)", ITEM_MOD_WEAPON_DAMAGE_MAX = "Weapon Damage (Max)",
@@ -858,6 +1116,12 @@ pcall(GameTooltip.HookScript, GameTooltip, "OnTooltipSetItem", OnTooltipItem)
 end
 elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "ACTIVE_TALENT_GROUP_CHANGED" then
 CheckAutoProfileSwitch(event)
+elseif event == "CHARACTER_POINTS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then
+CheckAutoProfileSwitch(event)
+if CysUpgrade.OnProfileAutoSwitched then pcall(CysUpgrade.OnProfileAutoSwitched) end
+elseif event == "PLAYER_LEVEL_UP" then
+CheckAutoProfileSwitch(event, arg1)
+if CysUpgrade.OnProfileAutoSwitched then pcall(CysUpgrade.OnProfileAutoSwitched) end
 elseif event == "PLAYER_LOGOUT" then
 local charKey = (UnitName("player") or "Unknown") .. " - " .. (GetRealmName() or "Unknown")
 if CysUIDB and CysUIDB.upgrade and CysUpgrade.activeProfileName ~= "" then
@@ -897,6 +1161,8 @@ local STAT_REGISTRY = {
 { name = "Hit Chance", key = "ITEM_MOD_HIT_RATING_SHORT" },
 { name = "Crit Chance", key = "ITEM_MOD_CRIT_RATING_SHORT" },
 { name = "Haste", key = "ITEM_MOD_HASTE_RATING_SHORT" },
+{ name = "Expertise", key = "ITEM_MOD_EXPERTISE_RATING_SHORT" },
+{ name = "Armor Penetration", key = "ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT" },
 { name = "Ranged Attack Power", key = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT" },
 { name = "Ranged Weapon DPS", key = "ITEM_MOD_RANGED_DPS" },
 { name = "Ranged Weapon Speed", key = "ITEM_MOD_RANGED_ATTACK_SPEED" },
@@ -940,6 +1206,9 @@ speed = "ITEM_MOD_ATTACK_SPEED", weaponspeed = "ITEM_MOD_ATTACK_SPEED",
 hit = "ITEM_MOD_HIT_RATING_SHORT", hitchance = "ITEM_MOD_HIT_RATING_SHORT",
 crit = "ITEM_MOD_CRIT_RATING_SHORT", critchance = "ITEM_MOD_CRIT_RATING_SHORT",
 haste = "ITEM_MOD_HASTE_RATING_SHORT",
+expertise = "ITEM_MOD_EXPERTISE_RATING_SHORT", expertiserating = "ITEM_MOD_EXPERTISE_RATING_SHORT",
+armorpenetration = "ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT", armorpen = "ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT", arp = "ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT",
+spellpierce = "ITEM_MOD_SPELL_PENETRATION_SHORT",
 rangedattackpower = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT", rap = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT",
 rangeddps = "ITEM_MOD_RANGED_DPS", rangedweapondps = "ITEM_MOD_RANGED_DPS",
 rangedweaponspeed = "ITEM_MOD_RANGED_ATTACK_SPEED",
@@ -1014,6 +1283,7 @@ local SITE_NAMES = {
     ITEM_MOD_WEAPON_DPS = "dps", ITEM_MOD_ATTACK_SPEED = "speed", RESISTANCE0_NAME = "armor",
     ITEM_MOD_SPELL_POWER_SHORT = "spellPower", ITEM_MOD_SPELL_HEALING_DONE_SHORT = "healing",
     ITEM_MOD_POWER_REGEN0_SHORT = "mp5", ITEM_MOD_HASTE_RATING_SHORT = "haste",
+    ITEM_MOD_EXPERTISE_RATING_SHORT = "expertise", ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = "armorPenetration",
     ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = "defense", ITEM_MOD_DODGE_RATING_SHORT = "dodge",
     ITEM_MOD_PARRY_RATING_SHORT = "parry", ITEM_MOD_BLOCK_RATING_SHORT = "block", ITEM_MOD_BLOCK_VALUE_SHORT = "blockValue",
     ITEM_MOD_HEALTH_SHORT = "health", ITEM_MOD_MANA_SHORT = "mana", ITEM_MOD_HEALTH_REGEN_SHORT = "hp5",
@@ -1296,6 +1566,8 @@ local STAT_CATEGORIES = {
 { text = "Hit Chance", key = "ITEM_MOD_HIT_RATING_SHORT" },
 { text = "Crit Chance", key = "ITEM_MOD_CRIT_RATING_SHORT" },
 { text = "Haste", key = "ITEM_MOD_HASTE_RATING_SHORT" },
+{ text = "Expertise", key = "ITEM_MOD_EXPERTISE_RATING_SHORT" },
+{ text = "Armor Penetration", key = "ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT" },
 }},
 { category = "RANGED", stats = {
 { text = "Ranged Attack Power", key = "ITEM_MOD_RANGED_ATTACK_POWER_SHORT" },
@@ -1470,15 +1742,78 @@ local function BuildUpgradeSettingsPage(page)
     bind2:SetPoint("TOPLEFT", 210, -148)
     nameBox:SetScript("OnTextChanged", function() bind1:Refresh(); bind2:Refresh() end)
 
-    W.Header(page, "Weights", width):SetPoint("TOPLEFT", 0, -184)
+    -- leveling sets: ready-made profiles per level range, switched by your level
+    local _, myClass = UnitClass("player")
+    local mySets = {}
+    -- WoW Forever only: the sets use Forever's stats and talent trees; Era keeps the plain Upgrade page
+    local isForever = CysUICompat and CysUICompat.isForever
+    for _, key in ipairs(LEVEL_SET_ORDER) do
+        if isForever and LEVEL_SETS[key] and LEVEL_SETS[key].class == myClass then mySets[#mySets + 1] = key end
+    end
+    local setBtns, byLevel = {}, nil
+    if #mySets > 0 then
+        local lbl = W.Text(page, 11, T.accent)
+        lbl:SetPoint("TOPLEFT", 4, -182)
+        lbl:SetText("Leveling:")
+        -- fit every set's button in the page width next to the label
+        local x0, gap, room = 66, 4, 470 - 66
+        local bw = math.min(100, math.floor((room - gap * (#mySets - 1)) / #mySets))
+        local x = x0
+        for _, key in ipairs(mySets) do
+            local b = W.Button(page, bw, 22, LEVEL_SETS[key].label or key)
+            b:SetPoint("TOPLEFT", x, -178)
+            b.setKey = key
+            b:HookScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:AddLine((LEVEL_SETS[key].label or key) .. " leveling profiles", 1, 0.82, 0)
+                GameTooltip:AddLine("Adds this set's profiles (keeps any you edited) and switches by your level.", 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+            b:HookScript("OnLeave", function() GameTooltip:Hide() end)
+            setBtns[#setBtns + 1] = b
+            x = x + bw + gap
+        end
+        byLevel = W.Checkbox(page, "Switch profile by level", function() return CharDB().levelSet ~= nil end,
+            function(on)
+                local cd = CharDB()
+                cd.levelSet = on and (cd.lastLevelSet or mySets[1]) or nil
+                if on and CheckAutoProfileSwitch then CheckAutoProfileSwitch("LEVEL_SET") end
+                if CysUpgrade.OnProfileAutoSwitched then CysUpgrade.OnProfileAutoSwitched() end
+            end)
+        byLevel:SetPoint("TOPLEFT", 4, -208)
+        local anyTree = false
+        for _, key in ipairs(mySets) do if LEVEL_SETS[key].tree then anyTree = true end end
+        if anyTree then
+            local byTalents = W.Checkbox(page, "Follow my talents", function() return CharDB().levelSetByTalents and true or false end,
+                function(on)
+                    CharDB().levelSetByTalents = on or nil
+                    if on and CheckAutoProfileSwitch then CheckAutoProfileSwitch("LEVEL_SET") end
+                    if CysUpgrade.OnProfileAutoSwitched then CysUpgrade.OnProfileAutoSwitched() end
+                end)
+            byTalents:SetPoint("TOPLEFT", 214, -208)
+            byTalents:HookScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:AddLine("Follow my talents", 1, 0.82, 0)
+                GameTooltip:AddLine("Uses the leveling set for the talent tree with the most points. Add each spec's set once with its button first.", 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+            byTalents:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+        local betaNote = W.Text(page, 10, T.dim or T.text)
+        betaNote:SetPoint("TOPLEFT", 6, -236)
+        betaNote:SetText("From Forever beta advice; expect changes.")
+    end
+    local SHIFT = (#setBtns > 0) and 78 or 0
+
+    W.Header(page, "Weights", width):SetPoint("TOPLEFT", 0, -184 - SHIFT)
     local colStat = W.Text(page, 11, T.accent)
-    colStat:SetPoint("TOPLEFT", 4, -212)
+    colStat:SetPoint("TOPLEFT", 4, -212 - SHIFT)
     colStat:SetText("Stat")
     local colWeight = W.Text(page, 11, T.accent)
-    colWeight:SetPoint("TOPLEFT", 214, -212)
+    colWeight:SetPoint("TOPLEFT", 214, -212 - SHIFT)
     colWeight:SetText("Weight")
 
-    local ROW_H, ROWS_TOP = 28, 230
+    local ROW_H, ROWS_TOP = 28, 230 + SHIFT
     local rowsHolder = CreateFrame("Frame", nil, page)
     rowsHolder:SetPoint("TOPLEFT", 0, -ROWS_TOP)
     rowsHolder:SetSize(width, 10)
@@ -1589,6 +1924,38 @@ local function BuildUpgradeSettingsPage(page)
         UpdateWeightsFromRows()
         RefreshRows()
         RefreshOverlays()
+    end
+
+    -- the page follows a profile switched by level
+    CysUpgrade.OnProfileAutoSwitched = function()
+        if not page:IsVisible() then return end
+        nameBox:SetText(CysUpgrade.activeProfileName or "")
+        RefreshRows()
+        RefreshOverlays()
+    end
+    for _, setBtn in ipairs(setBtns) do
+        setBtn:SetScript("OnClick", function(self)
+            local key = self.setKey
+            local set = LEVEL_SETS[key]
+            local cd = CharDB()
+            local made, kept = 0, 0
+            for _, stage in ipairs(set) do
+                if cd.profiles[stage.name] then
+                    kept = kept + 1 -- your own edits stay
+                else
+                    local rows = {}
+                    for i, r in ipairs(stage.rows) do rows[i] = { key = r.key, weight = r.weight } end
+                    cd.profiles[stage.name] = { statRows = rows }
+                    made = made + 1
+                end
+            end
+            cd.levelSet, cd.lastLevelSet = key, key
+            if byLevel then byLevel:Refresh() end
+            local now = LevelSetProfileName(key)
+            if now and cd.profiles[now] then LoadProfile(now, cd.profiles[now]) end
+            print(string.format("|cFF00BFFF[CysUpgrade]|r %s: %d profile(s) added%s. Switching by level is on; now using %s. These weights come from Forever beta advice and will change; tune them as you go.",
+                set.label or key, made, kept > 0 and string.format(", %d kept as you had them", kept) or "", now or "?"))
+        end)
     end
 
     switchBtn:SetScript("OnClick", function(self)

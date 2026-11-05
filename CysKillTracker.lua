@@ -96,7 +96,8 @@ local function Refresh()
     end
     -- the next kill finishes the level: from your target if one is selected, else from the average
     local remaining = (UnitXPMax("player") or 0) - (UnitXP("player") or 0)
-    local tx = TargetXP()
+    local okT, tx = pcall(TargetXP) -- a target's level can be locked on WoW Forever
+    if not okT then tx = nil end
     if remaining > 0 and tx and tx >= remaining then
         line = "|cFF4FD66BKilling this target levels you!|r"
     elseif remaining > 0 and not tx and kills > 0 and totalXP / kills >= remaining then
@@ -112,16 +113,51 @@ end
 
 function KT:Refresh() Refresh() end
 
+-- WoW Forever can lock the XP message in combat (it names the mob). Then the kill's XP is read from your own XP
+-- bar instead: the gain that arrives within a second of the locked message counts as the kill.
+local IsSecret = (CysUICompat and CysUICompat.Secret) or function() return false end
+local lastXP, lastMax = nil, nil
+local pendingKillAt, lastGain, lastGainAt = nil, 0, 0
+local function CountKill(xp)
+    if not xp or xp <= 0 then return end
+    totalXP = totalXP + xp
+    kills = kills + 1
+end
 local function OnEvent(_, event, msg)
     if event == "CHAT_MSG_COMBAT_XP_GAIN" then
+        if IsSecret(msg) then
+            local now = GetTime()
+            if lastGain > 0 and now - lastGainAt < 1 then
+                CountKill(lastGain); lastGain = 0 -- the XP bar moved first
+            else
+                pendingKillAt = now -- wait for the XP bar to move
+            end
+            Refresh()
+            return
+        end
         -- "<mob> dies, you gain 123 experience."  (quest rewards say "You gain 123 experience." and aren't kills)
         local xp = msg and msg:match("dies, you gain (%d+) experience")
         if xp then
-            totalXP = totalXP + tonumber(xp)
-            kills = kills + 1
+            CountKill(tonumber(xp))
+            lastGain = 0
             Refresh()
         end
-    elseif event == "PLAYER_XP_UPDATE" or event == "PLAYER_TARGET_CHANGED" then
+    elseif event == "PLAYER_XP_UPDATE" then
+        local cur, mx = UnitXP("player") or 0, UnitXPMax("player") or 0
+        if lastXP then
+            local gain = cur - lastXP
+            if gain < 0 and lastMax then gain = cur + (lastMax - lastXP) end -- went over a level
+            if gain > 0 then
+                if pendingKillAt and GetTime() - pendingKillAt < 1 then
+                    CountKill(gain); pendingKillAt = nil
+                else
+                    lastGain, lastGainAt = gain, GetTime()
+                end
+            end
+        end
+        lastXP, lastMax = cur, mx
+        Refresh()
+    elseif event == "PLAYER_TARGET_CHANGED" then
         Refresh()
     elseif event == "PLAYER_LEVEL_UP" then
         if DB().resetOnLevel then totalXP, kills = 0, 0 end
@@ -149,6 +185,7 @@ function KT.Enable()
     frame:RegisterEvent("PLAYER_LEVEL_UP")
     frame:RegisterEvent("PLAYER_TARGET_CHANGED")
     frame:SetScript("OnEvent", OnEvent)
+    lastXP, lastMax = UnitXP("player"), UnitXPMax("player")
     Refresh()
 end
 

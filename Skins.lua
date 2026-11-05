@@ -46,7 +46,7 @@ local function Safe(fn, ...)
     local ok, err = pcall(fn, ...)
     if not ok and not firstError then
         firstError = true
-        CUI:Print("|cFFFF4040A skin step failed:|r " .. tostring(err) .. "  (tell Claude this line)")
+        CUI:Print("|cFFFF4040A skin step failed:|r " .. tostring(err) .. "  |cFFAAAAAA(please report it with this line:|r " .. CUI:CopyLink(CUI.ISSUES_URL, "Report on GitHub") .. "|cFFAAAAAA)|r")
     end
 end
 
@@ -600,13 +600,16 @@ end
 -- Only alpha changes and hooksecurefunc are used, so nothing of Blizzard's is tainted.
 --------------------------------------------------------------------------------
 local FOREVER_ART = { "^UI%-Character%-Info", "^common%-insideframe", "^common%-framedivider", "^common%-sidetab",
-    "^_?UI%-Frame", "^_?ui%-frame", "^Options_", "^UI%-HUD%-ExperienceBar", "^common%-button%-list%-collapseExpand" }
+    "^_?UI%-Frame", "^_?ui%-frame", "^Options_", "^UI%-HUD%-ExperienceBar", "^common%-button%-list%-collapseExpand",
+    "^QuestLog%-main%-background", "^questlog%-frame", "^QuestLog%-frame%-devider", "^questlog%-header%-glow",
+    "^minimal%-scrollbar%-track" }
 local FOREVER_KEEP = { "Icon%-Add", "Icon%-Tick", "Info%-ItemLevel" }
 local function IsForeverArt(r)
     local ok, a = pcall(r.GetAtlas, r)
     if ok and type(a) == "string" and a ~= "" then
-        for _, k in ipairs(FOREVER_KEEP) do if a:find(k) then return false end end
-        for _, pat in ipairs(FOREVER_ART) do if a:find(pat) then return true end end
+        local la = a:lower() -- atlas names come back in either case
+        for _, k in ipairs(FOREVER_KEEP) do if la:find(k:lower()) then return false end end
+        for _, pat in ipairs(FOREVER_ART) do if la:find(pat:lower()) then return true end end
         return false
     end
     local okT, tex = pcall(r.GetTexture, r)
@@ -1372,18 +1375,22 @@ local function FitPanelToButtons(f, panel, l, t)
         if not (fb and fr) then return end
         local minB, maxR = fb, fr
         local function Look(frame, depth)
-            if depth > 3 then return end
-            for _, c in ipairs({ frame:GetChildren() }) do
-                if c ~= panel and c.IsShown and c:IsShown() and not c.cysOwn then
-                    local kind = c.GetObjectType and c:GetObjectType()
-                    local name = c.GetDebugName and c:GetDebugName() or ""
-                    if kind == "Button" or (type(name) == "string" and name:find("ScrollBar")) then
+            if depth > 4 then return end
+            for _, c in ipairs(Kids(frame)) do
+                -- one odd child (a protected frame, say) must not stop the whole fit
+                pcall(function()
+                    if c == panel or c.cysOwn or not c:IsShown() then return end
+                    local kind = c:GetObjectType()
+                    local name = c.GetName and c:GetName() or ""
+                    local isTab = type(name) == "string" and name:find("Tab")
+                    local isBar = c.Track or c.Thumb or c.GetScrollPercentage
+                    if (kind == "Button" and not isTab) or isBar then
                         local b, r = c:GetBottom(), c:GetRight()
                         if b and b < minB then minB = b end
                         if r and r > maxR then maxR = r end
                     end
-                    Look(c, depth + 1)
-                end
+                    if not isBar then Look(c, depth + 1) end
+                end)
             end
         end
         Look(f, 0)
@@ -1395,9 +1402,42 @@ local function FitPanelToButtons(f, panel, l, t)
     end
     f:HookScript("OnShow", function()
         Safe(Fit)
-        if C_Timer and C_Timer.After then C_Timer.After(0.05, function() Safe(Fit) end) end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.05, function() Safe(Fit) end)
+            C_Timer.After(0.3, function() Safe(Fit) end)
+        end
     end)
+    if f:IsShown() then Safe(Fit) end
 end
+
+-- WoW Forever: text drawn dark for the old parchment (headers, gossip options, charter lines) becomes light;
+-- big fancy headers turn gold. Inline black colour codes are swapped too.
+local function BrightenDarkText(fr, depth)
+    depth = depth or 0
+    if not fr or depth > 7 or fr.cysOwn then return end
+    for _, r in ipairs({ fr:GetRegions() }) do
+        if r.GetObjectType and r:GetObjectType() == "FontString" and not r.cysOwn then
+            local ok, cr, cg, cb = pcall(r.GetTextColor, r)
+            if ok and cr and (cr + cg + cb) < 0.9 then
+                local _, size = r:GetFont()
+                SetColor(r, (size or 0) >= 15 and T.accent or LIGHT)
+            end
+            LightenInlineBlack(r)
+        end
+    end
+    for _, c in ipairs(Kids(fr)) do BrightenDarkText(c, depth + 1) end
+end
+local function BrightenOnShow(f)
+    if not (CysUICompat and CysUICompat.isForever) or not f or f.cysBright then return end
+    f.cysBright = true
+    local function Go() Safe(BrightenDarkText, f, 0) end
+    f:HookScript("OnShow", function()
+        Go()
+        if C_Timer and C_Timer.After then C_Timer.After(0.05, Go); C_Timer.After(0.3, Go) end
+    end)
+    if f:IsShown() then Go() end
+end
+
 
 local function PaintQuestDialog()
     local gold = T.accent
@@ -1487,6 +1527,15 @@ local function SkinGossip()
     end
     local function Later() Safe(Paint); if C_Timer and C_Timer.After then C_Timer.After(0.05, function() Safe(Paint) end) end end
     f:HookScript("OnShow", Later)
+    BrightenOnShow(f)
+    if CysUICompat and CysUICompat.isForever then
+        local box = f.GreetingPanel and f.GreetingPanel.ScrollBox
+        if box and box.RegisterCallback and ScrollBoxListMixin and ScrollBoxListMixin.Event then
+            pcall(box.RegisterCallback, box, ScrollBoxListMixin.Event.OnDataRangeChanged, function()
+                Safe(BrightenDarkText, f, 0)
+            end, panel)
+        end
+    end
     if hooksecurefunc then
         if f.Update then hooksecurefunc(f, "Update", Later) end
         if f.UpdateScrollBox then hooksecurefunc(f, "UpdateScrollBox", Later) end
@@ -1875,10 +1924,156 @@ local function PlaceMap(map)
     end
 end
 
+-- WoW Forever: the map and the quest log are one window. The CysUI panel stretches over the quest log too, the
+-- quest log's backgrounds go (its zone headers get the flat band), and the World > zone bar along the top
+-- becomes a flat band. Quest text, objectives and map pins are left as Blizzard draws them.
+local function ForeverMapExtras(f, panel)
+    if f.cysForeverMap then return end
+    f.cysForeverMap = true
+    local qm = Get("QuestMapFrame")
+    -- panel: from the map's top-left to whichever reaches further right / down (the quest log when it's open)
+    local function FitPanel()
+        -- reach up to the zone bar when it sits above the map frame, so the bar is part of the window
+        local top = 4
+        local nav = f.NavBar
+        local nt, ft = nav and nav:GetTop(), f:GetTop()
+        if nt and ft and nt > ft then top = nt - ft + 3 end
+        panel:ClearAllPoints()
+        panel:SetPoint("TOPLEFT", f, "TOPLEFT", -4, top)
+        panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 4, -4)
+        local band = nav and nav.cysBand
+        local nb = nav and nav:GetBottom()
+        if band and nb and ft then
+            local pt = ft + top -- the panel's top
+            band:SetHeight(max(pt - nb + 2, 10))
+        end
+    end
+    f:HookScript("OnShow", function() if C_Timer and C_Timer.After then C_Timer.After(0.05, function() Safe(FitPanel) end) end end)
+    -- the quest log gets its own dark backing that always sits exactly under it (no guessing at sizes)
+    if qm and not qm.cysBacking then
+        local bk = Own(CreateFrame("Frame", nil, qm))
+        bk:SetPoint("TOPLEFT", qm, "TOPLEFT", -2, 4)
+        bk:SetPoint("BOTTOMRIGHT", qm, "BOTTOMRIGHT", 4, -4)
+        bk:SetFrameLevel(max(qm:GetFrameLevel() - 1, 0))
+        W.Texture(bk, "BACKGROUND", T.bg):SetAllPoints()
+        W.Border(bk, 1, T.border, "BORDER")
+        qm.cysBacking = bk
+    end
+    -- flat search boxes: the grey input art goes, a dark field with a hairline edge stays
+    local function FlatInputs(fr, depth)
+        if depth > 6 then return end
+        for _, c in ipairs(Kids(fr)) do
+            if not c.cysOwn then
+                if c.GetObjectType and c:GetObjectType() == "EditBox" and not c.cysField then
+                    c.cysField = true
+                    Blank(c)
+                    local bx = Own(CreateFrame("Frame", nil, c))
+                    bx:SetPoint("TOPLEFT", -4, 1)
+                    bx:SetPoint("BOTTOMRIGHT", 0, -1)
+                    bx:SetFrameLevel(max(c:GetFrameLevel() - 1, 0))
+                    W.Texture(bx, "BACKGROUND", T.field):SetAllPoints()
+                    bx.edges = W.Border(bx, 1, T.line, "BORDER")
+                end
+                FlatInputs(c, depth + 1)
+            end
+        end
+    end
+    local function Quest()
+        if not qm then return end
+        Safe(ForeverFadeTree, qm, 0)
+        Safe(FlatInputs, qm, 0)
+        -- the Quests / Events / Map legend tabs down the right edge: square icons like the character window's
+        for _, k in ipairs({ "QuestsTab", "EventsTab", "MapLegendTab" }) do
+            if qm[k] then Safe(SkinForeverSideTab, qm[k]); if qm[k].cysPaint then Safe(qm[k].cysPaint) end end
+        end
+    end
+    if qm then
+        qm:HookScript("OnShow", function() Safe(FitPanel); Safe(Quest) end)
+        qm:HookScript("OnHide", function() Safe(FitPanel) end)
+        if QuestMapFrame_UpdateAll then hooksecurefunc("QuestMapFrame_UpdateAll", function() Safe(Quest) end) end
+        -- a hairline between the map and the quest list
+        local sc = f.ScrollContainer
+        if sc then
+            local div = Own(f:CreateTexture(nil, "ARTWORK"))
+            div:SetColorTexture(T.line[1], T.line[2], T.line[3], 1)
+            div:SetWidth(1)
+            div:SetPoint("TOPLEFT", qm, "TOPLEFT", -2, 0)
+            div:SetPoint("BOTTOMLEFT", qm, "BOTTOMLEFT", -2, 0)
+            qm:HookScript("OnShow", function() div:Show() end)
+            qm:HookScript("OnHide", function() div:Hide() end)
+            div:SetShown(qm:IsShown())
+        end
+    end
+    f:HookScript("OnShow", function() Safe(FitPanel); Safe(Quest) end)
+    -- the window's own grey backgrounds (WorldMapFrameBg, the strip behind the title / zone bar)
+    Blank(f)
+    if f.TitleCanvasSpacerFrame then Blank(f.TitleCanvasSpacerFrame); Safe(ForeverFadeTree, f.TitleCanvasSpacerFrame, 0) end
+    Safe(ForeverFadeTree, f.BorderFrame or f, 0)
+
+    -- the World > Eastern Kingdoms > zone bar: Blizzard's stone and red crumb art goes, a flat band stays
+    local nav = f.NavBar
+    if nav and not nav.cysBand then
+        local function KeepArrow(r)
+            local par = r.GetParent and r:GetParent()
+            return par and (par.arrowUp == r or par.arrowDown == r)
+        end
+        local function FadeNav(fr, depth)
+            if depth > 5 then return end
+            for _, r in ipairs({ fr:GetRegions() }) do
+                if r.GetObjectType and r:GetObjectType() == "Texture" and not r.cysOwn and not KeepArrow(r) then
+                    r:SetAlpha(0)
+                end
+            end
+            for _, c in ipairs(Kids(fr)) do
+                if not c.cysOwn then
+                    -- the little menu arrows between the names stay, drawn as a plain gold arrow
+                    if c.arrowUp or c.arrowDown then
+                        for _, k in ipairs({ "arrowUp", "arrowDown" }) do
+                            local a = c[k]
+                            if a and a.SetDesaturated then a:SetDesaturated(true); a:SetVertexColor(T.accent[1], T.accent[2], T.accent[3]) end
+                        end
+                        for _, g in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture" }) do
+                            local t = c[g] and c[g](c)
+                            if t then t:SetAlpha(0) end
+                        end
+                    else
+                        FadeNav(c, depth + 1)
+                    end
+                    -- crumb names: plain light text
+                    local fs = c.text or (c.GetFontString and c:GetFontString())
+                    if fs and fs.SetTextColor then fs:SetTextColor(T.accent[1], T.accent[2], T.accent[3]) end
+                end
+            end
+        end
+        -- the band runs the full width of the window (not just under the crumbs), from the top edge down
+        local band = Own(panel:CreateTexture(nil, "ARTWORK"))
+        band:SetColorTexture(T.selected[1], T.selected[2], T.selected[3], 1)
+        band:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -1)
+        band:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -1)
+        band:SetHeight(max((nav:GetHeight() or 30) + 6, 20)) -- set exactly in FitPanel
+        local line = Own(panel:CreateTexture(nil, "OVERLAY"))
+        line:SetColorTexture(T.border[1], T.border[2], T.border[3], 1)
+        line:SetHeight(1)
+        line:SetPoint("BOTTOMLEFT", band, "BOTTOMLEFT")
+        line:SetPoint("BOTTOMRIGHT", band, "BOTTOMRIGHT")
+        nav.cysBand = band
+        local function Again() Safe(FadeNav, nav, 0) end
+        Again()
+        -- crumbs are added as you zoom in and out
+        if type(nav.AddButton) ~= "nil" then pcall(hooksecurefunc, "NavBar_AddButton", Again) end
+        if NavBar_Reset then pcall(hooksecurefunc, "NavBar_Reset", Again) end
+        f:HookScript("OnShow", Again)
+        if f.RefreshOverlayFrames then pcall(hooksecurefunc, f, "RefreshOverlayFrames", Again) end
+    end
+    FitPanel()
+    Quest()
+end
+
 local function SkinWorldMap()
     local f = Get("WorldMapFrame")
     if not f then return end
     local panel = Panel(f, -4, 4, 4, -4)
+    if CysUICompat and CysUICompat.isForever then Safe(ForeverMapExtras, f, panel) end
     -- Movable map with a drag handle outside the top-left corner, remembered position and a flicker-free show
     if not f.cysMove and not MapAddonLoaded() then
         f.cysMove = true
@@ -2847,6 +3042,20 @@ local function GenericWindow(name, o)
     return f, panel
 end
 
+-- every plain window skinned with GenericWindow (no tabs hanging off it) gets both on Forever
+do
+    local Base = GenericWindow
+    GenericWindow = function(name, o)
+        local f, panel = Base(name, o)
+        if f and panel and CysUICompat and CysUICompat.isForever and not (o and o.tabs) then
+            local pp = o and o.panel or { 0, 0, 0, 0 }
+            FitPanelToButtons(f, panel, pp[1], pp[2])
+            BrightenOnShow(f)
+        end
+        return f, panel
+    end
+end
+
 -- Slider: a thin dark track with a flat gold handle, and flat arrows on its ends
 local function FlatSlider(sl)
     if not sl or sl.cysFlat then return end
@@ -3478,8 +3687,13 @@ local function SkinDropdowns()
     end
     -- some frames other addons make answer to nothing useful ("bad self"), so every look at a frame is guarded
     local function Candidate(fr)
-        local ok, shown, strata = pcall(function() return fr:IsShown(), fr:GetFrameStrata() end)
-        return ok and shown and strata == "FULLSCREEN_DIALOG"
+        -- WoW Forever: some frames answer with locked values; those are tested inside the guard and skipped
+        local ok, yes = pcall(function()
+            local shown, strata = fr:IsShown(), fr:GetFrameStrata()
+            if CysUICompat.Secret(shown) or CysUICompat.Secret(strata) then return false end
+            return (shown and strata == "FULLSCREEN_DIALOG") and true or false
+        end)
+        return ok and yes == true
     end
     local function ScanMenus()
         for _, c in ipairs(Kids(UIParent)) do
