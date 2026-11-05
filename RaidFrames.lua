@@ -84,59 +84,9 @@ local function GetAura(unit, index, filter)
     return name, icon, count, debuffType
 end
 
-local FALLBACK_TYPES = {
-    Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 }, Poison = { 0, 0.6, 0 },
-}
--- Spells that remove debuffs in Classic Era: { debuff types it removes, spell ids (every rank), pet = learned by the pet }.
--- The border only lights up for a type you can remove right now (spell learned; warlocks need the Felhunter out).
-local DISPEL_SPELLS = {
-    PRIEST = {
-        { { "Disease" }, { 528, 552 } },                 -- Cure Disease, Abolish Disease
-        { { "Magic" },   { 527, 988 } },                 -- Dispel Magic
-    },
-    PALADIN = {
-        { { "Poison", "Disease" }, { 1152 } },           -- Purify
-        { { "Magic", "Poison", "Disease" }, { 4987 } },  -- Cleanse
-    },
-    DRUID = {
-        { { "Curse" },  { 2782 } },                      -- Remove Curse
-        { { "Poison" }, { 8946, 2893 } },                -- Cure Poison, Abolish Poison
-    },
-    SHAMAN = {
-        { { "Poison" },  { 526 } },                      -- Cure Poison
-        { { "Disease" }, { 2870 } },                     -- Cure Disease
-    },
-    MAGE = {
-        { { "Curse" }, { 475 } },                        -- Remove Lesser Curse
-    },
-    WARLOCK = {
-        { { "Magic" }, { 19505, 19731, 19734, 19736 }, pet = true }, -- Felhunter: Devour Magic
-    },
-}
-
-local canDispel = {}
-local function Known(id, pet)
-    if pet then
-        if IsSpellKnown then return IsSpellKnown(id, true) and true or false end
-        return false
-    end
-    if IsPlayerSpell and IsPlayerSpell(id) then return true end
-    return IsSpellKnown and IsSpellKnown(id) and true or false
-end
-
-local function RebuildDispels()
-    wipe(canDispel)
-    local _, class = UnitClass("player")
-    for _, entry in ipairs(DISPEL_SPELLS[class] or {}) do
-        for _, id in ipairs(entry[2]) do
-            local ok, known = pcall(Known, id, entry.pet)
-            if ok and known then
-                for _, t in ipairs(entry[1]) do canDispel[t] = true end
-                break
-            end
-        end
-    end
-end
+-- which debuff types you can remove lives in Compat (shared with party frames)
+local canDispel = CysUICompat.dispelTypes
+local function RebuildDispels() CysUICompat.RebuildDispels() end
 RF.RebuildDispels = RebuildDispels
 
 local function CanDispel(debuffType)
@@ -144,12 +94,7 @@ local function CanDispel(debuffType)
     return canDispel[debuffType] and true or false
 end
 
-local function TypeColor(debuffType)
-    local c = DebuffTypeColor and DebuffTypeColor[debuffType]
-    if c and c.r then return c.r, c.g, c.b end
-    local f = FALLBACK_TYPES[debuffType]
-    if f then return f[1], f[2], f[3] end
-end
+local function TypeColor(debuffType) return CysUICompat.DebuffColor(debuffType) end
 
 --------------------------------------------------------------------------------
 -- Updating one button
@@ -232,12 +177,56 @@ local function UpdateBorder(b)
     end
 end
 
+-- WoW Forever: addons can't read raid members' debuffs in combat, so the game draws them into our icons and
+-- tints our outline itself (aura container). Built once per button; settings flip groups on and off.
+local function ForeverAuras(b, unit, db, mode)
+    if b.cysAuraBox == nil then
+        local size = max(10, min(16, floor((b:GetHeight() or 30) * 0.42)))
+        local box = CysUICompat.AuraContainer(b, unit, {
+            point = { "BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2 },
+            anchor = "BOTTOMRIGHT", growH = "LEFT", growV = "UP", size = size, gap = 1, noClicks = true,
+            groups = { { key = "debuffs", filter = "HARMFUL", max = 3 } },
+        })
+        b.cysAuraBox = box or false
+        if box then
+            b.cysDispel = CysUICompat.AuraDispelEdges(box, "dispel", "HARMFUL|RAID_PLAYER_DISPELLABLE", b, 2) or false
+            b.cysDispelFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE"
+        end
+    end
+    local box = b.cysAuraBox
+    if not box then return false end
+    CysUICompat.AuraContainerUnit(box, unit)
+    local want = (db.debuffIcons and mode and mode.icons) or 0
+    if b.cysAuraCap ~= want then
+        b.cysAuraCap = want
+        CysUICompat.AuraContainerCap(box, "debuffs", want)
+    end
+    if b.cysDispel then
+        local filter = db.dispelOnly and "HARMFUL|RAID_PLAYER_DISPELLABLE" or "HARMFUL"
+        if b.cysDispelFilter ~= filter then
+            b.cysDispelFilter = filter
+            pcall(box.SetAuraSlotFilterString, box, "dispel", filter)
+        end
+        local on = db.dispelBorder and true or false
+        if b.cysDispelOn ~= on then
+            b.cysDispelOn = on
+            pcall(box.SetAuraSlotEnabled, box, "dispel", on)
+        end
+    end
+    return true
+end
+
 local function UpdateAuras(b)
     local unit = b.unit
     if not unit or not UnitExists(unit) then return end
     local db = DB()
     local mode = MODES[RF.mode or "10"]
     b.debuffType = nil
+    if CysUICompat.isForever and ForeverAuras(b, unit, db, mode) then
+        for i = 1, #b.icons do b.icons[i]:Hide() end
+        UpdateBorder(b) -- the target highlight; the debuff outline is the game's
+        return
+    end
     local shown = 0
     local want = (db.debuffIcons and mode and mode.icons) or 0
     for i = 1, 40 do

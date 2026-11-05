@@ -890,6 +890,12 @@ local function Build()
     tabWho:SetScript("OnClick", function() SetMode("who") end)
     tabGuild = W.Button(f, 54, 22, "Guild")
     tabGuild:SetPoint("LEFT", tabWho, "RIGHT", 4, 0)
+    -- WoW Forever: /who lives in Blizzard's Looking For Group window there, so ours steps aside
+    if CysUICompat.isForever then
+        tabWho:Hide()
+        tabGuild:ClearAllPoints()
+        tabGuild:SetPoint("LEFT", tabFriends, "RIGHT", 4, 0)
+    end
     tabGuild:SetScript("OnClick", function() SetMode("guild") end)
     tabIgnore = W.Button(f, 54, 22, "Ignore")
     tabIgnore:SetPoint("LEFT", tabGuild, "RIGHT", 4, 0)
@@ -997,7 +1003,7 @@ local function Build()
     -- events: refresh when the lists change (batched)
     for _, ev in ipairs({ "FRIENDLIST_UPDATE", "BN_FRIEND_LIST_SIZE_CHANGED", "BN_FRIEND_INFO_CHANGED",
         "BN_FRIEND_ACCOUNT_ONLINE", "BN_FRIEND_ACCOUNT_OFFLINE", "IGNORELIST_UPDATE", "WHO_LIST_UPDATE", "GUILD_ROSTER_UPDATE", "GUILD_MOTD", "PLAYER_GUILD_UPDATE" }) do
-        pcall(f.RegisterEvent, f, ev)
+        if not (ev == "WHO_LIST_UPDATE" and CysUICompat.isForever) then pcall(f.RegisterEvent, f, ev) end
     end
     f:SetScript("OnEvent", function(_, event)
         if event == "WHO_LIST_UPDATE" then whoSearching = false end
@@ -1048,7 +1054,7 @@ F.SetMode, F.RunWho = SetMode, RunWho
 
 -- Open the window on the Who tab and run a search (what /who does when we take it over)
 function F:OpenWho(text)
-    if not f then return end
+    if not f or CysUICompat.isForever then return end
     CUI:ShowWindow(f)
     SetMode("who")
     query = strtrim and strtrim(text or "") or (text or "")
@@ -1059,7 +1065,7 @@ end
 local origWho
 function F.ApplyWho()
     if not SlashCmdList then return end
-    if DB().takeKey and f then
+    if DB().takeKey and f and not CysUICompat.isForever then -- Forever: /who stays Blizzard's (Looking For Group)
         if not origWho then origWho = SlashCmdList["WHO"] end
         SlashCmdList["WHO"] = function(msg) F:OpenWho(msg) end
     elseif origWho then

@@ -1439,8 +1439,25 @@ local function BrightenOnShow(f)
 end
 
 
+-- WoW Forever shows the same quest text (QuestInfo) in two places: the NPC quest window, which Cys's UI makes dark,
+-- and the Map & Quest Log, which keeps Blizzard's light parchment. Light text only belongs in the dark one.
+local function QuestTextOnParchment()
+    if not (CysUICompat and CysUICompat.isForever) then return false end
+    local qf = Get("QuestFrame")
+    return not (qf and qf:IsShown())
+end
+
+local PARCHMENT_TEXT, PARCHMENT_TITLE = { 0.18, 0.12, 0.06 }, { 0, 0, 0 }
+if GetMaterialTextColors then
+    local ok, text, title = pcall(GetMaterialTextColors, "Parchment")
+    if ok and type(text) == "table" and text[1] then PARCHMENT_TEXT = { text[1], text[2], text[3] } end
+    if ok and type(title) == "table" and title[1] then PARCHMENT_TITLE = { title[1], title[2], title[3] } end
+end
+
 local function PaintQuestDialog()
-    local gold = T.accent
+    local parchment = QuestTextOnParchment()
+    local gold = parchment and PARCHMENT_TITLE or T.accent
+    local LIGHT = parchment and PARCHMENT_TEXT or LIGHT
     local rf = Get("QuestInfoRewardsFrame")
     for _, fs in ipairs({ Get("QuestInfoTitleHeader"), Get("QuestInfoDescriptionHeader"), Get("QuestInfoObjectivesHeader"),
         rf and rf.Header, Get("QuestProgressTitleText"), Get("QuestProgressRequiredItemsText"),
@@ -1457,6 +1474,7 @@ local function PaintQuestDialog()
     if rf and rf.spellHeaderPool then
         rf.spellHeaderPool.textR, rf.spellHeaderPool.textG, rf.spellHeaderPool.textB = LIGHT[1], LIGHT[2], LIGHT[3]
     end
+    if parchment then return end -- on parchment Blizzard's own objective and title colours are the right ones
     for i = 1, 10 do -- objectives: Blizzard paints finished ones 0.2 grey and open ones black
         local fs = Get("QuestInfoObjective" .. i)
         if fs then

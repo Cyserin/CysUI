@@ -527,6 +527,83 @@ function Compat.AuraBorder(edges, e, fallback)
 end
 
 --------------------------------------------------------------------------------
+-- Dispels: which debuff types YOU can remove right now (spell learned; warlocks need the Felhunter out).
+-- Shared by raid frames and party frames. Rebuilt whenever spells or the pet change.
+--------------------------------------------------------------------------------
+local DISPEL_SPELLS = {
+    PRIEST = {
+        { { "Disease" }, { 528, 552 } },                 -- Cure Disease, Abolish Disease
+        { { "Magic" },   { 527, 988 } },                 -- Dispel Magic
+    },
+    PALADIN = {
+        { { "Poison", "Disease" }, { 1152 } },           -- Purify
+        { { "Magic", "Poison", "Disease" }, { 4987 } },  -- Cleanse
+    },
+    DRUID = {
+        { { "Curse" },  { 2782 } },                      -- Remove Curse
+        { { "Poison" }, { 8946, 2893 } },                -- Cure Poison, Abolish Poison
+    },
+    SHAMAN = {
+        { { "Poison" },  { 526 } },                      -- Cure Poison
+        { { "Disease" }, { 2870 } },                     -- Cure Disease
+    },
+    MAGE = {
+        { { "Curse" }, { 475 } },                        -- Remove Lesser Curse
+    },
+    WARLOCK = {
+        { { "Magic" }, { 19505, 19731, 19734, 19736 }, pet = true }, -- Felhunter: Devour Magic
+    },
+}
+Compat.dispelTypes = {}
+
+local function KnownDispel(id, pet)
+    if pet then
+        if IsSpellKnown then return IsSpellKnown(id, true) and true or false end
+        return false
+    end
+    if IsPlayerSpell and IsPlayerSpell(id) then return true end
+    return IsSpellKnown and IsSpellKnown(id) and true or false
+end
+
+function Compat.RebuildDispels()
+    local can = Compat.dispelTypes
+    wipe(can)
+    local _, class = UnitClass("player")
+    for _, entry in ipairs(DISPEL_SPELLS[class] or {}) do
+        for _, id in ipairs(entry[2]) do
+            local ok, known = pcall(KnownDispel, id, entry.pet)
+            if ok and known then
+                for _, t in ipairs(entry[1]) do can[t] = true end
+                break
+            end
+        end
+    end
+end
+
+function Compat.CanDispel(debuffType)
+    return debuffType ~= nil and Compat.dispelTypes[debuffType] == true
+end
+
+local FALLBACK_TYPES = {
+    Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 }, Poison = { 0, 0.6, 0 },
+}
+function Compat.DebuffColor(debuffType)
+    local c = DebuffTypeColor and DebuffTypeColor[debuffType]
+    if c and c.r then return c.r, c.g, c.b end
+    local f = FALLBACK_TYPES[debuffType]
+    if f then return f[1], f[2], f[3] end
+end
+
+do
+    local ev = CreateFrame("Frame")
+    for _, e in ipairs({ "PLAYER_LOGIN", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB", "PLAYER_LEVEL_UP" }) do
+        pcall(ev.RegisterEvent, ev, e)
+    end
+    pcall(ev.RegisterUnitEvent, ev, "UNIT_PET", "player")
+    ev:SetScript("OnEvent", function() pcall(Compat.RebuildDispels) end)
+end
+
+--------------------------------------------------------------------------------
 -- Aura containers (WoW Forever): addons may not read other units' auras in combat at all, but they may hand the
 -- game a container of icon frames and the game fills them itself - icon, stacks, timer swipe, debuff-type border,
 -- tooltip - in and out of combat. Same system EllesmereUI uses. We build the look (dark edge, cropped icon, small
@@ -633,6 +710,43 @@ function Compat.AuraContainer(parent, unit, spec)
         pcall(c.UpdateAllAuras, c)
     end
     return c
+end
+
+-- A dispel-type outline for a whole frame (raid frames): one aura slot that takes the first debuff matching the
+-- filter, drawn as four thin edges the game tints by debuff type (magic blue, curse purple, ...). The slot never
+-- takes the mouse, so clicks and tooltips still reach the frame under it.
+function Compat.AuraDispelEdges(c, key, filter, owner, thickness)
+    if not (c and c.AddAuraSlot) then return nil end
+    local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
+    if not (styles and styles.PreserveAsset ~= nil) then return nil end
+    thickness = thickness or 2
+    local function Init(button)
+        pcall(button.SetMouseClickEnabled, button, false)
+        pcall(button.SetMouseMotionEnabled, button, false)
+        local edges = {
+            { "TOPLEFT", "TOPRIGHT", nil, thickness }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, thickness },
+            { "TOPLEFT", "BOTTOMLEFT", thickness, nil }, { "TOPRIGHT", "BOTTOMRIGHT", thickness, nil },
+        }
+        for _, e in ipairs(edges) do
+            local t = button:CreateTexture(nil, "OVERLAY", nil, 6)
+            t:SetTexture("Interface\\Buttons\\WHITE8X8")
+            t:SetPoint(e[1]); t:SetPoint(e[2])
+            if e[3] then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+            local ok, err = pcall(button.AddDispelTypeTexture, button, t, { style = styles.PreserveAsset })
+            if not ok then Compat.errors[#Compat.errors + 1] = "Aura dispel edge: " .. tostring(err) end
+        end
+    end
+    local ok, f = pcall(c.AddAuraSlot, c, key, filter, {
+        initializeFrame = Init,
+        candidateFilters = { includeDispelTypes = { Magic = true, Curse = true, Disease = true, Poison = true } },
+    })
+    if not ok or not f then
+        Compat.errors[#Compat.errors + 1] = "Aura dispel slot: " .. tostring(f)
+        return nil
+    end
+    pcall(f.ClearAllPoints, f)
+    pcall(f.SetAllPoints, f, owner)
+    return f
 end
 
 -- point a container at another unit (nameplates get reused) or refresh it (target changed)

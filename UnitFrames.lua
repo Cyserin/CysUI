@@ -503,6 +503,102 @@ local function ApplyColor(f)
     f.health:SetStatusBarColor(r, g, b)
 end
 
+--------------------------------------------------------------------------------
+-- Party: what a healer needs to see. Up to 4 debuff icons beside each member and the frame's outline colored by
+-- debuff type (magic, curse, disease, poison) - by default only for types you can remove right now.
+-- WoW Forever: the game draws both itself (aura container), so they keep working in combat.
+--------------------------------------------------------------------------------
+local PARTY_ICON, PARTY_MAX = 18, 4
+local DISPELLABLE = "HARMFUL|RAID_PLAYER_DISPELLABLE"
+
+local function UpdatePartyAuras(f)
+    local db = DB()
+    local unit = f.unit
+    if not (unit and UnitExists(unit)) then return end
+    local showIcons = db.partyDebuffs ~= false
+    local showOutline = db.partyDispel ~= false
+    local onlyMine = db.partyDispelOnly ~= false
+
+    if CysUICompat.isForever then
+        if f.cysAuraBox == nil then
+            local box = CysUICompat.AuraContainer(f, unit, {
+                point = { "TOPLEFT", f, "TOPRIGHT", 4, 0 },
+                anchor = "TOPLEFT", size = PARTY_ICON, gap = 2, noClicks = true,
+                groups = { { key = "debuffs", filter = "HARMFUL", max = PARTY_MAX } },
+            })
+            f.cysAuraBox = box or false
+            if box then
+                f.cysDispel = CysUICompat.AuraDispelEdges(box, "dispel", DISPELLABLE, f, 2) or false
+                f.cysDispelFilter = DISPELLABLE
+            end
+        end
+        local box = f.cysAuraBox
+        if box then
+            local want = showIcons and PARTY_MAX or 0
+            if f.cysAuraCap ~= want then
+                f.cysAuraCap = want
+                CysUICompat.AuraContainerCap(box, "debuffs", want)
+            end
+            if f.cysDispel then
+                local filter = onlyMine and DISPELLABLE or "HARMFUL"
+                if f.cysDispelFilter ~= filter then
+                    f.cysDispelFilter = filter
+                    pcall(box.SetAuraSlotFilterString, box, "dispel", filter)
+                end
+                if f.cysDispelOn ~= showOutline then
+                    f.cysDispelOn = showOutline
+                    pcall(box.SetAuraSlotEnabled, box, "dispel", showOutline)
+                end
+            end
+            return
+        end
+    end
+
+    -- Classic Era (and Forever if the game's containers are missing): read the debuffs ourselves
+    f.partyIcons = f.partyIcons or {}
+    if not f.dispelEdges then
+        f.dispelEdges = W.Border(f, 2, { 1, 1, 1 }, "OVERLAY", 4)
+    end
+    local outlineType
+    local shown = 0
+    for i = 1, 40 do
+        local name, icon, count, debuffType, duration, expiration = GetAura(unit, i, "HARMFUL")
+        if not name then break end
+        if debuffType and not outlineType and (not onlyMine or CysUICompat.CanDispel(debuffType)) then
+            outlineType = debuffType
+        end
+        if showIcons and shown < PARTY_MAX then
+            shown = shown + 1
+            local a = f.partyIcons[shown]
+            if not a then a = MakeAura(f); f.partyIcons[shown] = a end
+            a:SetSize(PARTY_ICON, PARTY_ICON)
+            a.unit, a.index, a.filter, a.auraInstanceID = unit, i, "HARMFUL", nil
+            a.icon:SetTexture(icon)
+            a.count:SetText((count and count > 1) and count or "")
+            if duration and duration > 0 and expiration then
+                a.cd:SetCooldown(expiration - duration, duration)
+                a.cd:Show()
+            else
+                a.cd:Hide()
+            end
+            local r, g, b = CysUICompat.DebuffColor(debuffType)
+            W.SetBorder(a.edges, r and { r, g, b } or { 0.8, 0.2, 0.2 })
+            a:ClearAllPoints()
+            a:SetPoint("TOPLEFT", f, "TOPRIGHT", 4 + (shown - 1) * (PARTY_ICON + 2), 0)
+            a:Show()
+        end
+    end
+    for i = shown + 1, #f.partyIcons do f.partyIcons[i]:Hide() end
+    local r, g, b
+    if showOutline and outlineType then r, g, b = CysUICompat.DebuffColor(outlineType) end
+    if r then
+        W.SetBorder(f.dispelEdges, { r, g, b })
+        for i = 1, 4 do f.dispelEdges[i]:Show() end
+    else
+        for i = 1, 4 do f.dispelEdges[i]:Hide() end
+    end
+end
+
 function UF:Update(f)
     local unit = f.unit
     if not UnitExists(unit) then return end
@@ -521,6 +617,7 @@ function UF:Update(f)
         end
     end
     Step("auras", UpdateAuras, f)
+    if f.isParty then Step("party auras", UpdatePartyAuras, f) end
     Step("combo", UpdateCombo, f)
 end
 UF.Update = Guard("Unit frames", UF.Update) -- WoW Forever: a locked value skips one update instead of erroring
@@ -528,7 +625,7 @@ UF.Update = Guard("Unit frames", UF.Update) -- WoW Forever: a locked value skips
 -- the icon size setting changed: WoW Forever's aura containers are built at one size, so they are rebuilt
 function UF.RebuildAuras()
     for _, f in pairs(UF.frames) do
-        if f.cysAuraBox then
+        if f.cysAuraBox and f.auras then -- party icons have their own fixed size
             pcall(f.cysAuraBox.SetEnabled, f.cysAuraBox, false)
             f.cysAuraBox:Hide()
             f.cysAuraBox = nil
@@ -576,6 +673,7 @@ local function CreateUnitFrame(def)
     f:SetAttribute("*type2", (CysUICompat and CysUICompat.isForever) and "togglemenu" or "menu")
     f:RegisterForClicks("AnyUp", "AnyDown")
     f.noHealthText = def.noHealthText
+    f.isParty = def.party
 
     -- body
     W.Texture(f, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.9 }):SetAllPoints()
@@ -674,7 +772,7 @@ local function CreateUnitFrame(def)
 
     -- events
     for _, ev in ipairs(UNIT_EVENTS) do
-        if not (ev == "UNIT_AURA" and not def.auras) and not (ev == "UNIT_TARGET" and def.unit ~= "targettarget") then
+        if not (ev == "UNIT_AURA" and not def.auras and not def.party) and not (ev == "UNIT_TARGET" and def.unit ~= "targettarget") then
             local unit = (ev == "UNIT_TARGET") and "target" or def.unit
             pcall(f.RegisterUnitEvent, f, ev, unit)
         end
@@ -692,7 +790,9 @@ local function CreateUnitFrame(def)
     if def.party then pcall(f.RegisterEvent, f, "GROUP_ROSTER_UPDATE") end
     f:SetScript("OnEvent", function(self, event)
         -- a new target: the game's aura icons need telling (WoW Forever)
-        if self.cysAuraBox and event == "PLAYER_TARGET_CHANGED" then CysUICompat.AuraContainerUnit(self.cysAuraBox) end
+        if self.cysAuraBox and (event == "PLAYER_TARGET_CHANGED" or event == "GROUP_ROSTER_UPDATE") then
+            CysUICompat.AuraContainerUnit(self.cysAuraBox)
+        end
         UF:Update(self)
     end)
 
@@ -911,9 +1011,25 @@ CUI:RegisterPage("Unit Frames", function(page)
     auraSize:SetPoint("TOPLEFT", 4, y - 10)
     y = y - 40
 
+    W.Header(page, "Party (for healers)", width):SetPoint("TOPLEFT", 0, y - 8)
+    y = y - 38
+    local function PartyRefresh() for i = 1, 4 do local pf = UF.frames["party" .. i]; if pf then UF:Update(pf) end end end
+    for _, row in ipairs({
+        { "partyDebuffs", "Show debuffs beside each party member" },
+        { "partyDispel", "Color the outline by debuff type" },
+        { "partyDispelOnly", "Only outline debuffs I can remove" },
+    }) do
+        local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
+            function(on) db[row[1]] = on and true or false; PartyRefresh() end)
+        cb:SetPoint("TOPLEFT", 4, y)
+        y = y - 26
+    end
+
     local note = W.Notes(page, 4, y - 52, width, "", {
             "Frames can only be moved or resized out of combat.",
             "Raid frames have their own page (Raid Frames).",
+            "Party outline colors: blue Magic, purple Curse, brown Disease, green Poison.",
+            "Only debuffs I can remove goes by the cures you have learned (warlocks: Felhunter out).",
             "A frame you untick keeps Blizzard's version.",
             "If anything looks wrong, untick Unit Frames under Modules and reload: the game's own frames come straight back.",
         })
