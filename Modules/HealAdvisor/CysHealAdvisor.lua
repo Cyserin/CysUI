@@ -77,12 +77,11 @@ local FAMILY = {
     -- fast = the fast-cast single-target heal
     -- group = group heals (own row); exclude = never used for the four single-target rows
     -- rows = which family a row reads from (default: heavy, general, small = main; emergency = fast)
-    -- emergencyCast = the cast time that counts as fast when a class has no fast heal
     SHAMAN  = { main = { "Healing Wave" }, fast = { "Lesser Healing Wave" }, group = { "Chain Heal" },
                 exclude = { "Chain Heal", "Healing Stream Totem" } },
     PRIEST  = { main = { "Lesser Heal", "Heal", "Greater Heal" }, fast = { "Flash Heal" }, group = { "Prayer of Healing" },
                 exclude = { "Renew", "Power Word: Shield", "Prayer of Healing", "Holy Nova" } },
-    DRUID   = { main = { "Healing Touch" }, fast = { "Regrowth" }, group = {}, emergencyCast = 2.0,
+    DRUID   = { main = { "Healing Touch" }, fast = { "Regrowth" }, group = {},
                 exclude = { "Rejuvenation", "Tranquility", "Swiftmend" } }, -- Regrowth counts for its direct heal only
     PALADIN = { main = { "Holy Light" }, fast = { "Flash of Light" }, group = {},
                 rows = { small = "fast", general = "fast", heavy = "main", emergency = "fast" }, -- to confirm with guild paladins
@@ -462,13 +461,12 @@ end
 --   heavy     the biggest rank in its family that is still efficient (eff >= HEAVY_EFF)
 --   general   the next size down that is also efficient (eff >= GENERAL_EFF): less mana, less overheal, faster
 --   small     the smallest efficient rank (eff >= SMALL_EFF) that heals at least SMALL_MIN_SIZE of the heavy heal
---   emergency the biggest heal in the fast family; with no fast heal, the biggest heal that casts quickly and is
---             not tiny. Efficiency is ignored. A rank is never picked just because it is short.
+--   emergency the biggest heal in the fast family; with no fast heal learned yet, the rank with the most healing
+--             per second of casting (not tiny). Efficiency is ignored. A rank is never picked just because it is short.
 -- Each row has its own rule, so rows may land on the same rank but never share one "most efficient" pick.
 -- Spells you do not know never appear.
 local HEAVY_EFF, GENERAL_EFF, SMALL_EFF = 0.90, 0.90, 0.80
 local SMALL_MIN_SIZE = 0.20
-local EMERGENCY_MAX_CAST = 1.5
 local DEFAULT_ROWS = { small = "main", general = "main", heavy = "main", emergency = "fast" }
 
 local function BiggerHeal(a, b)
@@ -568,12 +566,23 @@ local function Situations(spells, snap)
     if emPool and #emPool > 0 then
         em = PickBest(emPool, BiggerHeal)
     elseif heavy then
-        local limit = fam.emergencyCast or EMERGENCY_MAX_CAST
-        local quick = {}
-        for _, r in ipairs(all) do
-            if r.cast <= limit and r.heal >= heavy.heal * SMALL_MIN_SIZE then quick[#quick + 1] = r end
+        -- No fast heal learned yet: a short-cast low rank only heals a sliver, so the pick is the rank that puts
+        -- out the most healing per second of casting (ties go to the faster cast).
+        local function MoreHealPerSecond(a, b)
+            local ha, hb = a.heal / math.max(a.cast, 1), b.heal / math.max(b.cast, 1)
+            if ha ~= hb then return ha > hb end
+            return a.cast < b.cast
         end
-        em = PickBest(quick, BiggerHeal)
+        local pool = {}
+        for _, r in ipairs(all) do
+            if r.heal >= heavy.heal * SMALL_MIN_SIZE then pool[#pool + 1] = r end
+        end
+        em = PickBest(pool, MoreHealPerSecond)
+        if em then
+            local fastName = fam.fast and fam.fast[1]
+            why = "Most healing per second of casting you have. Costs more mana per heal, so save it for real emergencies."
+            if fastName then why = why .. " " .. fastName .. " takes over once you learn it." end
+        end
     end
     if swift and heavy then why = why .. " Or: Nature's Swiftness + " .. heavy.spell .. " " .. heavy.rank .. "." end
     if em then
@@ -1372,7 +1381,7 @@ CUI:RegisterPage("Heal Advisor", function(page)
         { "/cuirank", "opens or closes the window; /cuirank scan takes a new scan." },
         { "Scan", "saves your bonus healing, Intellect, Spirit, mana and healing talents. The advice keeps using that scan, so changing gear does not move it until you press Scan." },
         { "Talents", "each healing talent you have points in is read from its own tooltip. Cast-time and healing-bonus talents change the numbers; mana-cost talents are already in the game's mana costs; crit and chance talents are listed but not counted." },
-        { "How it picks", "Heavy damage is your biggest heal that is still within 10% of your best heal per mana. General healing is the next size down that is also within 10%, which is faster and wastes less on normal tank damage. Small hits is the smallest rank within 20% of your best that still heals at least a fifth of your heavy heal. Emergency is your biggest heal that casts in 1.5 seconds or less. It never needs a health number, and only spells you know are named." },
+        { "How it picks", "Heavy damage is your biggest heal that is still within 10% of your best heal per mana. General healing is the next size down that is also within 10%, which is faster and wastes less on normal tank damage. Small hits is the smallest rank within 20% of your best that still heals at least a fifth of your heavy heal. Emergency is the biggest rank of your fast heal (like Flash Heal or Lesser Healing Wave); before you learn one, it is the rank that heals the most per second of casting. It never needs a health number, and only spells you know are named." },
         { "Popup", "when you learn a spell or level up and the advice would be different, a small popup shows what changed." },
         { "Classes", "Shaman, Priest, Druid and Paladin heals. Priest, Druid and Paladin are new and unchecked in game, so tell me if a number looks off." },
     })
