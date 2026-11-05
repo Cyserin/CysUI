@@ -650,8 +650,16 @@ local function AuraCellInit(spec)
         local count = top:CreateFontString(nil, "OVERLAY")
         count:SetFont(STANDARD_TEXT_FONT, math.max(8, math.floor(size * 0.45)), "OUTLINE")
         count:SetPoint("BOTTOMRIGHT", 1, 0)
-        local dispel = top:CreateTexture(nil, "OVERLAY")
-        dispel:SetAllPoints(button)
+        -- debuff-type tint on a thin 1px edge (the game's own border art is bigger than the icon and spills out)
+        local edges = {}
+        for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 },
+                             { "TOPLEFT", "BOTTOMLEFT", 1, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 1, nil } }) do
+            local t = top:CreateTexture(nil, "OVERLAY")
+            t:SetTexture("Interface\\Buttons\\WHITE8X8")
+            t:SetPoint(e[1], button, e[1]); t:SetPoint(e[2], button, e[2])
+            if e[3] then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+            edges[#edges + 1] = t
+        end
 
         if spec.noClicks then pcall(button.SetMouseClickEnabled, button, false) end
 
@@ -666,8 +674,8 @@ local function AuraCellInit(spec)
         Try("timer", button.SetDurationCooldown, cd)
         Try("stacks", button.SetApplicationCount, count, {})
         local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
-        if styles and styles.Border ~= nil and button.AddDispelTypeTexture then
-            Try("border", button.AddDispelTypeTexture, dispel, { style = styles.Border })
+        if styles and styles.PreserveAsset ~= nil and button.AddDispelTypeTexture then
+            for _, t in ipairs(edges) do Try("border", button.AddDispelTypeTexture, t, { style = styles.PreserveAsset }) end
         end
         Compat.auraInitCount = (Compat.auraInitCount or 0) + 1
     end

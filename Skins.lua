@@ -1487,6 +1487,15 @@ local function PaintQuestDialog()
         local fs = b and b.GetFontString and b:GetFontString()
         if fs then SetColor(fs, LIGHT); LightenInlineBlack(fs) end
     end
+    -- WoW Forever builds that list from a pool of unnamed buttons, written in parchment ink
+    local gp = Get("QuestFrameGreetingPanel")
+    local pool = gp and gp.titleButtonPool
+    if pool and pool.EnumerateActive then
+        for b in pool:EnumerateActive() do
+            local fs = b.GetFontString and b:GetFontString()
+            if fs then SetColor(fs, LIGHT); LightenInlineBlack(fs) end
+        end
+    end
 end
 
 -- The quest names in gossip / quest lists carry a built-in black colour (made for the old parchment), which vanishes on a dark panel
