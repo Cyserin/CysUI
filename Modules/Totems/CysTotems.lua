@@ -939,13 +939,26 @@ do
         if not bar.cysHooked then
             bar.cysHooked = true
             bar:HookScript("OnShow", function() C_Timer.After(0, HideBlizzardTotemBar) end)
+            -- Blizzard fades the bar back in on its own after a reload; put it straight back to invisible
+            -- (only its transparency is touched, which is allowed even in combat)
+            local fixing = false
+            pcall(hooksecurefunc, bar, "SetAlpha", function(self, a)
+                if fixing or a == 0 then return end
+                fixing = true
+                pcall(self.SetAlpha, self, 0)
+                fixing = false
+            end)
         end
     end
+    pcall(HideBlizzardTotemBar) -- right away at load, so it never flashes up after a reload
     local hev = CreateFrame("Frame")
     hev:RegisterEvent("PLAYER_ENTERING_WORLD")
     hev:RegisterEvent("SPELLS_CHANGED")
     hev:RegisterEvent("PLAYER_REGEN_ENABLED")
-    hev:SetScript("OnEvent", function() C_Timer.After(0.5, HideBlizzardTotemBar) end)
+    hev:SetScript("OnEvent", function()
+        pcall(HideBlizzardTotemBar)
+        C_Timer.After(0.5, HideBlizzardTotemBar)
+    end)
 end
 _G.CysTotemsSyncMacros = function(create) if SyncMacros then SyncMacros(create) end end -- for the settings page
 

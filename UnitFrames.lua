@@ -134,7 +134,8 @@ local function UpdateAuras(f)
     if CysUICompat.isForever and unit ~= "player" then
         if f.cysAuraBox == nil then
             f.cysAuraBox = CysUICompat.AuraContainer(f, unit, {
-                point = { "TOPLEFT", f, "BOTTOMLEFT", 0, -4 },
+                -- above the frame: the target cast bar sits right under it
+                point = { "BOTTOMLEFT", f, "TOPLEFT", 0, 4 }, anchor = "BOTTOMLEFT", growV = "UP",
                 size = AURA_SIZE, gap = 2, lineWidth = AURA_COLUMNS * (AURA_SIZE + 2),
                 groups = { { key = "debuffs", filter = "HARMFUL", max = AURA_COLUMNS * AURA_ROWS },
                            { key = "buffs", filter = "HELPFUL", max = AURA_COLUMNS * AURA_ROWS } },
@@ -171,7 +172,7 @@ local function UpdateAuras(f)
                 if f.unit == "targettarget" then
                     a:SetPoint("TOPLEFT", f, "BOTTOMLEFT", col * (AURA_SIZE + 1), -(2 + (rowShift + row) * (AURA_SIZE + 1)))
                 else
-                    a:SetPoint("TOPLEFT", f, "BOTTOMLEFT", col * (AURA_SIZE + 2), -(4 + (rowShift + row) * (AURA_SIZE + 2)))
+                    a:SetPoint("BOTTOMLEFT", f, "TOPLEFT", col * (AURA_SIZE + 2), 4 + (rowShift + row) * (AURA_SIZE + 2))
                 end
                 a:Show()
             end
@@ -201,7 +202,7 @@ local function UpdateAuras(f)
                 if f.unit == "targettarget" then
                     a:SetPoint("TOPLEFT", f, "BOTTOMLEFT", col * (AURA_SIZE + 1), -(2 + (rowShift + row) * (AURA_SIZE + 1)))
                 else
-                    a:SetPoint("TOPLEFT", f, "BOTTOMLEFT", col * (AURA_SIZE + 2), -(4 + (rowShift + row) * (AURA_SIZE + 2)))
+                    a:SetPoint("BOTTOMLEFT", f, "TOPLEFT", col * (AURA_SIZE + 2), 4 + (rowShift + row) * (AURA_SIZE + 2))
                 end
                 a:Show()
             end
@@ -438,6 +439,8 @@ local function UpdatePower(f)
             f.powerText:SetText(cur .. " / " .. mx)
         elseif mode == "percent" then
             f.powerText:SetText(format("%d%%", floor(cur / mx * 100 + 0.5)))
+        elseif mode == "valuepct" then
+            f.powerText:SetText(format("%d  |cFFFFD100%d%%|r", cur, floor(cur / mx * 100 + 0.5)))
         else
             f.powerText:SetText(tostring(cur))
         end
@@ -896,6 +899,37 @@ function UF.Enable()
         if not ok then CUI:Print("|cFFFF9F43Unit Frames: party skipped (" .. tostring(err) .. ")|r") end
     end
     UF.StartRangeCheck()
+    UF.SetupCombatIcon()
+end
+
+-- Combat: crossed swords on the player frame while you are in combat (switch on the Unit Frames page)
+function UF.SetupCombatIcon()
+    local f = UF.frames.player
+    if not f or f.cysCombat then return end
+    local holder = CreateFrame("Frame", nil, f)
+    holder:SetSize(20, 20)
+    holder:SetPoint("CENTER", f, "TOPRIGHT", -4, -2)
+    holder:SetFrameLevel(f:GetFrameLevel() + 8)
+    holder:EnableMouse(false)
+    local tex = holder:CreateTexture(nil, "OVERLAY")
+    tex:SetAllPoints()
+    tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+    tex:SetTexCoord(0.5, 1, 0, 0.49) -- the combat half of the state icon
+    f.cysCombat = holder
+    local function Apply()
+        holder:SetShown(DB().combatIcon ~= false and (InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player")) or false))
+    end
+    UF.ApplyCombatIcon = Apply
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+    ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+    ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    ev:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then holder:SetShown(DB().combatIcon ~= false)
+        elseif event == "PLAYER_REGEN_ENABLED" then holder:Hide()
+        else Apply() end
+    end)
+    Apply()
 end
 
 -- party members out of range fade; a player you target shows a rough distance
@@ -969,7 +1003,7 @@ CUI:RegisterPage("Unit Frames", function(page)
         end, "Health text: ")
     textBtn:SetPoint("TOPLEFT", 4, -66)
 
-    local manaBtn = W.Dropdown(page, 230, { { "current", "current" }, { "both", "current / max" }, { "percent", "percent" }, { "off", "off" } },
+    local manaBtn = W.Dropdown(page, 230, { { "current", "current" }, { "valuepct", "value and percent" }, { "both", "current / max" }, { "percent", "percent" }, { "off", "off" } },
         function() return db.manaText or "current" end,
         function(v)
             db.manaText = v
@@ -1006,6 +1040,10 @@ CUI:RegisterPage("Unit Frames", function(page)
         cb:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
+    local combat = W.Checkbox(page, "Show a combat icon on the player frame", function() return db.combatIcon ~= false end,
+        function(on) db.combatIcon = on and true or false; if UF.ApplyCombatIcon then UF.ApplyCombatIcon() end end)
+    combat:SetPoint("TOPLEFT", 4, y - 4)
+    y = y - 30
     local auraSize = W.Stepper(page, "Target buff and debuff icon size", function() return db.auraSize or 24 end,
         function(v) db.auraSize = v; UF.RebuildAuras() end, 16, 40, 2, " px")
     auraSize:SetPoint("TOPLEFT", 4, y - 10)

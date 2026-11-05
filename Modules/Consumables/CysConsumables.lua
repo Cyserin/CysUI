@@ -19,12 +19,31 @@ local W = CUI.W
 local T = W.T
 
 local floor, max, min = math.floor, math.max, math.min
+
+-- do you have the Well Fed buff right now? (read out of combat; macros can't change in combat anyway)
+local WELL_FED = (GetSpellInfo and GetSpellInfo(19705)) or "Well Fed"
+local function IsWellFed()
+    for i = 1, 40 do
+        local name
+        if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+            local a = CysUICompat and CysUICompat.AuraEntry and CysUICompat.AuraEntry("player", i, "HELPFUL")
+            if not a then break end
+            name = a.name
+        else
+            name = UnitBuff("player", i)
+            if not name then break end
+        end
+        if name == WELL_FED then return true end
+    end
+    return false
+end
 local CC = C_Container
 
 local DEFAULTS = {
     macros = { food = true, drink = true, hp = true, mp = true, bandage = true, stone = true },
     conjuredFirst = true,  -- eat / drink conjured items first while they are close to your best
     buffFood = false,      -- allow Well Fed food in the Food macro
+    buffFoodUnfed = false, -- use Well Fed food in the Food macro only while you don't have the Well Fed buff
     restock = true,        -- buy the restock list at vendors
     chars = {},            -- [name - realm] = { restock = { [itemID] = count } }
 }
@@ -141,21 +160,35 @@ local function Scan()
         end
     end
     wipe(best)
+    -- "only while unbuffed": not Well Fed -> buff food is preferred over any plain food
+    local preferBuff = db.buffFoodUnfed and not IsWellFed()
+    local allowBuff = db.buffFood or preferBuff
     for _, kind in ipairs(KINDS) do
         local top, topConj
         for id, it in pairs(items) do
             local info = it and it.info
             local amount = info and info.usable and info[kind.field]
-            local skip = info and kind.field == "food" and info.buff and not db.buffFood
+            local skip = info and kind.field == "food" and info.buff and not allowBuff
             if amount and not skip then
-                local e = { id = id, amount = amount, count = it.count, conjured = info.conjured }
-                -- best: most restored; ties go to the smaller stack so stacks get used up
-                if not top or amount > top.amount or (amount == top.amount and e.count < top.count) then top = e end
+                local e = { id = id, amount = amount, count = it.count, conjured = info.conjured,
+                            buff = (kind.field == "food" and info.buff) and true or false }
+                -- best: most restored; ties go to the smaller stack so stacks get used up.
+                -- While you want the Well Fed buff, buff food wins over plain food whatever it restores.
+                local better
+                if not top then
+                    better = true
+                elseif preferBuff and e.buff ~= top.buff then
+                    better = e.buff
+                else
+                    better = amount > top.amount or (amount == top.amount and e.count < top.count)
+                end
+                if better then top = e end
                 if info.conjured and (not topConj or amount > topConj.amount) then topConj = e end
             end
         end
         -- conjured first while it restores at least 3/4 of the best (it disappears anyway)
-        if db.conjuredFirst and topConj and top and topConj.amount >= top.amount * 0.75 then top = topConj end
+        if db.conjuredFirst and topConj and top and topConj.amount >= top.amount * 0.75
+            and not (preferBuff and top.buff) then top = topConj end
         best[kind.key] = top
     end
 end
@@ -276,11 +309,21 @@ local function Enable()
                          "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "MERCHANT_SHOW" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
+    pcall(frame.RegisterUnitEvent, frame, "UNIT_AURA", "player")
+    local fed
     frame:SetScript("OnEvent", function(_, event)
+        if event == "UNIT_AURA" then
+            -- only matters when Well Fed comes or goes, and only with the "while unbuffed" option
+            if not DB().buffFoodUnfed or InCombatLockdown() then return end
+            local now = IsWellFed()
+            if now ~= fed then fed = now; Refresh() end
+            return
+        end
         if event == "MERCHANT_SHOW" then
             C_Timer.After(0.3, Restock) -- give the vendor list a moment to fill
         elseif event == "PLAYER_REGEN_ENABLED" then
-            if pendingMacros then WriteMacros() end
+            if DB().buffFoodUnfed then fed = IsWellFed(); Refresh() -- Well Fed may have run out mid-fight
+            elseif pendingMacros then WriteMacros() end
         else
             Refresh()
         end
@@ -349,7 +392,10 @@ CUI:RegisterPage("Consumables", function(page)
     c1:SetPoint("TOPLEFT", 4, y); y = y - 26
     local c2 = W.Checkbox(page, "Allow Well Fed (buff) food in the Food macro",
         function() return db.buffFood end, function(on) db.buffFood = on; Refresh() end)
-    c2:SetPoint("TOPLEFT", 4, y); y = y - 34
+    c2:SetPoint("TOPLEFT", 4, y); y = y - 26
+    local c2b = W.Checkbox(page, "Use Well Fed food only while I don't have the Well Fed buff",
+        function() return db.buffFoodUnfed end, function(on) db.buffFoodUnfed = on; Refresh() end)
+    c2b:SetPoint("TOPLEFT", 4, y); y = y - 34
 
     ---------------------------------------------------------------- restock list
     W.Header(page, "Restock list (this character)", width):SetPoint("TOPLEFT", 0, y); y = y - 28

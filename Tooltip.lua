@@ -144,14 +144,15 @@ local function OnUnit(tip)
         end
 
         -- Query guild info and safely add/update the guild line in gold
-        local guildName = GetGuildInfo(unit)
+        local guildName = CysUICompat.Plain(GetGuildInfo(unit))
         if guildName then
             local hasGuildLine = false
             for i = 2, tip:NumLines() do
                 local line = _G["GameTooltipTextLeft" .. i]
                 if line then
-                    local text = line:GetText()
-                    if text and text:find("<") and text:find(">") then
+                    local text = CysUICompat.Plain(line:GetText())
+                    -- Classic Era writes "<Guild>"; WoW Forever writes the bare guild name on its own line
+                    if text and ((text:find("<") and text:find(">")) or text == guildName) then
                         hasGuildLine = true
                         line:SetText("<" .. guildName .. ">")
                         line:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
@@ -288,20 +289,35 @@ function TT.Enable()
     local anchor = CreateFrame("Frame", "CysUITooltipAnchor", UIParent)
     anchor:SetSize(220, 70)
     CUI:RegisterMovable(anchor, "tooltip", "Tooltip", { point = "BOTTOMRIGHT", x = -60, y = 120, scalable = false })
+    local function Place(tooltip, parent)
+        if tooltip ~= GameTooltip then return end
+        local world = (parent == UIParent)
+        if (Cfg(world)) then
+            follow.world = world
+            -- the game ignores an offset on its own mouse anchor, so the tooltip follows the mouse by itself
+            tooltip:SetOwner(parent, "ANCHOR_NONE")
+            follow.on = true
+            follow.tip = tooltip
+            PlaceAtMouse(tooltip)
+        else
+            tooltip:ClearAllPoints()
+            tooltip:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+        end
+    end
     if GameTooltip_SetDefaultAnchor then
-        hooksecurefunc("GameTooltip_SetDefaultAnchor", function(tooltip, parent)
-            if tooltip ~= GameTooltip then return end
-            local world = (parent == UIParent)
-            if (Cfg(world)) then
-                follow.world = world
-                -- the game ignores an offset on its own mouse anchor, so the tooltip follows the mouse by itself
-                tooltip:SetOwner(parent, "ANCHOR_NONE")
-                follow.on = true
-                follow.tip = tooltip
-                PlaceAtMouse(tooltip)
+        hooksecurefunc("GameTooltip_SetDefaultAnchor", Place)
+    end
+    -- WoW Forever: mousing over something in the world can skip the default anchor and drop the tooltip at
+    -- Blizzard's own spot (its "nameplate" placement). Put it back where Cys's UI keeps it.
+    if GameTooltip.SetObjectTooltipPosition then
+        pcall(hooksecurefunc, GameTooltip, "SetObjectTooltipPosition", function(self)
+            -- only moved, never re-owned (re-owning would wipe what the tooltip already shows)
+            if (Cfg(true)) then
+                follow.world, follow.on, follow.tip = true, true, self
+                PlaceAtMouse(self)
             else
-                tooltip:ClearAllPoints()
-                tooltip:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+                self:ClearAllPoints()
+                self:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
             end
         end)
     end

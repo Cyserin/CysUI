@@ -694,7 +694,7 @@ local function SkinForeverStatTabs()
         for _, t in ipairs(tabs) do
             if t.cysBox then
                 local okC, on = pcall(t.GetChecked, t)
-                W.SetBorder(t.cysBox.edges, (okC and on) and T.glow or T.line)
+                W.SetBorder(t.cysBox.edges, (okC and on) and T.glow or T.border)
             end
         end
     end
@@ -712,7 +712,7 @@ local function SkinForeverStatTabs()
             box:SetPoint("BOTTOMRIGHT", icon or t, "BOTTOMRIGHT", 2, -2)
             box:SetFrameLevel(max(t:GetFrameLevel() - 1, 0))
             W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
-            box.edges = W.Border(box, 1, T.line, "BORDER")
+            box.edges = W.Border(box, 1, T.border, "BORDER")
             t.cysBox = box
             if t.SetChecked then hooksecurefunc(t, "SetChecked", PaintAll) end
             t:HookScript("OnClick", PaintAll)
@@ -3372,6 +3372,9 @@ end
 
 -- Blizzard's bank window (Cys's Bags' own bank replaces it when that module is on)
 local function SkinBank()
+    -- WoW Forever has the rebuilt retail bank: this skin was made for the Classic one, and touching the new bank
+    -- taints it (its first-tab purchase then gets blocked when it opens). Left to Blizzard there for now.
+    if CysUICompat and CysUICompat.isForever then return end
     local f = Get("BankFrame")
     if not f then return end
     Strip(f)

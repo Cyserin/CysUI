@@ -17,6 +17,7 @@ CUI.PlayerAuras = PlayerAuras
 local DEFAULTS = {
     enabled = true, iconSize = 28, spacing = 6, numBuffs = 16, numDebuffs = 8, perRow = 8,
     rightClickCancel = true, showTimers = true, timerBelow = false,
+    sortMode = "time", -- "time": no-timer buffs at the far right, then longest to shortest; "blizzard": order gained
 }
 
 local function DB()
@@ -145,7 +146,15 @@ local function GetSortedAuras(auraType)
         end
     end
 
-    -- no-expiry buffs first, then the longest remaining down to the shortest
+    -- no-expiry buffs first, then the longest remaining down to the shortest (Blizzard order: as gained,
+    -- weapon enchants first)
+    if DB().sortMode == "blizzard" then
+        table.sort(t, function(a, b)
+            if (a.isWeaponEnchant ~= nil) ~= (b.isWeaponEnchant ~= nil) then return a.isWeaponEnchant ~= nil end
+            return (a.auraIndex or 0) < (b.auraIndex or 0)
+        end)
+        return t
+    end
     table.sort(t, function(a, b)
         if (a.expirationTime == 0) ~= (b.expirationTime == 0) then return a.expirationTime == 0 end
         return a.expirationTime > b.expirationTime
@@ -204,9 +213,64 @@ local function Fill(list, holder, auras, limit, isDebuff)
     for i = shown + 1, #list do list[i]:Hide() end
 end
 
+-- WoW Forever: the game draws the player's buffs and debuffs into our icons (aura containers), so they stay
+-- current in combat, right-click cancel works through the game's own cancel, and weapon imbues show as icons.
+-- Rebuilt when size, spacing, timers or counts change.
+local buffBox, debuffBox
+local function KillBox(box)
+    if not box then return end
+    pcall(box.SetEnabled, box, false)
+    box:Hide()
+end
+local function BuildForeverBoxes()
+    if not (IS_FOREVER and CysUICompat.HasAuraContainers and CysUICompat.HasAuraContainers()) then return false end
+    if InCombatLockdown() then return buffBox ~= nil end
+    local db = DB()
+    KillBox(buffBox); KillBox(debuffBox)
+    buffBox, debuffBox = nil, nil
+    if not db.enabled then return true end
+    local size, spacing, perRow = db.iconSize, db.spacing, db.perRow or 8
+    local common = {
+        anchor = "TOPRIGHT", growH = "LEFT", growV = "DOWN", size = size, gap = spacing, lineGap = spacing + 4,
+        lineWidth = perRow * (size + spacing) - spacing, noSwipe = true,
+        timerText = db.showTimers and (db.timerBelow and "below" or "center") or nil,
+    }
+    local function Spec(holder, extra)
+        local t = {}
+        for k, v in pairs(common) do t[k] = v end
+        for k, v in pairs(extra) do t[k] = v end
+        t.point = { "TOPRIGHT", holder, "TOPRIGHT", 0, 0 }
+        return t
+    end
+    -- the row fills from the right, so the first in order sits at the far right
+    local byTime = db.sortMode ~= "blizzard" and AuraContainerSortMethod ~= nil
+    local sortMethod = byTime and AuraContainerSortMethod.ExpirationOnly
+        or (AuraContainerSortMethod and AuraContainerSortMethod.AuraInstanceIDOnly)
+    local sortDirection = byTime and AuraContainerSortDirection and AuraContainerSortDirection.Reverse or nil
+    buffBox = CysUICompat.AuraContainer(buffHolder, "player", Spec(buffHolder, {
+        cancel = db.rightClickCancel and "RightButtonUp" or nil, enchants = true, edgeColor = T.border,
+        groups = { { key = "buffs", filter = "HELPFUL", max = db.numBuffs or 16,
+                     sortMethod = sortMethod, sortDirection = sortDirection } },
+    }))
+    debuffBox = CysUICompat.AuraContainer(debuffHolder, "player", Spec(debuffHolder, {
+        edgeColor = { 0.8, 0.2, 0.2 },
+        groups = { { key = "debuffs", filter = "HARMFUL", max = db.numDebuffs or 8,
+                     sortMethod = sortMethod, sortDirection = sortDirection } },
+    }))
+    return buffBox ~= nil
+end
+PlayerAuras.BuildForeverBoxes = BuildForeverBoxes
+
 local function UpdateAuras()
     local db = DB()
     if not buffHolder or not debuffHolder then return end
+    if buffBox then
+        -- the game keeps these current on its own; our old icons stay hidden
+        for _, f in ipairs(activeBuffIcons) do if not InCombatLockdown() or not f.cysSecure then f:Hide() end end
+        for _, f in ipairs(activeDebuffIcons) do f:Hide() end
+        if not InCombatLockdown() then buffHolder:SetShown(db.enabled); debuffHolder:SetShown(db.enabled) end
+        return
+    end
     -- WoW Forever: the buff icons are secure there, so nothing may be shown, hidden or moved in combat
     -- (auras are locked in combat anyway); PLAYER_REGEN_ENABLED brings it up to date afterwards
     if IS_FOREVER and InCombatLockdown() then return end
@@ -290,6 +354,7 @@ function PlayerAuras.Enable()
         end
         for _, f in ipairs(activeBuffIcons) do PlaceTimer(f) end
         for _, f in ipairs(activeDebuffIcons) do PlaceTimer(f) end
+        BuildForeverBoxes()
         UpdateAuras()
     end
 
@@ -353,6 +418,17 @@ CUI:RegisterPage("PlayerAuras", function(page)
         c:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
+
+    local sortBtn = W.Dropdown(page, 230, { { "time", "time left" }, { "blizzard", "Blizzard order" } },
+        function() return db.sortMode or "time" end,
+        function(v) db.sortMode = v; Apply() end, "Order: ")
+    sortBtn:SetPoint("TOPLEFT", 4, y - 4)
+    local sortNote = W.Text(page, 11, T.desc)
+    sortNote:SetPoint("TOPLEFT", 4, y - 32)
+    sortNote:SetWidth(width - 8)
+    sortNote:SetJustifyH("LEFT")
+    sortNote:SetText("Time left: buffs with no timer and weapon imbues at the far right, then longest to shortest. Blizzard order: as you gained them.")
+    y = y - 70
 
     W.Header(page, "Size", width):SetPoint("TOPLEFT", 0, y - 8)
     y = y - 38

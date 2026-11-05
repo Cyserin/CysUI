@@ -1,67 +1,74 @@
 --------------------------------------------------------------------------------
--- Window stacking: Cys's UI windows join Blizzard's own window layout, so they open side by side with the
--- character window, spellbook, quest log, map and the rest instead of piling on top of each other. Blizzard
--- decides like it does for its own windows: a window opens in the next free spot, pushes others over, or
--- closes the one in its spot when there is no room.
+-- Window stacking: Cys's UI windows open beside Blizzard's own windows (character, spellbook, quest log, map,
+-- bank...) instead of on top of them, and beside each other.
 --
--- How: each window gets Blizzard's "UIPanelLayout" attributes (area, pushable) on itself and is opened
--- with ShowUIPanel. Only our own frames are touched; no Blizzard table or function is changed.
--- In combat Blizzard won't move windows, so a window opened then just shows where it last was.
+-- How: Blizzard's windows are only LOOKED at (GetUIPanel tells which are open, GetRight where they end); ours are
+-- then placed to the right of them, in the order they were opened. Nothing is handed to Blizzard's own window
+-- manager: doing that leaves addon "taint" inside it, and then Blizzard's protected actions that run when its own
+-- windows open (like the bank buying its free first tab) get blocked.
+-- Our windows are plain frames, so they can be placed in combat too.
 -- Switch: /cui > General > "Open windows side by side like Blizzard's" (reload to apply).
 --------------------------------------------------------------------------------
 local CUI = CysUI
 
 local SLOTS = { "left", "center", "right", "doublewide", "fullscreen" }
-local managed = {}
+local LEFT_OFFSET, TOP_OFFSET, GAP = 16, -104, 8
+local managed, order = {}, {}
 
 local function Enabled()
     return not (CysUIDB and CysUIDB.stackWindows == false)
 end
 
-local function Available()
-    return ShowUIPanel and HideUIPanel and GetUIPanel and true or false
-end
-
--- which of Blizzard's window spots this frame sits in, if any
-local function SlotOf(frame)
+-- right edge (in UIParent units) of the Blizzard windows that are open right now, or nil
+local function BlizzardRightEdge()
     if not GetUIPanel then return nil end
+    local edge
+    local uiScale = UIParent:GetEffectiveScale() or 1
     for _, key in ipairs(SLOTS) do
         local ok, f = pcall(GetUIPanel, key)
-        if ok and f == frame then return key end
+        if ok and f and not managed[f] and f.IsShown and f:IsShown() then
+            local okR, r = pcall(f.GetRight, f)
+            if okR and type(r) == "number" then
+                r = r * (f:GetEffectiveScale() or 1) / uiScale
+                if not edge or r > edge then edge = r end
+            end
+        end
     end
-    return nil
+    return edge
 end
 
--- A window closed with a plain Hide() (an X button, or code that hides it) still holds its spot in Blizzard's
--- layout. WoW Forever cleans that up on its own; Classic Era doesn't, so give the spot back the way Blizzard
--- expects: show it for an instant (invisible) and close it through HideUIPanel. Done a moment later, never
--- while Blizzard's own layout code is still running, and never in combat.
-local function FreeSpot(frame)
-    if CysUICompat and CysUICompat.isForever then return end
-    if InCombatLockdown() or frame:IsShown() or not SlotOf(frame) then return end
-    local alpha = frame:GetAlpha()
-    frame:SetAlpha(0)
-    frame:Show()
-    pcall(HideUIPanel, frame)
-    if frame:IsShown() then frame:Hide() end
-    frame:SetAlpha(alpha)
+local arranging = false
+local function Arrange()
+    if arranging or not Enabled() then return end
+    arranging = true
+    local x = (BlizzardRightEdge() or 0) + (BlizzardRightEdge() and GAP or LEFT_OFFSET)
+    for _, f in ipairs(order) do
+        if f:IsShown() and not (f.IsProtected and f:IsProtected() and InCombatLockdown()) then
+            local scale = (f:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
+            f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x / scale, TOP_OFFSET / scale)
+            x = x + (f:GetWidth() or 0) * scale + GAP
+        end
+    end
+    arranging = false
 end
 
--- Register one of our windows. area: "left", "center" or "right". pushable: like Blizzard's (0 = stays put).
+local function Later()
+    if C_Timer and C_Timer.After then C_Timer.After(0, Arrange) else Arrange() end
+end
+
+-- Register one of our windows. (area / pushable are kept for older callers; they no longer change anything)
 function CUI:ManageWindow(frame, area, pushable, extra)
-    if not (frame and frame.GetName and frame:GetName() and frame.SetAttribute) then return end
-    if managed[frame] or not Enabled() or not Available() then return end
+    if not frame or managed[frame] or not Enabled() then return end
     managed[frame] = true
-    frame:SetAttribute("UIPanelLayout-defined", true)
-    frame:SetAttribute("UIPanelLayout-enabled", true)
-    frame:SetAttribute("UIPanelLayout-area", area or "left")
-    frame:SetAttribute("UIPanelLayout-pushable", pushable or 0)
-    frame:SetAttribute("UIPanelLayout-whileDead", true)
-    if extra then
-        for k, v in pairs(extra) do frame:SetAttribute("UIPanelLayout-" .. k, v) end
-    end
+    frame:HookScript("OnShow", function(self)
+        for i = #order, 1, -1 do if order[i] == self then table.remove(order, i) end end
+        order[#order + 1] = self -- newest opens furthest right
+        Later()
+    end)
     frame:HookScript("OnHide", function(self)
-        if C_Timer and C_Timer.After then C_Timer.After(0, function() FreeSpot(self) end) end
+        for i = #order, 1, -1 do if order[i] == self then table.remove(order, i) end end
+        Later()
     end)
 end
 
@@ -69,36 +76,22 @@ function CUI:IsManagedWindow(frame)
     return managed[frame] == true
 end
 
--- Open / close / toggle one of our windows. Falls back to a plain Show/Hide when the window isn't managed,
--- in combat, or when Blizzard refuses to place it (the shop is open, and so on).
 function CUI:ShowWindow(frame)
-    if not frame or frame:IsShown() then return end
-    if managed[frame] and not InCombatLockdown() then
-        pcall(ShowUIPanel, frame)
-        if frame:IsShown() then return end
-    end
-    frame:Show()
+    if frame and not frame:IsShown() then frame:Show() end
 end
 
 function CUI:HideWindow(frame)
-    if not frame or not frame:IsShown() then return end
-    if managed[frame] and not InCombatLockdown() and SlotOf(frame) then
-        pcall(HideUIPanel, frame)
-        if not frame:IsShown() then return end
-    end
-    frame:Hide()
+    if frame and frame:IsShown() then frame:Hide() end
 end
 
 function CUI:ToggleWindow(frame)
     if not frame then return end
-    if frame:IsShown() then self:HideWindow(frame) else self:ShowWindow(frame) end
+    if frame:IsShown() then frame:Hide() else frame:Show() end
 end
 
--- after combat: hand back the spots of windows that were closed during the fight
-do
-    local ev = CreateFrame("Frame")
-    ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-    ev:SetScript("OnEvent", function()
-        for frame in pairs(managed) do FreeSpot(frame) end
-    end)
+-- Blizzard's windows opening or closing move ours along (post-hooks only: nothing of Blizzard's is changed)
+if hooksecurefunc then
+    if ShowUIPanel then hooksecurefunc("ShowUIPanel", Later) end
+    if HideUIPanel then hooksecurefunc("HideUIPanel", Later) end
+    if UpdateUIPanelPositions then hooksecurefunc("UpdateUIPanelPositions", Later) end
 end

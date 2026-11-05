@@ -276,9 +276,32 @@ local function SortEntries(a, b)
     return a.slot < b.slot
 end
 
+-- Search matches the item's name, its type ("trade goods", "herb", "cloth"...), a profession name
+-- ("herbalism" finds herbs, "mining" ore and stone...), and whatever the game's own bag search matches.
+local PROFESSION_WORDS = {
+    herbalism = { "herb" }, alchemy = { "herb", "potion", "elixir", "flask" }, mining = { "metal", "stone" },
+    blacksmithing = { "metal", "stone" }, engineering = { "parts", "devices", "explosives", "metal" },
+    skinning = { "leather" }, leatherworking = { "leather" }, tailoring = { "cloth" }, ["first aid"] = { "cloth", "bandage" },
+    enchanting = { "enchanting" }, cooking = { "meat", "cooking" }, fishing = { "fish" },
+}
 local function MatchesSearch(e, search)
     if search == "" then return true end
-    return e.nameLower:find(search, 1, true) ~= nil
+    if e.nameLower:find(search, 1, true) then return true end
+    local tl = e.typeLower
+    if tl and tl:find(search, 1, true) then return true end
+    if tl and #search >= 3 then
+        for prof, words in pairs(PROFESSION_WORDS) do
+            if prof:sub(1, #search) == search then
+                for _, w in ipairs(words) do if tl:find(w, 1, true) then return true end end
+            end
+        end
+    end
+    -- the game's own bag search (knows more: tooltip words, sets, item kinds)
+    if C_Container and C_Container.SetItemSearch and C_Container.GetContainerItemInfo and e.bag and e.slot then
+        local ok, info = pcall(C_Container.GetContainerItemInfo, e.bag, e.slot)
+        if ok and type(info) == "table" and info.isFiltered == false and CysBags.engineSearch then return true end
+    end
+    return false
 end
 
 local function IsHighlighted(e)
@@ -304,6 +327,27 @@ local function BuildSetLookup()
     wipe(setLookup)
     wipe(setItemMap)
     wipe(dynamicSetTitles)
+
+    -- Blizzard's own Equipment Manager (WoW Forever has one built in; Cys's Armory is Era only there)
+    if C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs then
+        local okIDs, ids = pcall(C_EquipmentSet.GetEquipmentSetIDs)
+        for _, setID in ipairs(okIDs and ids or {}) do
+            local okInfo, setName = pcall(C_EquipmentSet.GetEquipmentSetInfo, setID)
+            local okItems, items = pcall(C_EquipmentSet.GetItemIDs, setID)
+            if okInfo and setName and okItems and type(items) == "table" then
+                local setKey = "SET_" .. setName
+                dynamicSetTitles[setKey] = "Set: " .. setName
+                VALID_CATEGORY[setKey] = true
+                CATEGORY_TITLE[setKey] = "Set: " .. setName
+                for _, id in pairs(items) do
+                    if type(id) == "number" and id > 0 then
+                        setLookup[id] = true
+                        setItemMap[id] = setItemMap[id] or setKey
+                    end
+                end
+            end
+        end
+    end
 
     local db = _G.CysArmoryDB
     if type(db) ~= "table" then return end
@@ -521,6 +565,8 @@ function CysBags:Collect()
                     e.icon, e.count, e.locked = icon, count or 1, locked
                     e.quality = quality or select(3, GetItemInfo(link)) or 1
                     e.name, e.nameLower = GetItemName(link)
+                    local _, itype, isub = GetItemInfoInstant(itemID)
+                    e.typeLower = lower((itype or "") .. " " .. (isub or ""))
                     e.isQuest = IsQuestSlot(bag, slot)
                     slotEntries[bag] = slotEntries[bag] or {}
                     slotEntries[bag][slot] = e
@@ -789,6 +835,11 @@ end
 
 function CysBags:SetSearch(text)
     self.search = lower(strtrim(text or ""))
+    -- also ask the game's bag search; its answer arrives with INVENTORY_SEARCH_UPDATE
+    if C_Container and C_Container.SetItemSearch then
+        self.engineSearch = false -- trusted again once the game says its results are ready
+        pcall(C_Container.SetItemSearch, self.search)
+    end
     self:ApplySearch()
 end
 
@@ -1070,7 +1121,7 @@ local GUIDE_LINES = {
     "All your bags in one window, split into sections with a filter sidebar. Inside each section items are ordered by quality, then name.",
     "",
     GOLD .. "Armory Sets|r",
-    "Items saved in Cys's Armory sets are grouped into the Armory Sets section at the top.",
+    "Items saved in Cys's Armory sets (or in Blizzard's Equipment Manager on WoW Forever) are grouped into the Armory Sets section at the top.",
     "",
     GOLD .. "Moving items between categories|r",
     "Pick an item up and drop it on a category in the sidebar to move it there for good. Drop it on All Items to go back to automatic sorting.",
@@ -1429,8 +1480,21 @@ function CysBags:CreateFrames()
         s.placeholder:SetShown(s:GetText() == "")
         SetBorderColor(sbBorder, C.border[1], C.border[2], C.border[3])
     end)
+    -- X to clear the search
+    local clear = CreateFrame("Button", nil, sb)
+    clear:SetSize(16, 16)
+    clear:SetPoint("RIGHT", -4, 0)
+    clear.text = CreateText(clear, 12, C.dim)
+    clear.text:SetPoint("CENTER", 0, 1)
+    clear.text:SetText("x")
+    clear:SetScript("OnEnter", function(s) s.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3]) end)
+    clear:SetScript("OnLeave", function(s) s.text:SetTextColor(C.dim[1], C.dim[2], C.dim[3]) end)
+    clear:SetScript("OnClick", function() sb:SetText(""); sb:ClearFocus() end)
+    clear:Hide()
+    sb:SetTextInsets(8, 22, 0, 0)
     sb:SetScript("OnTextChanged", function(s)
         s.placeholder:SetShown(s:GetText() == "" and not s:HasFocus())
+        clear:SetShown(s:GetText() ~= "")
         CysBags:SetSearch(s:GetText())
     end)
     self.searchBox = sb
@@ -1644,6 +1708,59 @@ local function InstallBagHooks()
     if hooksInstalled then return end
     hooksInstalled = true
 
+    if IS_FOREVER and hooksecurefunc then
+        -- WoW Forever: Blizzard's bag functions are never replaced. Replacing them left addon "taint" in the
+        -- path Blizzard's bank runs when it opens (OpenAllBags), and the bank's protected first-tab purchase
+        -- got blocked. Instead Blizzard's own bag windows are tucked into a hidden frame, its functions run as
+        -- normal, and ours follows whether Blizzard thinks the bags are open.
+        local hidden = CreateFrame("Frame")
+        hidden:Hide()
+        local function Tuck(f) if f and f.SetParent then pcall(f.SetParent, f, hidden) end end
+        Tuck(_G.ContainerFrameCombinedBags)
+        for i = 1, (NUM_CONTAINER_FRAMES or 13) do Tuck(_G["ContainerFrame" .. i]) end
+
+        local function BlizzardOpen()
+            for id = FIRST_BAG, LAST_BAG do
+                local ok, open = pcall(IsBagOpen, id)
+                if ok and open then return true end
+            end
+            local cb = _G.ContainerFrameCombinedBags
+            return cb and cb.IsShown and cb:IsShown() or false
+        end
+        -- A toggle (the bag key) flips ours, whatever Blizzard's hidden bags think; an open or close (bank,
+        -- mailbox, vendor, Escape...) makes ours match Blizzard's. Calls in the same frame are handled once,
+        -- because Blizzard's toggle runs its own open and close calls inside.
+        local pending, toggled = false, false
+        local function Sync()
+            pending = false
+            if toggled then
+                toggled = false
+                CysBags:Toggle()
+            elseif BlizzardOpen() then
+                CysBags:Open()
+            else
+                CysBags:Close()
+            end
+        end
+        local function Later()
+            if pending then return end
+            pending = true
+            C_Timer.After(0, Sync)
+        end
+        for _, name in ipairs({ "OpenBackpack", "CloseBackpack", "OpenAllBags", "CloseAllBags", "OpenBag", "CloseBag" }) do
+            if _G[name] then hooksecurefunc(name, Later) end
+        end
+        local function Toggled(id)
+            if id ~= nil and not (type(id) == "number" and id >= FIRST_BAG and id <= LAST_BAG) then return end
+            toggled = true
+            Later()
+        end
+        for _, name in ipairs({ "ToggleBackpack", "ToggleAllBags", "ToggleBag" }) do
+            if _G[name] then hooksecurefunc(name, Toggled) end
+        end
+        return
+    end
+
     local origToggleBag, origOpenBag, origCloseBag = ToggleBag, OpenBag, CloseBag
     local function Ours(id) return type(id) == "number" and id >= FIRST_BAG and id <= LAST_BAG end
 
@@ -1704,6 +1821,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
         events:RegisterEvent("PLAYER_MONEY")
         events:RegisterEvent("ITEM_LOCK_CHANGED")
         events:RegisterEvent("UNIT_INVENTORY_CHANGED")
+        pcall(events.RegisterEvent, events, "EQUIPMENT_SETS_CHANGED") -- Blizzard's Equipment Manager sets
+        pcall(events.RegisterEvent, events, "INVENTORY_SEARCH_UPDATE") -- the game's bag search answered
 
     elseif event == "PLAYER_LOGIN" then
         InstallBagHooks()
@@ -1726,6 +1845,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
 
     elseif event == "UNIT_INVENTORY_CHANGED" then
         if arg1 == "player" then CysBags.dirty = true end
+
+    elseif event == "EQUIPMENT_SETS_CHANGED" then
+        CysBags.dirty = true
+
+    elseif event == "INVENTORY_SEARCH_UPDATE" then
+        CysBags.engineSearch = (CysBags.search or "") ~= ""
+        if frame and frame:IsShown() then CysBags:ApplySearch() end
 
     elseif event == "PLAYER_MONEY" then
         if frame and frame:IsShown() then CysBags:UpdateFooter() end

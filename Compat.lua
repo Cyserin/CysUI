@@ -276,14 +276,22 @@ function Compat.SecureReload(btn, owner)
             sec:HookScript("OnEnter", function() local f = btn:GetScript("OnEnter"); if f then f(btn) end end)
             sec:HookScript("OnLeave", function() local f = btn:GetScript("OnLeave"); if f then f(btn) end end)
         end
-        sec:ClearAllPoints()
-        sec:SetAllPoints(btn)
+        -- placed by screen position, never anchored to the button: anchoring a secure frame to the settings window
+        -- would make the whole window protected, and then it couldn't be opened or closed in combat
+        local l, b, w, h = btn:GetRect()
+        if l and w then
+            local ratio = (btn:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
+            sec:ClearAllPoints()
+            sec:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * ratio, b * ratio)
+            sec:SetSize(w * ratio, h * ratio)
+        end
         sec:SetFrameStrata("FULLSCREEN_DIALOG") -- always above the settings window, whatever raises it
         sec:SetShown(owner:IsShown() and btn:IsVisible())
     end
     Compat.reloadSync, Compat.reloadOwner = Sync, owner
     owner:HookScript("OnShow", Sync)
     owner:HookScript("OnHide", Sync)
+    if owner.HookScript then pcall(owner.HookScript, owner, "OnDragStop", Sync) end -- the window was moved
     -- the mouse reaching the plain button puts the secure one back over it (out of combat), so the click lands there
     btn:HookScript("OnEnter", Sync)
     local ev = CreateFrame("Frame")
@@ -392,7 +400,7 @@ function Compat.LockedUnitText(fs, unit, kind, mode)
         if mode == "percent" then
             if pct == nil then error("no percent") end
             fs:SetFormattedText("%.0f%%", pct)
-        elseif mode == "both" and kind == "health" then
+        elseif (mode == "both" and kind == "health") or mode == "valuepct" then
             if pct == nil then fs:SetText(Abbrev(cur)) else fs:SetFormattedText("%s  |cFFFFD100%.0f%%|r", Abbrev(cur), pct) end
         elseif mode == "both" or mode == "max" then
             local mx = (kind == "health") and UnitHealthMax(unit) or UnitPowerMax(unit)
@@ -650,6 +658,28 @@ local function AuraCellInit(spec)
         local count = top:CreateFontString(nil, "OVERLAY")
         count:SetFont(STANDARD_TEXT_FONT, math.max(8, math.floor(size * 0.45)), "OUTLINE")
         count:SetPoint("BOTTOMRIGHT", 1, 0)
+        -- optional fixed-colour 1px edge (player buffs use the theme border), drawn under the debuff-type tint
+        if spec.edgeColor then
+            local c = spec.edgeColor
+            for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 },
+                                 { "TOPLEFT", "BOTTOMLEFT", 1, nil }, { "TOPRIGHT", "BOTTOMRIGHT", 1, nil } }) do
+                local t = top:CreateTexture(nil, "BORDER")
+                t:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
+                t:SetPoint(e[1], button, e[1]); t:SetPoint(e[2], button, e[2])
+                if e[3] then t:SetWidth(e[3]) else t:SetHeight(e[4]) end
+            end
+        end
+        -- time left as text, drawn by the game (works while locked): on the icon or under it
+        local timerText
+        if spec.timerText then
+            timerText = top:CreateFontString(nil, "OVERLAY")
+            timerText:SetFont(STANDARD_TEXT_FONT, math.max(8, math.floor(size * 0.4)), "OUTLINE")
+            if spec.timerText == "below" then
+                timerText:SetPoint("TOP", button, "BOTTOM", 0, -1)
+            else
+                timerText:SetPoint("CENTER", button, "CENTER", 0, 0)
+            end
+        end
         -- debuff-type tint on a thin 1px edge (the game's own border art is bigger than the icon and spills out)
         local edges = {}
         for _, e in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 },
@@ -671,7 +701,16 @@ local function AuraCellInit(spec)
             return ok
         end
         Try("icon", button.SetIcon, icon)
-        Try("timer", button.SetDurationCooldown, cd)
+        if spec.noSwipe then
+            cd:Hide()
+        else
+            Try("timer", button.SetDurationCooldown, cd)
+            if timerText and cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(true) end
+        end
+        if timerText and button.SetDurationText then
+            if not Try("timer text", button.SetDurationText, timerText, {}) then timerText:Hide() end
+        end
+        if spec.cancel and button.SetCancelAuraButtons then Try("cancel", button.SetCancelAuraButtons, spec.cancel) end
         Try("stacks", button.SetApplicationCount, count, {})
         local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
         if styles and styles.PreserveAsset ~= nil and button.AddDispelTypeTexture then
@@ -704,11 +743,25 @@ function Compat.AuraContainer(parent, unit, spec)
     for i, g in ipairs(spec.groups or {}) do
         local okG, err = pcall(c.AddAuraGroup, c, g.key, g.filter, {
             maxFrameCount = g.max or 8,
+            sortMethod = g.sortMethod, sortDirection = g.sortDirection,
             initializeFrame = init,
-            layout = { elementWidth = size, elementHeight = size, elementSpacing = gap, lineSpacing = gap,
-                       groupLineSpacing = gap + 2, forceNewLine = i > 1 },
+            layout = { elementWidth = size, elementHeight = size, elementSpacing = gap, lineSpacing = spec.lineGap or gap,
+                       groupLineSpacing = (spec.lineGap or gap) + 2, forceNewLine = i > 1 },
         })
         if not okG then Compat.errors[#Compat.errors + 1] = "Aura container group " .. g.key .. ": " .. tostring(err) end
+    end
+    -- weapon enchants (imbues, oils, stones) as icons in the same row, before the buffs
+    if spec.enchants and c.AddItemEnchantment and AuraContainerItemEnchantmentSlot then
+        for _, name in ipairs({ "MainHand", "OffHand", "Ranged" }) do
+            local slot = AuraContainerItemEnchantmentSlot[name]
+            if slot ~= nil then
+                pcall(c.AddItemEnchantment, c, slot, { initializeFrame = init, hidePermanent = true })
+            end
+        end
+        if c.SetItemEnchantmentLayout then
+            pcall(c.SetItemEnchantmentLayout, c, { elementWidth = size, elementHeight = size, elementSpacing = gap,
+                lineSpacing = spec.lineGap or gap })
+        end
     end
     -- a new container starts switched off: until SetEnabled(true) it never reads auras or listens for changes
     local okE, errE = pcall(c.SetEnabled, c, true)
