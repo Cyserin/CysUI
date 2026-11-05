@@ -22,7 +22,7 @@ permissions:
   actions: write
 
 env:
-  RELEASE_CHANNEL: alpha
+  RELEASE_CHANNEL: ""
 
 jobs:
   check:
