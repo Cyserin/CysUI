@@ -460,20 +460,28 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.2",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.3",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.3", date = "2026-11-05",
+              improved = {
+                  "Target frame and nameplates: new icon size settings for target buffs and debuffs (bigger by default) and for your debuffs on nameplates.",
+              },
+              fixed = {
+                  "Target frame: buffs and debuffs now really show in combat on Forever, with icons, stacks, timers and debuff-type borders. The game draws them into Cys's UI icons, so they work even while it locks aura details.",
+                  "Nameplates: your debuffs on enemies now show in combat on Forever.",
+              },
+            },
             { version = "0.58.2", date = "2026-11-05",
               added = {
                   "Window stacking: the Cys's UI settings, Friends and Heal Advisor windows open side by side with Blizzard's windows (character, spellbook, quest log, map) and push or close each other like Blizzard's own, instead of opening on top of them. Turn it off under General (reload).",
               },
               improved = {
-                  "Unit Frames and Nameplates: new icon size settings for target buffs and debuffs (bigger by default) and for your debuffs on nameplates.",
                   "Modules page: a new Only show modules that are turned off box at the top, so switched-off modules are easy to find and turn back on.",
                   "Raid Debuffs: turned off on Forever, where the game hides the names of other players' debuffs in combat. It still works on Classic Era.",
               },
               fixed = {
-                  "Target frame: buffs and debuffs show in combat on Forever, with their icons, stacks, timers and debuff-type borders. The game draws them into Cys's UI icons, so they work even while it locks aura details.",
+                  "Target frame: buffs and debuffs stay up in combat on Forever, with their icons, stacks, timers and debuff-type borders.",
                   "Nameplates: your debuffs on enemies show in combat on Forever again.",
                   "Settings: the Reload UI button works on Forever (outside combat).",
                   "Player buffs: on Forever a buff whose details are locked in combat (like Lightning Shield) stays on your buff bar.",

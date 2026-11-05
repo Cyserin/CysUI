@@ -53,6 +53,9 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.
 
+## Added in 0.58.3
+- **Forever target and nameplate auras in combat**, drawn by the game into Cys's UI icons; **icon size settings** for target buffs/debuffs and nameplate debuffs.
+
 ## Added in 0.58.2
 - **Window stacking**: the settings, Friends and Heal Advisor windows open side by side with Blizzard's windows and push or close each other like Blizzard's own (switch under General).
 - **Forever debuffs in combat**: target frame buffs and debuffs and your debuffs on nameplates keep working while the game locks aura details. **Raid Debuffs** is Era only (Forever hides other players' debuff names in combat).
