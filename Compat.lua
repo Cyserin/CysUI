@@ -123,6 +123,25 @@ end
 -- One aura as a table (name, icon, applications, dispelName, duration, expirationTime, spellId, ...), or nil.
 -- On Classic Era this is exactly C_UnitAuras.GetAuraDataByIndex. On WoW Forever it answers nil while auras are
 -- locked and gives back plain copies of the fields, so aura rows just stay empty instead of erroring.
+-- Like AuraData, but tells "no aura at this index" (nil) apart from "an aura whose details are locked"
+-- ({ locked = true, icon = <locked icon> }), so a list keeps going past a locked aura instead of stopping there.
+-- The locked icon can still go on a Texture as it is.
+function Compat.AuraEntry(unit, index, filter)
+    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
+    if not Compat.isForever then return C_UnitAuras.GetAuraDataByIndex(unit, index, filter) end
+    local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, unit, index, filter)
+    if not ok or a == nil then return nil end
+    if Secret(a) then return { locked = true, applications = 0, duration = 0, expirationTime = 0 } end
+    local name = Plain(a.name)
+    if not name then
+        return { locked = true, icon = a.icon, applications = 0, duration = 0, expirationTime = 0 }
+    end
+    return {
+        name = name, icon = Plain(a.icon), applications = Plain(a.applications) or 0, dispelName = Plain(a.dispelName),
+        duration = Plain(a.duration) or 0, expirationTime = Plain(a.expirationTime) or 0, spellId = Plain(a.spellId),
+    }
+end
+
 function Compat.AuraData(unit, index, filter)
     if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
     if not Compat.isForever then return C_UnitAuras.GetAuraDataByIndex(unit, index, filter) end

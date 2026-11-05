@@ -111,20 +111,25 @@ local function GetSortedAuras(auraType)
     local auraIndex = 1
     while true do
         local name, icon, count, dispelName, duration, expirationTime
+        local locked
         if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-            local aura = CysUICompat.AuraData("player", auraIndex, auraType)
+            -- WoW Forever: a buff with locked details is still listed (icon only) and the list goes on past it
+            local aura = CysUICompat.AuraEntry("player", auraIndex, auraType)
             if not aura then break end
+            locked = aura.locked
             name, icon, count, dispelName, duration, expirationTime =
                 aura.name, aura.icon, aura.applications, aura.dispelName, aura.duration, aura.expirationTime
         else
             name, icon, count, dispelName, duration, expirationTime = UnitAura("player", auraIndex, auraType)
             if not name then break end
         end
-        t[#t + 1] = {
-            name = name, icon = icon, applications = count or 0, dispelName = dispelName,
-            expirationTime = expirationTime or 0, duration = duration or 0,
-            auraIndex = auraIndex, auraType = auraType,
-        }
+        if icon ~= nil or not locked then
+            t[#t + 1] = {
+                name = name, icon = icon, applications = count or 0, dispelName = dispelName,
+                expirationTime = expirationTime or 0, duration = duration or 0,
+                auraIndex = auraIndex, auraType = auraType, locked = locked,
+            }
+        end
         auraIndex = auraIndex + 1
     end
 
