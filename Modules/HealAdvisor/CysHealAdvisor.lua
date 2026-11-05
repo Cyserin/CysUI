@@ -872,6 +872,7 @@ local function Build()
     win:SetScript("OnDragStop", win.StopMovingOrSizing)
     win:Hide()
     tinsert(UISpecialFrames, "CysHealAdvisorFrame")
+    CUI:ManageWindow(win, "left", 1) -- opens beside Blizzard's windows instead of on top of them
     W.Texture(win, "BACKGROUND", T.bg):SetAllPoints()
     W.Border(win, 2, T.border, "BORDER")
     local strip = W.Texture(win, "ARTWORK", T.header)
@@ -891,7 +892,7 @@ local function Build()
 
     local close = W.Button(win, 22, 18, "X")
     close:SetPoint("TOPRIGHT", -6, -7)
-    close:SetScript("OnClick", function() win:Hide() end)
+    close:SetScript("OnClick", function() CUI:HideWindow(win) end)
     local again = W.Button(win, 90, 18, "Scan", true)
     again:SetPoint("RIGHT", close, "LEFT", -6, 0)
     again:SetScript("OnClick", function()
@@ -927,9 +928,9 @@ local function Toggle(show)
         return
     end
     Build()
-    if win:IsShown() and not show then win:Hide() return end
+    if win:IsShown() and not show then CUI:HideWindow(win) return end
     Refresh(false)
-    win:Show()
+    CUI:ShowWindow(win)
 end
 
 function CUI.HealAdvisorPreview(class)
@@ -937,7 +938,7 @@ function CUI.HealAdvisorPreview(class)
     MYFAM = FAMILY[class]
     Build()
     Refresh(false)
-    win:Show()
+    CUI:ShowWindow(win)
 end
 
 -- A plain-text report a tester can copy and paste into a GitHub issue (nothing is sent anywhere).

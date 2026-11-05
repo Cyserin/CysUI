@@ -53,6 +53,10 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.
 
+## Added in 0.58.2
+- **Window stacking**: the settings, Friends and Heal Advisor windows open side by side with Blizzard's windows and push or close each other like Blizzard's own (switch under General).
+- **Forever debuffs in combat**: target frame buffs and debuffs and your debuffs on nameplates keep working while the game locks aura details. **Raid Debuffs** is Era only (Forever hides other players' debuff names in combat).
+
 ## Added in 0.58.1
 - **Forever map and quest log** fully skinned; **weapon imbue timer** on the Totem Bar; **Rockbiter counts as tank** for nameplate threat colors.
 - **Upgrade leveling profiles (Forever only)** for every spec, shown only for your class, that switch by level; **Follow my talents** picks the set for your main talent tree. **Expertise** and **Armor Penetration** stats added.

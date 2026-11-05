@@ -162,22 +162,26 @@ CUI:RegisterPage("General", function(page)
     local resetAll = W.Button(page, 140, 22, "Reset all positions")
     resetAll:SetPoint("LEFT", unlock, "RIGHT", 8, 0)
     resetAll:SetScript("OnClick", function() CUI:ResetAllMovers() end)
+    local stack = W.Checkbox(page, "Open windows side by side like Blizzard's (reload)",
+        function() return CysUIDB.stackWindows ~= false end,
+        function(v) CysUIDB.stackWindows = v and true or false end)
+    stack:SetPoint("TOPLEFT", 4, -170)
 
     local memHeader = W.Header(page, "Memory use", CONTENT_W)
-    memHeader:SetPoint("TOPLEFT", 0, -184)
+    memHeader:SetPoint("TOPLEFT", 0, -212)
     page.memStatus = W.Text(page, 16, T.text)
-    page.memStatus:SetPoint("TOPLEFT", 4, -210)
+    page.memStatus:SetPoint("TOPLEFT", 4, -238)
     local legend = W.Text(page, 10, T.desc)
-    legend:SetPoint("TOPLEFT", 4, -234)
+    legend:SetPoint("TOPLEFT", 4, -262)
     legend:SetWidth(CONTENT_W - 12)
     legend:SetJustifyV("TOP")
     legend:SetSpacing(2)
     legend:SetText(format("|cFF59D959Green|r under %d MB   |cFFFFD100Yellow|r %d-%d MB   |cFFFF4D4DRed|r over %d MB\nAddon memory only; other addons are not counted.", MEM_YELLOW, MEM_YELLOW, MEM_RED, MEM_RED))
     page.memNames = W.Text(page, 11, T.text)
-    page.memNames:SetPoint("TOPLEFT", 4, -270)
+    page.memNames:SetPoint("TOPLEFT", 4, -298)
     page.memNames:SetSpacing(3)
     page.memValues = W.Text(page, 11, T.accent, "RIGHT")
-    page.memValues:SetPoint("TOPLEFT", 160, -270)
+    page.memValues:SetPoint("TOPLEFT", 160, -298)
     page.memValues:SetWidth(90)
     page.memValues:SetSpacing(3)
 
@@ -231,7 +235,7 @@ CUI:RegisterPage("General", function(page)
         function(v) CysUIDB.update = CysUIDB.update or {}; CysUIDB.update.enabled = v and true or false end)
     upd:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -14)
 
-    page.contentHeight = 800
+    page.contentHeight = 830
     RefreshMemory(page)
 end, RefreshMemory)
 
@@ -284,6 +288,24 @@ CUI:RegisterPage("Modules", function(page)
     intro:SetPoint("TOPLEFT", 0, -4)
     intro:SetWidth(CONTENT_W)
     intro:SetText("Untick a module to switch it off - the game's own version takes over again after a reload. Switches are saved for this character only.")
+
+    -- "only the modules that are off" filter. The list is worked out when you tick it (or reopen the page),
+    -- so a module you switch back on stays in view instead of jumping away under the mouse.
+    local onlyOff, offAtFilter = false, {}
+    local Relayout
+    local filter = W.Checkbox(page, "Only show modules that are turned off",
+        function() return onlyOff end,
+        function(v)
+            onlyOff = v and true or false
+            wipe(offAtFilter)
+            for _, row in ipairs(page.rows) do
+                if not CUI:IsModuleEnabled(row.def.key) then offAtFilter[row.def.key] = true end
+            end
+            if Relayout then Relayout() end
+        end)
+    local allOn = W.Text(page, 11, T.text)
+    allOn:SetText("Every module is on.")
+    allOn:Hide()
 
     page.rows = {}
     local stack = {} -- headers and cards in display order (placed by Relayout below)
@@ -355,10 +377,35 @@ CUI:RegisterPage("Modules", function(page)
     -- Stack headers and cards top to bottom. Each card grows with its description so long
     -- text never runs into the next one. Text can only be measured once it is on screen,
     -- so this runs again every time the page is shown.
-    local function Relayout()
-        local y = -(math.ceil(intro:GetStringHeight() or 12) + 12)
-        for _, it in ipairs(stack) do
+    Relayout = function()
+        local y = -(math.ceil(intro:GetStringHeight() or 12) + 8)
+        filter:ClearAllPoints()
+        filter:SetPoint("TOPLEFT", 4, y)
+        y = y - 28
+        -- which cards show, and which headers still have a card under them
+        local visible, any = {}, false
+        local currentHeader
+        for i, it in ipairs(stack) do
             if it.header then
+                currentHeader = i
+            else
+                local show = not onlyOff or offAtFilter[it.row.def.key] == true
+                visible[i] = show
+                if show then
+                    any = true
+                    if currentHeader then visible[currentHeader] = true end
+                end
+            end
+        end
+        allOn:ClearAllPoints()
+        allOn:SetPoint("TOPLEFT", 4, y - 4)
+        allOn:SetShown(onlyOff and not any)
+        if onlyOff and not any then y = y - 24 end
+        for i, it in ipairs(stack) do
+            if not visible[i] then
+                if it.header then it.header:Hide(); it.line:Hide() else it.row:Hide() end
+            elseif it.header then
+                it.header:Show(); it.line:Show()
                 it.header:ClearAllPoints()
                 it.header:SetPoint("TOPLEFT", 2, y - 8)
                 it.line:ClearAllPoints()
@@ -366,6 +413,7 @@ CUI:RegisterPage("Modules", function(page)
                 y = y - 32
             else
                 local row = it.row
+                row:Show()
                 local h = math.max(62, 28 + math.ceil(row.desc:GetStringHeight() or 0) + 10)
                 row:SetHeight(h)
                 row:ClearAllPoints()
@@ -380,6 +428,13 @@ CUI:RegisterPage("Modules", function(page)
     end
     Relayout()
     page:HookScript("OnShow", function()
+        if onlyOff then
+            -- reopening the page: modules switched back on since last time drop out of the list
+            wipe(offAtFilter)
+            for _, row in ipairs(page.rows) do
+                if not CUI:IsModuleEnabled(row.def.key) then offAtFilter[row.def.key] = true end
+            end
+        end
         Relayout()
         C_Timer.After(0, Relayout) -- once more after the text has been drawn
     end)
@@ -465,7 +520,7 @@ local function CreateWindow()
     close.text:SetText("X")
     close:SetScript("OnEnter", function(s) s.text:SetTextColor(1, 0.3, 0.3) end)
     close:SetScript("OnLeave", function(s) s.text:SetTextColor(1, 1, 1) end)
-    close:SetScript("OnClick", function() f:Hide() end)
+    close:SetScript("OnClick", function() CUI:HideWindow(f) end)
 
     -- always-visible way into layout mode; the settings come back when you press Done
     local layoutBtn = W.Button(header, 110, 22, "Layout mode")
@@ -495,6 +550,7 @@ local function CreateWindow()
     f.reload = W.Button(footer, 100, 24, "Reload UI")
     f.reload:SetPoint("RIGHT", -10, 0)
     f.reload:SetScript("OnClick", function() CysUICompat.Reload() end)
+    CysUICompat.SecureReload(f.reload, f) -- WoW Forever: the click itself runs /reload
 
     -- sidebar
     local sidebar = CreateFrame("Frame", nil, f)
@@ -887,19 +943,20 @@ local function CreateWindow()
         if f.ticker then f.ticker:Cancel(); f.ticker = nil end
     end)
     tinsert(UISpecialFrames, "CysUIConfigFrame")
+    CUI:ManageWindow(f, "center", 0) -- opens beside Blizzard's windows instead of on top of them
 
     SelectPage(1)
 end
 
 function CUI:ToggleConfig()
     if not window then CreateWindow() end
-    if window:IsShown() then window:Hide() else window:Show() end
+    CUI:ToggleWindow(window)
 end
 
 -- Open straight to a page by title, e.g. CysUI:OpenConfig("Vendor")
 function CUI:OpenConfig(pageTitle)
     if not window then CreateWindow() end
-    window:Show()
+    CUI:ShowWindow(window)
     for i, page in ipairs(CUI.pages) do
         if page.title == pageTitle then SelectPage(i) return end
     end

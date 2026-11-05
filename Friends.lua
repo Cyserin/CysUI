@@ -880,7 +880,7 @@ local function Build()
     x:SetText("X")
     close:SetScript("OnEnter", function() x:SetTextColor(1, 0.3, 0.3) end)
     close:SetScript("OnLeave", function() x:SetTextColor(T.text[1], T.text[2], T.text[3]) end)
-    close:SetScript("OnClick", function() f:Hide() end)
+    close:SetScript("OnClick", function() CUI:HideWindow(f) end)
 
     tabFriends = W.Button(f, 58, 22, "Friends")
     tabFriends:SetPoint("TOPLEFT", 10, -32)
@@ -1028,6 +1028,7 @@ local function Build()
         if C_FriendList and C_FriendList.SetWhoToUi and not (FriendsFrame and FriendsFrame:IsShown()) then C_FriendList.SetWhoToUi(false) end
     end)
     tinsert(UISpecialFrames, "CysFriendsFrame")
+    CUI:ManageWindow(f, "left", 0) -- the same spot as Blizzard's Friends window
 
     SetMode("friends")
     Layout()
@@ -1048,7 +1049,7 @@ F.SetMode, F.RunWho = SetMode, RunWho
 -- Open the window on the Who tab and run a search (what /who does when we take it over)
 function F:OpenWho(text)
     if not f then return end
-    f:Show()
+    CUI:ShowWindow(f)
     SetMode("who")
     query = strtrim and strtrim(text or "") or (text or "")
     searchBox:SetText(query)
@@ -1070,7 +1071,7 @@ function F.IsActive() return f ~= nil and DB().takeKey end
 
 function F:Toggle()
     if not f then return end
-    if f:IsShown() then f:Hide() else f:Show() end
+    CUI:ToggleWindow(f)
 end
 
 local keyOwner, toggleButton

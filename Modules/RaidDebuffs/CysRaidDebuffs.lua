@@ -8,6 +8,7 @@
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "raiddebuffs", name = "Cys's Raid Debuffs",
+    forever = false, -- WoW Forever locks other players' debuff names in combat, so the boxes can't be filled there
     desc = "Tracks the key raid debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements...) and only shows the ones your group can apply.",
     open = function() CysUI:OpenConfig("Raid Debuffs") end,
     body = function()

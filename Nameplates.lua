@@ -170,10 +170,47 @@ end
 
 local MAX_AURAS = 5
 
+local function NewPlateAura(p)
+    local a = CreateFrame("Frame", nil, p)
+    a.icon = a:CreateTexture(nil, "ARTWORK")
+    a.icon:SetPoint("TOPLEFT", 1, -1)
+    a.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+    a.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    a.edges = W.Border(a, 1, { 0, 0, 0, 1 }, "OVERLAY")
+    a.count = a:CreateFontString(nil, "OVERLAY")
+    a.count:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+    a.count:SetPoint("BOTTOMRIGHT", 1, 0)
+    a.cd = CreateFrame("Cooldown", nil, a, "CooldownFrameTemplate")
+    a.cd:SetAllPoints(a.icon)
+    if a.cd.SetDrawEdge then a.cd:SetDrawEdge(false) end
+    CysUICompat.SmallCooldownText(a.cd, 18)
+    return a
+end
+
 local function UpdateAuras(p)
     local db = DB()
     local shown = 0
-    if db.myDebuffs and UnitCanAttack("player", p.unit) then
+    -- WoW Forever: whether you can attack a nameplate unit can be locked in combat; the "only my debuffs" filter
+    -- below already keeps friendly plates empty, so a locked answer counts as yes
+    local attackable = UnitCanAttack("player", p.unit)
+    local mine = db.myDebuffs and (Secret(attackable) or attackable)
+    -- WoW Forever: your debuffs on the mob are locked in combat; draw them from aura instance IDs instead
+    local list = mine and CysUICompat.AuraIcons(p.unit, "HARMFUL|PLAYER", MAX_AURAS)
+    if list then
+        for _, e in ipairs(list) do
+            if shown >= MAX_AURAS then break end
+            shown = shown + 1
+            local a = p.auras[shown] or NewPlateAura(p)
+            p.auras[shown] = a
+            local size = max(db.height + 6, 14)
+            a:SetSize(size, size)
+            CysUICompat.ShowAuraIcon(a, e)
+            CysUICompat.SmallCooldownText(a.cd, size)
+            a:ClearAllPoints()
+            a:SetPoint("BOTTOMLEFT", p, "TOPLEFT", (shown - 1) * (size + 2), 16)
+            a:Show()
+        end
+    elseif mine then
         for i = 1, 40 do
             if shown >= MAX_AURAS then break end
             local name, icon, count, _, duration, expiration = GetAura(p.unit, i, "HARMFUL|PLAYER")
@@ -323,7 +360,11 @@ local function CreatePlate(base)
     NP:ApplySize(p)
 
     p:SetScript("OnEvent", function(self, event)
-        if event:find("^UNIT_SPELLCAST") then UpdateCast(self) else NP:Update(self) end
+        if event:find("^UNIT_SPELLCAST") then UpdateCast(self) return end
+        -- health and threat ticks come often in combat; the debuff icons only need a redraw on aura changes
+        self.cysSkipAuras = event ~= "UNIT_AURA" and event ~= "UNIT_FACTION" and event ~= "UNIT_NAME_UPDATE"
+        NP:Update(self)
+        self.cysSkipAuras = nil
     end)
     return p
 end
@@ -356,6 +397,9 @@ function NP:Update(p)
     local unit = p.unit
     if not (unit and UnitExists(unit)) then return end
     local db = DB()
+    -- WoW Forever: draw the debuffs first and on their own, so a locked value further down (reaction color,
+    -- level) can't skip them
+    if CysUICompat.isForever and not p.cysSkipAuras then pcall(UpdateAuras, p) end
 
     -- keep Blizzard's own plate art invisible
     if p.base.UnitFrame then p.base.UnitFrame:SetAlpha(0) end
@@ -416,7 +460,7 @@ function NP:Update(p)
         p.raid:Hide()
     end
 
-    UpdateAuras(p)
+    if not CysUICompat.isForever then UpdateAuras(p) end
 end
 NP.Update = Guard("Nameplates", NP.Update) -- WoW Forever: a locked value skips one update instead of erroring
 

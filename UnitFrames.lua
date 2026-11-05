@@ -114,6 +114,7 @@ local function MakeAura(parent)
     if a.cd.SetDrawEdge then a.cd:SetDrawEdge(false) end
     a:EnableMouse(true)
     a:SetScript("OnEnter", function(self)
+        if self.auraInstanceID then return CysUICompat.AuraTooltip(self, self.unit, self.auraInstanceID, self.filter) end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
         pcall(GameTooltip.SetUnitAura, GameTooltip, self.unit, self.index, self.filter)
         GameTooltip:Show()
@@ -130,7 +131,34 @@ local function UpdateAuras(f)
     for _, kind in ipairs({ "HARMFUL", "HELPFUL" }) do
         local pool = pools[kind]
         local shown = 0
-        if UnitExists(unit) then
+        -- WoW Forever: other units' auras are locked in combat; draw them from aura instance IDs instead
+        local list = (unit ~= "player" and UnitExists(unit)) and CysUICompat.AuraIcons(unit, kind, AURA_COLUMNS * AURA_ROWS)
+        if list then
+            for _, e in ipairs(list) do
+                if shown >= AURA_COLUMNS * AURA_ROWS then break end
+                shown = shown + 1
+                local a = pool[shown]
+                if not a then a = MakeAura(f); pool[shown] = a end
+                a.unit, a.index, a.filter = unit, nil, kind
+                CysUICompat.ShowAuraIcon(a, e)
+                local color = (kind == "HARMFUL" and e.dispelName and DebuffTypeColor and DebuffTypeColor[e.dispelName])
+                if color or kind ~= "HARMFUL" then
+                    color = color or { r = T.line[1], g = T.line[2], b = T.line[3] }
+                    W.SetBorder(a.edges, { color.r, color.g, color.b })
+                else
+                    -- locked: the game colors the border by debuff type itself
+                    CysUICompat.AuraBorder(a.edges, e, { 0.8, 0.2, 0.2 })
+                end
+                local col, row = (shown - 1) % AURA_COLUMNS, floor((shown - 1) / AURA_COLUMNS)
+                a:ClearAllPoints()
+                if f.unit == "targettarget" then
+                    a:SetPoint("TOPLEFT", f, "BOTTOMLEFT", col * (AURA_SIZE + 1), -(2 + (rowShift + row) * (AURA_SIZE + 1)))
+                else
+                    a:SetPoint("TOPLEFT", f, "BOTTOMLEFT", col * (AURA_SIZE + 2), -(4 + (rowShift + row) * (AURA_SIZE + 2)))
+                end
+                a:Show()
+            end
+        elseif UnitExists(unit) then
             for i = 1, 40 do
                 if shown >= AURA_COLUMNS * AURA_ROWS then break end
                 local name, icon, count, debuffType, duration, expiration = GetAura(unit, i, kind)
@@ -138,7 +166,7 @@ local function UpdateAuras(f)
                 shown = shown + 1
                 local a = pool[shown]
                 if not a then a = MakeAura(f); pool[shown] = a end
-                a.unit, a.index, a.filter = unit, i, kind
+                a.unit, a.index, a.filter, a.auraInstanceID = unit, i, kind, nil
                 a.icon:SetTexture(icon)
                 a.count:SetText((count and count > 1) and count or "")
                 if duration and duration > 0 and expiration then

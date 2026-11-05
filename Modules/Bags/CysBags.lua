@@ -1259,13 +1259,9 @@ end
 --------------------------------------------------
 -- Delete Cheapest Junk Helper Function
 --------------------------------------------------
-local function DeleteCheapestJunk()
-    if InCombatLockdown() then
-        print("|cFFFFD100Cys's Bags|r: Cannot delete items in combat!")
-        return
-    end
-
-    local cheapestBag, cheapestSlot, cheapestLink
+-- the grey item (or stack) worth the least at a vendor: bag, slot, link, total value in copper, stack count
+local function FindCheapestJunk()
+    local cheapestBag, cheapestSlot, cheapestLink, cheapestCount
     local lowestValue = math.huge
 
     if not C_Container then return end
@@ -1277,25 +1273,44 @@ local function DeleteCheapestJunk()
                 local _, _, quality, _, _, _, _, _, _, _, itemSellPrice = GetItemInfo(info.hyperlink)
                 
                 -- Verify item is strictly Poor (grey = 0) and NOT a quest item
-                if quality == 0 and not C_Container.GetContainerItemQuestInfo(bag, slot).isQuestItem then
+                local questInfo = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
+                if quality == 0 and not (questInfo and questInfo.isQuestItem) then
                     local totalValue = (itemSellPrice or 0) * (info.stackCount or 1)
                     if totalValue < lowestValue then
                         lowestValue = totalValue
                         cheapestBag = bag
                         cheapestSlot = slot
                         cheapestLink = info.hyperlink
+                        cheapestCount = info.stackCount or 1
                     end
                 end
             end
         end
     end
+    if cheapestBag then return cheapestBag, cheapestSlot, cheapestLink, lowestValue, cheapestCount end
+end
+
+local function CoinText(copper)
+    copper = copper or 0
+    if C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString then return C_CurrencyInfo.GetCoinTextureString(copper) end
+    if GetCoinTextureString then return GetCoinTextureString(copper) end
+    return string.format("%dg %ds %dc", math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100)
+end
+
+local function DeleteCheapestJunk()
+    if InCombatLockdown() then
+        print("|cFFFFD100Cys's Bags|r: Cannot delete items in combat!")
+        return
+    end
+    local cheapestBag, cheapestSlot, cheapestLink, value, count = FindCheapestJunk()
 
     if cheapestBag and cheapestSlot then
         ClearCursor()
         C_Container.PickupContainerItem(cheapestBag, cheapestSlot)
         if CursorHasItem() then
             DeleteCursorItem()
-            print(string.format("|cFFFFD100Cys's Bags|r: Destroyed cheapest junk %s", cheapestLink or "item"))
+            print(string.format("|cFFFFD100Cys's Bags|r: Destroyed cheapest junk %s%s (%s)", cheapestLink or "item",
+                (count or 1) > 1 and (" x" .. count) or "", value and value > 0 and CoinText(value) or "no vendor value"))
             CysBags.dirty = true
             if CysBags.Refresh then CysBags:Refresh() end
         end
@@ -1481,6 +1496,15 @@ function CysBags:CreateFrames()
         GameTooltip:SetOwner(s, "ANCHOR_TOP")
         GameTooltip:SetText("Destroy Cheapest Junk", 1, 1, 1)
         GameTooltip:AddLine("Click to delete the cheapest grey junk item in your bags.", 0.8, 0.8, 0.8, true)
+        -- what would go, and what it's worth at a vendor, so you can decide if the loot is worth more
+        local _, _, link, value, count = FindCheapestJunk()
+        GameTooltip:AddLine(" ")
+        if link then
+            GameTooltip:AddDoubleLine("Next to go:", link .. ((count or 1) > 1 and (" x" .. count) or ""), 1, 0.82, 0, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Vendor value:", (value and value > 0) and CoinText(value) or "none", 1, 0.82, 0, 1, 1, 1)
+        else
+            GameTooltip:AddLine("No grey junk in your bags.", 0.6, 0.6, 0.6)
+        end
         GameTooltip:Show()
     end)
     junkBtn:SetScript("OnLeave", function()

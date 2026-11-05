@@ -253,6 +253,45 @@ function Compat.Reload()
     ReloadUI()
 end
 
+-- WoW Forever: ReloadUI is blocked for addons, but a click on a secure button running the /reload macro
+-- is the player's own action, so that works. This lays such a button over a plain "Reload UI" button.
+-- It sits on UIParent (a secure child would stop the window from closing in combat) and follows the
+-- owner window out of combat; in combat it steps aside and the plain button explains /reload.
+function Compat.SecureReload(btn, owner)
+    if not (Compat.isForever and btn and owner) then return end
+    local sec
+    local function Sync()
+        if InCombatLockdown() then return end
+        if not sec then
+            sec = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
+            sec:SetAttribute("type", "macro")
+            sec:SetAttribute("macrotext", "/reload")
+            sec:SetAttribute("useOnKeyDown", false)
+            sec:RegisterForClicks("AnyUp")
+            sec:HookScript("OnEnter", function() local f = btn:GetScript("OnEnter"); if f then f(btn) end end)
+            sec:HookScript("OnLeave", function() local f = btn:GetScript("OnLeave"); if f then f(btn) end end)
+        end
+        sec:ClearAllPoints()
+        sec:SetAllPoints(btn)
+        sec:SetFrameStrata(owner:GetFrameStrata())
+        sec:SetFrameLevel(btn:GetFrameLevel() + 5)
+        sec:SetShown(owner:IsShown() and btn:IsVisible())
+    end
+    owner:HookScript("OnShow", Sync)
+    owner:HookScript("OnHide", Sync)
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_REGEN_DISABLED") -- still allowed to hide it here, right before combat locks it
+    ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+    ev:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            if sec then sec:Hide() end
+        else
+            Sync()
+        end
+    end)
+    Sync()
+end
+
 --------------------------------------------------------------------------------
 -- Locked casts (WoW Forever): other units' cast name, icon and times are locked for addons, so no math on them.
 -- What still works: the name and icon go straight onto a FontString / Texture, and the bar runs off the game's own
@@ -382,5 +421,114 @@ function Compat.LockedCostBar(f, cost)
         cb:SetValue(cost)
     end)
     cb:SetShown(ok)
+end
+
+--------------------------------------------------------------------------------
+-- Aura icons for other units (WoW Forever): their aura details are locked in combat, but the game still hands out
+-- plain aura instance IDs, and per ID a ready-made stack text and a duration object. The icon (locked or not) goes
+-- straight onto a Texture, the stack text onto a FontString, the duration onto a Cooldown. No math, no comparisons
+-- and no if-tests on locked values: every locked value is checked with Secret() before anything else touches it.
+-- Returns a list of { id, icon, count, dur, dispelName, filter } or nil when the game can't list them.
+--------------------------------------------------------------------------------
+local LOCKED_ICON = 134400 -- question mark, for an aura whose icon the game won't even hand over
+
+-- plain "is there something here" test that never does an if-test on a locked value
+local function Present(v)
+    if Secret(v) then return true end
+    return v ~= nil
+end
+Compat.Present = Present
+
+-- debuff type (magic, curse, disease, poison) -> border color, worked out by the game so it works while locked
+local dispelCurve
+local function DispelCurve()
+    if dispelCurve ~= nil then return dispelCurve or nil end
+    dispelCurve = false
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local ok, c = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not c then return nil end
+    if c.SetType and Enum and Enum.LuaCurveType then pcall(c.SetType, c, Enum.LuaCurveType.Step) end
+    -- x = the game's dispel type number: 0 none, 1 magic, 2 curse, 3 disease, 4 poison
+    local pts = { { 0, 0.80, 0.20, 0.20 }, { 1, 0.20, 0.60, 1.00 }, { 2, 0.60, 0.00, 1.00 },
+                  { 3, 0.60, 0.40, 0.00 }, { 4, 0.00, 0.60, 0.00 }, { 5, 0.80, 0.20, 0.20 } }
+    for _, pt in ipairs(pts) do pcall(c.AddPoint, c, pt[1], CreateColor(pt[2], pt[3], pt[4], 1)) end
+    dispelCurve = c
+    return c
+end
+
+function Compat.AuraIcons(unit, filter, maxCount)
+    if not (Compat.isForever and C_UnitAuras and C_UnitAuras.GetUnitAuraInstanceIDs) then return nil end
+    local ok, ids = pcall(C_UnitAuras.GetUnitAuraInstanceIDs, unit, filter, maxCount)
+    if not ok or Secret(ids) or type(ids) ~= "table" then return nil end
+    local out = {}
+    for _, id in ipairs(ids) do
+        if not Secret(id) then
+            local e = { id = id, unit = unit, filter = filter, icon = LOCKED_ICON }
+            local okA, a = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, id)
+            if okA and not Secret(a) and type(a) == "table" then
+                local okI, icon = pcall(function() return a.icon end)
+                if okI and Present(icon) then e.icon = icon end
+                local okD, dn = pcall(function() return a.dispelName end)
+                if okD then e.dispelName = Plain(dn) end
+                local okN, nm = pcall(function() return a.name end)
+                if okN then e.name = Plain(nm) end
+            end
+            if C_UnitAuras.GetAuraApplicationDisplayCount then
+                local okC, c = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, unit, id, 2)
+                if okC then e.count = c end
+            end
+            if C_UnitAuras.GetAuraDuration then
+                local okT, d = pcall(C_UnitAuras.GetAuraDuration, unit, id)
+                if okT then e.dur = d end
+            end
+            out[#out + 1] = e
+        end
+    end
+    return out
+end
+
+-- put one Compat.AuraIcons entry on an icon frame that has .icon, .count and .cd
+function Compat.ShowAuraIcon(a, e)
+    if not pcall(a.icon.SetTexture, a.icon, e.icon) then a.icon:SetTexture(LOCKED_ICON) end
+    if Present(e.count) then
+        if not pcall(a.count.SetText, a.count, e.count) then a.count:SetText("") end
+    else
+        a.count:SetText("")
+    end
+    local shown = false
+    if Present(e.dur) and a.cd.SetCooldownFromDurationObject then
+        shown = pcall(a.cd.SetCooldownFromDurationObject, a.cd, e.dur)
+    end
+    a.cd:SetShown(shown)
+    a.auraInstanceID, a.auraUnit, a.auraFilter = e.id, e.unit, e.filter
+end
+
+-- color a W.Border edge set by the aura's debuff type; falls back to the given plain color
+function Compat.AuraBorder(edges, e, fallback)
+    for i = 1, #edges do edges[i]:SetColorTexture(fallback[1], fallback[2], fallback[3], fallback[4] or 1) end
+    if not (e and e.id and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor) then return end
+    local curve = DispelCurve()
+    if not curve then return end
+    local ok, col = pcall(C_UnitAuras.GetAuraDispelTypeColor, e.unit, e.id, curve)
+    if not ok or not col or Secret(col) then return end
+    local okRGB, r, g, b = pcall(col.GetRGB, col)
+    if not okRGB then return end
+    for i = 1, #edges do
+        edges[i]:SetColorTexture(1, 1, 1, 1)
+        pcall(edges[i].SetVertexColor, edges[i], r, g, b, 1)
+    end
+end
+
+-- tooltip for an aura by its instance ID
+function Compat.AuraTooltip(owner, unit, id, filter, anchor)
+    GameTooltip:SetOwner(owner, anchor or "ANCHOR_BOTTOMRIGHT")
+    local harmful = type(filter) == "string" and filter:find("HARMFUL")
+    local fn = harmful and GameTooltip.SetUnitDebuffByAuraInstanceID or GameTooltip.SetUnitBuffByAuraInstanceID
+    if fn then
+        pcall(fn, GameTooltip, unit, id, filter)
+    elseif GameTooltip.SetUnitAuraByAuraInstanceID then
+        pcall(GameTooltip.SetUnitAuraByAuraInstanceID, GameTooltip, unit, id)
+    end
+    GameTooltip:Show()
 end
 
