@@ -95,7 +95,7 @@ local function GetAura(unit, index, filter)
     return name, icon, count, debuffType, duration, expirationTime
 end
 
-local AURA_SIZE, AURA_COLUMNS, AURA_ROWS = 20, 8, 2
+local AURA_SIZE, AURA_COLUMNS, AURA_ROWS = 24, 8, 2 -- size follows the "icon size" setting (UpdateAuras)
 
 local function MakeAura(parent)
     local a = CreateFrame("Frame", nil, parent)
@@ -125,9 +125,26 @@ end
 
 local function UpdateAuras(f)
     if not f.auras then return end
+    AURA_SIZE = DB().auraSize or 24
     local unit = f.unit
     local pools = f.auras
     local rowShift = 0
+    -- WoW Forever: addons can't read the target's auras in combat, so the game draws them into our icons
+    -- through an aura container (debuffs on the first row, buffs below). Era keeps the code further down.
+    if CysUICompat.isForever and unit ~= "player" then
+        if f.cysAuraBox == nil then
+            f.cysAuraBox = CysUICompat.AuraContainer(f, unit, {
+                point = { "TOPLEFT", f, "BOTTOMLEFT", 0, -4 },
+                size = AURA_SIZE, gap = 2, lineWidth = AURA_COLUMNS * (AURA_SIZE + 2),
+                groups = { { key = "debuffs", filter = "HARMFUL", max = AURA_COLUMNS * AURA_ROWS },
+                           { key = "buffs", filter = "HELPFUL", max = AURA_COLUMNS * AURA_ROWS } },
+            }) or false
+        end
+        if f.cysAuraBox then
+            for _, pool in pairs(pools) do for i = 1, #pool do pool[i]:Hide() end end
+            return
+        end
+    end
     for _, kind in ipairs({ "HARMFUL", "HELPFUL" }) do
         local pool = pools[kind]
         local shown = 0
@@ -166,6 +183,7 @@ local function UpdateAuras(f)
                 shown = shown + 1
                 local a = pool[shown]
                 if not a then a = MakeAura(f); pool[shown] = a end
+                a:SetSize(AURA_SIZE, AURA_SIZE)
                 a.unit, a.index, a.filter, a.auraInstanceID = unit, i, kind, nil
                 a.icon:SetTexture(icon)
                 a.count:SetText((count and count > 1) and count or "")
@@ -507,6 +525,18 @@ function UF:Update(f)
 end
 UF.Update = Guard("Unit frames", UF.Update) -- WoW Forever: a locked value skips one update instead of erroring
 
+-- the icon size setting changed: WoW Forever's aura containers are built at one size, so they are rebuilt
+function UF.RebuildAuras()
+    for _, f in pairs(UF.frames) do
+        if f.cysAuraBox then
+            pcall(f.cysAuraBox.SetEnabled, f.cysAuraBox, false)
+            f.cysAuraBox:Hide()
+            f.cysAuraBox = nil
+        end
+        if f.auras and f.unit and UnitExists(f.unit) then UF:Update(f) end
+    end
+end
+
 --------------------------------------------------------------------------------
 -- Building a frame & Click-Casting / Clique Registration
 --------------------------------------------------------------------------------
@@ -660,7 +690,11 @@ local function CreateUnitFrame(def)
         end
     end
     if def.party then pcall(f.RegisterEvent, f, "GROUP_ROSTER_UPDATE") end
-    f:SetScript("OnEvent", function(self) UF:Update(self) end)
+    f:SetScript("OnEvent", function(self, event)
+        -- a new target: the game's aura icons need telling (WoW Forever)
+        if self.cysAuraBox and event == "PLAYER_TARGET_CHANGED" then CysUICompat.AuraContainerUnit(self.cysAuraBox) end
+        UF:Update(self)
+    end)
 
     -- Register safely with Clique and ClickCastFrames
     RegisterWithClique(f)
@@ -872,7 +906,10 @@ CUI:RegisterPage("Unit Frames", function(page)
         cb:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
-
+    local auraSize = W.Stepper(page, "Target buff and debuff icon size", function() return db.auraSize or 24 end,
+        function(v) db.auraSize = v; UF.RebuildAuras() end, 16, 40, 2, " px")
+    auraSize:SetPoint("TOPLEFT", 4, y - 10)
+    y = y - 40
 
     local note = W.Notes(page, 4, y - 52, width, "", {
             "Frames can only be moved or resized out of combat.",

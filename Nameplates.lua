@@ -202,7 +202,7 @@ local function UpdateAuras(p)
             shown = shown + 1
             local a = p.auras[shown] or NewPlateAura(p)
             p.auras[shown] = a
-            local size = max(db.height + 6, 14)
+            local size = db.debuffSize or 20
             a:SetSize(size, size)
             CysUICompat.ShowAuraIcon(a, e)
             CysUICompat.SmallCooldownText(a.cd, size)
@@ -233,7 +233,7 @@ local function UpdateAuras(p)
                 CysUICompat.SmallCooldownText(a.cd, a:GetHeight() > 0 and a:GetHeight() or 18)
                 p.auras[shown] = a
             end
-            local size = max(db.height + 6, 14)
+            local size = db.debuffSize or 20
             a:SetSize(size, size)
             a.icon:SetTexture(icon)
             a.count:SetText((count and count > 1) and count or "")
@@ -397,9 +397,21 @@ function NP:Update(p)
     local unit = p.unit
     if not (unit and UnitExists(unit)) then return end
     local db = DB()
-    -- WoW Forever: draw the debuffs first and on their own, so a locked value further down (reaction color,
-    -- level) can't skip them
-    if CysUICompat.isForever and not p.cysSkipAuras then pcall(UpdateAuras, p) end
+    -- WoW Forever: addons can't read the mob's auras in combat, so the game's own debuff row is used instead
+    if CysUICompat.isForever then
+        -- the game's own debuff row shows your debuffs here (see ShowBlizzardAuras); ours stay hidden
+        for i = 1, #p.auras do p.auras[i]:Hide() end
+        if p.cysAuraBox then
+            local want = db.myDebuffs and MAX_AURAS or 0
+            if p.cysAuraCap ~= want then
+                p.cysAuraCap = want
+                CysUICompat.AuraContainerCap(p.cysAuraBox, "mine", want)
+            end
+        else
+            local af = p.base and p.base.UnitFrame and p.base.UnitFrame.AurasFrame
+            if af then pcall(af.SetAlpha, af, db.myDebuffs and 1 or 0) end
+        end
+    end
 
     -- keep Blizzard's own plate art invisible
     if p.base.UnitFrame then p.base.UnitFrame:SetAlpha(0) end
@@ -468,8 +480,8 @@ NP.Update = Guard("Nameplates", NP.Update) -- WoW Forever: a locked value skips 
 -- which let its bar flash through under ours. Keep its alpha at zero for good.
 -- Some of its pieces (the mouse-over highlight, the target border) ignore their parent's transparency, so every
 -- frame, texture and text inside the game's plate is held at zero on its own as well.
-local function Silence(obj, depth)
-    if not obj or depth > 5 then return end
+local function Silence(obj, depth, keep)
+    if not obj or depth > 5 or obj == keep then return end
     local first = not obj.cysSilenced
     obj.cysSilenced = true
     if obj.SetIgnoreParentAlpha then pcall(obj.SetIgnoreParentAlpha, obj, false) end
@@ -490,20 +502,71 @@ local function Silence(obj, depth)
         end
     end
     if obj.GetRegions then
-        for _, r in ipairs({ obj:GetRegions() }) do Silence(r, depth + 1) end
+        for _, r in ipairs({ obj:GetRegions() }) do Silence(r, depth + 1, keep) end
     end
     if obj.GetChildren then
-        for _, c in ipairs({ obj:GetChildren() }) do Silence(c, depth + 1) end
+        for _, c in ipairs({ obj:GetChildren() }) do Silence(c, depth + 1, keep) end
+    end
+end
+
+-- WoW Forever: addons can't read other units' auras at all in combat ("Auras cannot be accessed when secret
+-- while tainted"), but the game's own plate still draws your debuffs. So on Forever the game's debuff row is
+-- left visible on top of our plate instead of being hidden with the rest. Only its transparency is touched.
+local function ForeverAuras(uf)
+    if not CysUICompat.isForever or CysUICompat.HasAuraContainers() then return nil end -- containers draw our own
+    return uf and uf.AurasFrame or nil
+end
+
+local function ShowBlizzardAuras(uf)
+    local af = ForeverAuras(uf)
+    if not af then return end
+    if af.SetIgnoreParentAlpha then pcall(af.SetIgnoreParentAlpha, af, true) end
+    pcall(af.SetAlpha, af, DB().myDebuffs and 1 or 0)
+    if not af.cysAlphaHook then
+        af.cysAlphaHook = true
+        -- the game's plate fades its pieces; keep the debuff row at the switch's value
+        local fixing = false
+        pcall(hooksecurefunc, af, "SetAlpha", function(self, a)
+            if fixing then return end
+            local want = DB().myDebuffs and 1 or 0
+            if a == want then return end
+            fixing = true
+            self:SetAlpha(want)
+            fixing = false
+        end)
     end
 end
 
 local function SilenceBlizzard(base)
     local uf = base.UnitFrame
     if not uf then return end
-    Silence(uf, 0)
+    Silence(uf, 0, ForeverAuras(uf))
+    ShowBlizzardAuras(uf)
     if not uf.cysShowHook and uf.HookScript then
         uf.cysShowHook = true
         uf:HookScript("OnShow", function(self) self:SetAlpha(0) end)
+    end
+end
+
+function NP.MakeAuraBox(p, unit)
+    p.cysAuraBox = CysUICompat.AuraContainer(p, unit, {
+        point = { "BOTTOMLEFT", p, "TOPLEFT", 0, 16 },
+        anchor = "BOTTOMLEFT", growV = "UP", size = DB().debuffSize or 20, gap = 2, noClicks = true,
+        groups = { { key = "mine", filter = "HARMFUL|PLAYER", max = MAX_AURAS } },
+    }) or false
+    p.cysAuraCap = nil
+end
+
+-- the debuff icon size changed: rebuild the containers (they are built at one size)
+function NP.RebuildAuras()
+    for _, p in pairs(NP.plates) do
+        if p.cysAuraBox then
+            pcall(p.cysAuraBox.SetEnabled, p.cysAuraBox, false)
+            p.cysAuraBox:Hide()
+            p.cysAuraBox = nil
+        end
+        if p.unit and CysUICompat.isForever then NP.MakeAuraBox(p, p.unit) end
+        if p.unit then NP:Update(p) end
     end
 end
 
@@ -517,6 +580,14 @@ function NP:Add(unit)
         self.plates[base] = p
     end
     p.unit = unit
+    -- WoW Forever: the game fills our debuff icons itself through an aura container (works in combat)
+    if CysUICompat.isForever then
+        if p.cysAuraBox == nil then
+            NP.MakeAuraBox(p, unit)
+        else
+            CysUICompat.AuraContainerUnit(p.cysAuraBox, unit)
+        end
+    end
     p:UnregisterAllEvents()
     for _, ev in ipairs(PLATE_EVENTS) do pcall(p.RegisterUnitEvent, p, ev, unit) end
     for _, ev in ipairs(CAST_EVENTS) do pcall(p.RegisterUnitEvent, p, ev, unit) end
@@ -685,9 +756,12 @@ CUI:RegisterPage("Nameplates", function(page)
     local h = W.Stepper(page, "Plate height", function() return db.height end,
         function(v) db.height = v; NP:ApplyAll() end, 4, 24, 1)
     h:SetPoint("TOPLEFT", w, "BOTTOMLEFT", 0, -6)
+    local ds = W.Stepper(page, "Debuff icon size", function() return db.debuffSize or 20 end,
+        function(v) db.debuffSize = v; NP.RebuildAuras() end, 12, 36, 2, " px")
+    ds:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -6)
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -18)
+    note:SetPoint("TOPLEFT", ds, "BOTTOMLEFT", 0, -18)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)

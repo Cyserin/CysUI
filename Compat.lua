@@ -247,6 +247,11 @@ end
 -- message, not an error a script can catch), so buttons and commands that reload call this instead.
 function Compat.Reload()
     if Compat.isForever then
+        if Compat.reloadSync and Compat.reloadOwner and Compat.reloadOwner:IsShown() and not InCombatLockdown() then
+            Compat.reloadSync()
+            print("|cFFFFD100Cys's UI|r: click Reload UI once more (Forever needs the click itself), or type |cFFFFFFFF/reload|r.")
+            return
+        end
         print("|cFFFFD100Cys's UI|r: the game doesn't let addons reload the interface on WoW Forever - type |cFFFFFFFF/reload|r.")
         return
     end
@@ -273,12 +278,14 @@ function Compat.SecureReload(btn, owner)
         end
         sec:ClearAllPoints()
         sec:SetAllPoints(btn)
-        sec:SetFrameStrata(owner:GetFrameStrata())
-        sec:SetFrameLevel(btn:GetFrameLevel() + 5)
+        sec:SetFrameStrata("FULLSCREEN_DIALOG") -- always above the settings window, whatever raises it
         sec:SetShown(owner:IsShown() and btn:IsVisible())
     end
+    Compat.reloadSync, Compat.reloadOwner = Sync, owner
     owner:HookScript("OnShow", Sync)
     owner:HookScript("OnHide", Sync)
+    -- the mouse reaching the plain button puts the secure one back over it (out of combat), so the click lands there
+    btn:HookScript("OnEnter", Sync)
     local ev = CreateFrame("Frame")
     ev:RegisterEvent("PLAYER_REGEN_DISABLED") -- still allowed to hide it here, right before combat locks it
     ev:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -517,6 +524,129 @@ function Compat.AuraBorder(edges, e, fallback)
         edges[i]:SetColorTexture(1, 1, 1, 1)
         pcall(edges[i].SetVertexColor, edges[i], r, g, b, 1)
     end
+end
+
+--------------------------------------------------------------------------------
+-- Aura containers (WoW Forever): addons may not read other units' auras in combat at all, but they may hand the
+-- game a container of icon frames and the game fills them itself - icon, stacks, timer swipe, debuff-type border,
+-- tooltip - in and out of combat. Same system EllesmereUI uses. We build the look (dark edge, cropped icon, small
+-- stack text); the game decides which aura goes where.
+--   spec = { groups = { { key = "debuffs", filter = "HARMFUL", max = 16 }, ... },
+--            size = 20, gap = 2, lineWidth = 180, anchor = "TOPLEFT", growH = "RIGHT", growV = "DOWN",
+--            noClicks = true (nameplates: clicks go through to the plate) }
+-- Returns the container, or nil where the system isn't there (Classic Era).
+--------------------------------------------------------------------------------
+function Compat.HasAuraContainers()
+    if not Compat.isForever then return false end
+    if C_AddOns and C_AddOns.IsAddOnLoaded and not C_AddOns.IsAddOnLoaded("Blizzard_AuraContainer") then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
+    end
+    return AnchorUtil ~= nil and AnchorUtil.FlowDirection ~= nil
+        and C_AddOns ~= nil and C_AddOns.IsAddOnLoaded("Blizzard_AuraContainer") and true or false
+end
+
+local function AuraCellInit(spec)
+    local size = spec.size or 20
+    local function Build(button)
+        -- the game's layout only spaces the icons; their size is ours to set (without it they are 0 wide)
+        button:SetSize(size, size)
+        -- every region is made and styled first; registering an unstyled FontString makes the game error
+        local icon = button:CreateTexture(nil, "ARTWORK")
+        icon:SetPoint("TOPLEFT", 1, -1)
+        icon:SetPoint("BOTTOMRIGHT", -1, 1)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(button)
+        bg:SetColorTexture(0, 0, 0, 1)
+
+        local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+        cd:SetAllPoints(icon)
+        if cd.SetDrawEdge then cd:SetDrawEdge(false) end
+        cd.noCooldownCount = true
+        Compat.SmallCooldownText(cd, size)
+
+        -- text and border sit above the swipe and never take the mouse
+        local top = CreateFrame("Frame", nil, button)
+        top:SetAllPoints(button)
+        top:SetFrameLevel(cd:GetFrameLevel() + 2)
+        top:EnableMouse(false)
+        local count = top:CreateFontString(nil, "OVERLAY")
+        count:SetFont(STANDARD_TEXT_FONT, math.max(8, math.floor(size * 0.45)), "OUTLINE")
+        count:SetPoint("BOTTOMRIGHT", 1, 0)
+        local dispel = top:CreateTexture(nil, "OVERLAY")
+        dispel:SetAllPoints(button)
+
+        if spec.noClicks then pcall(button.SetMouseClickEnabled, button, false) end
+
+        local function Try(label, fn, ...)
+            local ok, err = pcall(fn, button, ...)
+            if not ok and not Compat.auraInitLogged then
+                Compat.errors[#Compat.errors + 1] = "Aura icon setup " .. label .. ": " .. tostring(err)
+            end
+            return ok
+        end
+        Try("icon", button.SetIcon, icon)
+        Try("timer", button.SetDurationCooldown, cd)
+        Try("stacks", button.SetApplicationCount, count, {})
+        local styles = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
+        if styles and styles.Border ~= nil and button.AddDispelTypeTexture then
+            Try("border", button.AddDispelTypeTexture, dispel, { style = styles.Border })
+        end
+        Compat.auraInitCount = (Compat.auraInitCount or 0) + 1
+    end
+    return function(button)
+        local ok, err = pcall(Build, button)
+        if not ok then Compat.errors[#Compat.errors + 1] = "Aura icon setup: " .. tostring(err) end
+    end
+end
+
+function Compat.AuraContainer(parent, unit, spec)
+    if not Compat.HasAuraContainers() then return nil end
+    local ok, c = pcall(CreateFrame, "AuraContainer", nil, parent, "CustomAuraContainerTemplate")
+    if not ok or not c then
+        Compat.errors[#Compat.errors + 1] = "Aura container: " .. tostring(c)
+        return nil
+    end
+    if spec.point then c:SetPoint(unpack(spec.point)) end -- placed before any group, so it can draw at once
+    c:SetSize(1, 1)
+    local dirs = AnchorUtil.FlowDirection
+    local size, gap = spec.size or 20, spec.gap or 2
+    pcall(c.SetFlowLayoutAnchorPoint, c, spec.anchor or "TOPLEFT")
+    pcall(c.SetFlowLayoutGrowthDirection, c, dirs[spec.growH == "LEFT" and "Left" or "Right"],
+        dirs[spec.growV == "UP" and "Up" or "Down"])
+    if spec.lineWidth then pcall(c.SetFlowLayoutMaximumLineSize, c, spec.lineWidth) end
+    local init = AuraCellInit(spec)
+    for i, g in ipairs(spec.groups or {}) do
+        local okG, err = pcall(c.AddAuraGroup, c, g.key, g.filter, {
+            maxFrameCount = g.max or 8,
+            initializeFrame = init,
+            layout = { elementWidth = size, elementHeight = size, elementSpacing = gap, lineSpacing = gap,
+                       groupLineSpacing = gap + 2, forceNewLine = i > 1 },
+        })
+        if not okG then Compat.errors[#Compat.errors + 1] = "Aura container group " .. g.key .. ": " .. tostring(err) end
+    end
+    -- a new container starts switched off: until SetEnabled(true) it never reads auras or listens for changes
+    local okE, errE = pcall(c.SetEnabled, c, true)
+    if not okE then Compat.errors[#Compat.errors + 1] = "Aura container enable: " .. tostring(errE) end
+    if unit then
+        pcall(c.SetUnit, c, unit)
+        pcall(c.UpdateAllAuras, c)
+    end
+    return c
+end
+
+-- point a container at another unit (nameplates get reused) or refresh it (target changed)
+function Compat.AuraContainerUnit(c, unit)
+    if not c then return end
+    if unit and c.GetUnit and c:GetUnit() ~= unit then pcall(c.SetUnit, c, unit) end
+    pcall(c.UpdateAllAuras, c)
+end
+
+-- set a group's icon count (0 hides it)
+function Compat.AuraContainerCap(c, key, n)
+    if not c then return end
+    if c.SetAuraGroupEnabled then pcall(c.SetAuraGroupEnabled, c, key, n > 0) end
+    pcall(c.SetAuraGroupMaxFrameCount, c, key, n)
 end
 
 -- tooltip for an aura by its instance ID

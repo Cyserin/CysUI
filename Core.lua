@@ -170,12 +170,12 @@ local DEFAULTS = {
                 showIDs = false, hideUnitInCombat = false },
     minimap = { zoneText = true, coords = true, wheelZoom = true },
     unitframes = { rangeFade = true, targetRange = true, player = true, target = true, targettarget = true, pet = true, party = true,
-                   classColors = true, healthText = "both" },
+                   classColors = true, healthText = "both", auraSize = 24 },
     castbar = { player = true, target = true, icon = true, time = true },
     update = { enabled = true, notified = "0.0.0" },
     scale = { mode = "off", percent = 100, prompted = false },
     nameplates = { width = 112, height = 10, showLevel = true, healthText = true, classColors = true,
-                   targetHighlight = true, myDebuffs = true, castBar = true, threat = "auto" },
+                   targetHighlight = true, myDebuffs = true, castBar = true, threat = "auto", debuffSize = 20 },
     chat = { skin = true, hideButtons = true, tabsSolid = true, classColors = true, timestamps = false, use24h = false, fontSize = 14 },
     layout = {},      -- saved positions / sizes / scales from layout mode
     blueShaman = false, -- draw Shamans blue (the later-expansion color) instead of Classic Era's pink
@@ -468,11 +468,12 @@ if CysChangelog then
                   "Window stacking: the Cys's UI settings, Friends and Heal Advisor windows open side by side with Blizzard's windows (character, spellbook, quest log, map) and push or close each other like Blizzard's own, instead of opening on top of them. Turn it off under General (reload).",
               },
               improved = {
+                  "Unit Frames and Nameplates: new icon size settings for target buffs and debuffs (bigger by default) and for your debuffs on nameplates.",
                   "Modules page: a new Only show modules that are turned off box at the top, so switched-off modules are easy to find and turn back on.",
                   "Raid Debuffs: turned off on Forever, where the game hides the names of other players' debuffs in combat. It still works on Classic Era.",
               },
               fixed = {
-                  "Target frame: buffs and debuffs stay up in combat on Forever, with their icons, stacks, timers and debuff-type borders.",
+                  "Target frame: buffs and debuffs show in combat on Forever, with their icons, stacks, timers and debuff-type borders. The game draws them into Cys's UI icons, so they work even while it locks aura details.",
                   "Nameplates: your debuffs on enemies show in combat on Forever again.",
                   "Settings: the Reload UI button works on Forever (outside combat).",
                   "Player buffs: on Forever a buff whose details are locked in combat (like Lightning Shield) stays on your buff bar.",
