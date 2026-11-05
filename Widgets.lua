@@ -106,12 +106,14 @@ W.BORDER_STYLES = {
     { key = "shaman", label = "Shaman blue", class = "SHAMAN" },
 }
 
--- Styles this character can use (the Shaman blue only shows for Shamans)
+-- Styles this character can use (the Shaman blue only shows for Shamans, and not on WoW Forever,
+-- where Shamans are already blue so Class color gives the same thing)
 function W.AvailableBorderStyles()
     local _, class = UnitClass("player")
+    local isForever = CysUICompat and CysUICompat.isForever
     local out = {}
     for _, st in ipairs(W.BORDER_STYLES) do
-        if not st.class or st.class == class then out[#out + 1] = st end
+        if (not st.class or st.class == class) and not (isForever and st.key == "shaman") then out[#out + 1] = st end
     end
     return out
 end

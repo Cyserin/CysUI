@@ -43,15 +43,24 @@ local function PowerColor(unit)
     return d[1], d[2], d[3]
 end
 
+local Flag = CysUICompat.Flag -- a locked true/false counts as false (WoW Forever)
+
 local function UnitColor(unit)
-    if UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) then return 0.5, 0.5, 0.5 end -- dead beats class color
-    if UnitIsPlayer(unit) then
+    if UnitIsDeadOrGhost and Flag(UnitIsDeadOrGhost(unit)) then return 0.5, 0.5, 0.5 end -- dead beats class color
+    if Flag(UnitIsPlayer(unit)) then
         local _, class = UnitClass(unit)
+        class = CysUICompat.Plain(class)
         local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
         if c then return c.r, c.g, c.b end
     end
-    if UnitIsTapDenied and UnitIsTapDenied(unit) and not UnitPlayerControlled(unit) then return 0.5, 0.5, 0.5 end
+    if UnitIsTapDenied and Flag(UnitIsTapDenied(unit)) and not Flag(UnitPlayerControlled(unit)) then return 0.5, 0.5, 0.5 end
     local reaction = UnitReaction(unit, "player")
+    if Secret(reaction) then
+        -- WoW Forever: the reaction is locked for this unit; fall back to attackable / friendly
+        if UnitCanAttack and Flag(UnitCanAttack("player", unit)) then return 0.9, 0.2, 0.2 end
+        if UnitIsFriend and Flag(UnitIsFriend("player", unit)) then return 0.3, 0.85, 0.4 end
+        return 1, 0.82, 0
+    end
     if not reaction then return 0.8, 0.8, 0.8 end
     if reaction <= 2 then return 0.9, 0.2, 0.2 end
     if reaction <= 4 then return 1, 0.82, 0 end
@@ -101,6 +110,7 @@ local function MakeAura(parent)
     a.count:SetPoint("BOTTOMRIGHT", 1, 0)
     a.cd = CreateFrame("Cooldown", nil, a, "CooldownFrameTemplate")
     a.cd:SetAllPoints(a.icon)
+    CysUICompat.SmallCooldownText(a.cd, AURA_SIZE)
     if a.cd.SetDrawEdge then a.cd:SetDrawEdge(false) end
     a:EnableMouse(true)
     a:SetScript("OnEnter", function(self)
@@ -184,6 +194,8 @@ end
 CysUI.HealEstimateWatchers = CysUI.HealEstimateWatchers or {}
 local healEst, healTarget
 local function EstimateFromSpell(spellID)
+    -- WoW Forever gives real incoming heals (drawn by CysUICompat.ForeverHealBar); its bonus healing is locked
+    if CysUICompat.isForever then return nil end
     local getDesc = GetSpellDescription or (C_Spell and C_Spell.GetSpellDescription)
     if not (getDesc and spellID) then return nil end
     local ok, desc = pcall(getDesc, spellID)
@@ -249,7 +261,10 @@ local function UpdateHealth(f)
         -- WoW Forever: this unit's health is locked. The bar can still show it; the math and text can't run.
         pcall(f.health.SetMinMaxValues, f.health, 0, mx)
         pcall(f.health.SetValue, f.health, cur)
-        if f.healTex then f.healTex:Hide(); f.overhealTex:Hide() end
+        if f.healTex then
+            f.healTex:Hide(); f.overhealTex:Hide()
+            if CysUICompat.isForever then CysUICompat.ForeverHealBar(f, f.health, unit) end
+        end
         f.healthText:SetText("")
         return
     end
@@ -258,7 +273,11 @@ local function UpdateHealth(f)
 
     -- Incoming heals: a segment that starts where the health fill ends and only covers missing health;
     -- anything beyond max health shows as a small sliver past the frame's edge.
-    if f.healTex then
+    if f.healTex and CysUICompat.isForever then
+        -- WoW Forever: the incoming-heal amount is locked; draw it with a status bar instead (see Compat)
+        f.healTex:Hide(); f.overhealTex:Hide()
+        CysUICompat.ForeverHealBar(f, f.health, unit)
+    elseif f.healTex then
         local incoming = (UnitGetIncomingHeals and UnitGetIncomingHeals(unit)) or 0
         if incoming <= 0 then incoming = CysUI.HealEstimate(unit) end
         local width = f.health:GetWidth()
@@ -303,10 +322,19 @@ local function UpdatePower(f)
     local unit = f.unit
     if not UnitExists(unit) then return end
     local mx = UnitPowerMax(unit)
-    f.power:SetMinMaxValues(0, max(mx, 1))
-    f.power:SetValue(UnitPower(unit))
     local r, g, b = PowerColor(unit)
     f.power:SetStatusBarColor(r, g, b)
+    local pcur = UnitPower(unit)
+    if Secret(mx) or Secret(pcur) then
+        -- WoW Forever: this unit's power is locked. The bar can still show it; the math and text can't run.
+        pcall(f.power.SetMinMaxValues, f.power, 0, mx)
+        pcall(f.power.SetValue, f.power, pcur)
+        if f.powerText then f.powerText:SetText("") end
+        if f.costTex then f.costTex:Hide() end
+        return
+    end
+    f.power:SetMinMaxValues(0, max(mx, 1))
+    f.power:SetValue(pcur)
 
     -- number on the mana bar (player only; Settings > Unit Frames)
     if f.powerText then
@@ -365,21 +393,48 @@ local function UpdateName(f)
     local unit = f.unit
     if not UnitExists(unit) then return end
     local level = UnitLevel(unit)
+    local unitName = UnitName(unit)
+    if Secret(level) or Secret(unitName) then
+        -- WoW Forever: a locked name / level can go on the font string as it is, but not into format()
+        pcall(f.name.SetText, f.name, unitName)
+        return
+    end
     local levelText = (level and level > 0) and tostring(level) or "??"
-    local class = UnitClassification and UnitClassification(unit)
+    local class = UnitClassification and CysUICompat.Plain(UnitClassification(unit))
     if class == "elite" or class == "worldboss" or class == "rareelite" then levelText = levelText .. "+" end
     f.name:SetText(format("|cFFFFD100%s|r %s", levelText, UnitName(unit) or ""))
+end
+
+-- WoW Forever: run each part on its own so one locked value can't blank the whole frame (on Classic Era the
+-- parts are called directly, exactly as before)
+local IS_FOREVER = CysUICompat.isForever
+local stepErrors = {}
+local function Step(label, fn, f)
+    if not IS_FOREVER then return fn(f) end
+    local ok, err = pcall(fn, f)
+    if not ok then
+        err = tostring(err)
+        if not stepErrors[label .. err] then
+            stepErrors[label .. err] = true
+            local list = CysUICompat.errors
+            if list and #list < 50 then list[#list + 1] = "Unit frames " .. label .. ": " .. err end
+            print("|cFFFFD100Cys's UI|r |cFFFF8040(Forever)|r Unit frames " .. label .. ": " .. err)
+        end
+    end
+end
+local function ApplyColor(f)
+    local r, g, b = UnitColor(f.unit)
+    if not DB().classColors then r, g, b = T.accent[1], T.accent[2], T.accent[3] end
+    f.health:SetStatusBarColor(r, g, b)
 end
 
 function UF:Update(f)
     local unit = f.unit
     if not UnitExists(unit) then return end
-    local r, g, b = UnitColor(unit)
-    if not DB().classColors then r, g, b = T.accent[1], T.accent[2], T.accent[3] end
-    f.health:SetStatusBarColor(r, g, b)
-    UpdateName(f)
-    UpdateHealth(f)
-    UpdatePower(f)
+    Step("color", ApplyColor, f)
+    Step("name", UpdateName, f)
+    Step("health", UpdateHealth, f)
+    Step("power", UpdatePower, f)
     if f.raidIcon then
         local index = GetRaidTargetIndex and GetRaidTargetIndex(unit)
         if index and SetRaidTargetIconTexture then
@@ -390,8 +445,8 @@ function UF:Update(f)
             f.raidIcon:Hide()
         end
     end
-    UpdateAuras(f)
-    UpdateCombo(f)
+    Step("auras", UpdateAuras, f)
+    Step("combo", UpdateCombo, f)
 end
 UF.Update = Guard("Unit frames", UF.Update) -- WoW Forever: a locked value skips one update instead of erroring
 
@@ -429,7 +484,9 @@ local function CreateUnitFrame(def)
     f:SetSize(def.w, def.h)
     f:SetAttribute("unit", def.unit)
     f:SetAttribute("*type1", "target")
-    f:SetAttribute("*type2", "menu")
+    -- right-click menu: WoW Forever's "menu" action needs a menu function we don't have; its "togglemenu" opens
+    -- Blizzard's own unit menu (Self / Party / Target...)
+    f:SetAttribute("*type2", (CysUICompat and CysUICompat.isForever) and "togglemenu" or "menu")
     f:RegisterForClicks("AnyUp", "AnyDown")
     f.noHealthText = def.noHealthText
 
@@ -658,11 +715,17 @@ function UF.StartRangeCheck()
         for unit, f in pairs(UF.frames) do
             if f.IsShown and f:IsShown() then
                 local alpha = 1
+                local locked
                 if db.rangeFade ~= false and unit:find("^party") and UnitExists(unit) and UnitInRange then
                     local inRange, checked = UnitInRange(unit)
-                    if checked and not inRange then alpha = 0.45 end
+                    if Secret(inRange) or Secret(checked) then
+                        -- WoW Forever: range is a locked true/false; the frame can still apply it as alpha
+                        locked = true
+                        if f.SetAlphaFromBoolean then pcall(f.SetAlphaFromBoolean, f, inRange, 1, 0.45) end
+                        f.cysRangeAlpha = nil
+                    elseif checked and not inRange then alpha = 0.45 end
                 end
-                if f.cysRangeAlpha ~= alpha then f.cysRangeAlpha = alpha; f:SetAlpha(alpha) end
+                if not locked and f.cysRangeAlpha ~= alpha then f.cysRangeAlpha = alpha; f:SetAlpha(alpha) end
             end
         end
         local tf = UF.frames.target
@@ -741,6 +804,7 @@ CUI:RegisterPage("Unit Frames", function(page)
             end
         end)
     blue:SetPoint("TOPLEFT", 4, -130)
+    if CysUICompat and CysUICompat.isForever then blue:Hide() end -- Shamans are already blue on WoW Forever
 
     W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -222)
     local y = -252

@@ -593,6 +593,337 @@ local function SkinCharacter()
     end
 end
 
+--------------------------------------------------------------------------------
+-- WoW Forever's character window (one window with side tabs for Character, Reputation, Skills, PvP, Currency
+-- and Statistics). Its art is atlas based, so every piece of frame art is found by its atlas name and faded;
+-- icons, the model, text and scroll bars stay. Lists are built on demand, so this runs again on each update.
+-- Only alpha changes and hooksecurefunc are used, so nothing of Blizzard's is tainted.
+--------------------------------------------------------------------------------
+local FOREVER_ART = { "^UI%-Character%-Info", "^common%-insideframe", "^common%-framedivider", "^common%-sidetab",
+    "^_?UI%-Frame", "^_?ui%-frame", "^Options_", "^UI%-HUD%-ExperienceBar", "^common%-button%-list%-collapseExpand" }
+local FOREVER_KEEP = { "Icon%-Add", "Icon%-Tick", "Info%-ItemLevel" }
+local function IsForeverArt(r)
+    local ok, a = pcall(r.GetAtlas, r)
+    if ok and type(a) == "string" and a ~= "" then
+        for _, k in ipairs(FOREVER_KEEP) do if a:find(k) then return false end end
+        for _, pat in ipairs(FOREVER_ART) do if a:find(pat) then return true end end
+        return false
+    end
+    local okT, tex = pcall(r.GetTexture, r)
+    if okT and type(tex) == "string" then
+        local t = tex:lower()
+        return t:find("characterframe\\char%-") and true or false -- (empty-slot pictures live under PaperDoll and stay)
+    end
+    return false
+end
+
+local function ForeverFadeTree(f, depth)
+    if not f or depth > 8 or f.cysOwn then return end
+    local okR, regions = pcall(function() return { f:GetRegions() } end)
+    if okR then
+        for _, r in ipairs(regions) do
+            if not r.cysOwn and r.GetObjectType and r:GetObjectType() == "Texture" and IsForeverArt(r) then
+                local okA, a = pcall(r.GetAtlas, r)
+                r:SetAlpha(0)
+                -- section headers (General, Primary Attributes...): a flat band with a gold hairline instead
+                -- (reputation / skill group headers too, one band per header)
+                if okA and type(a) == "string" and (a:find("Info%-Title") or a:find("collapseExpand"))
+                    and not r.cysBand and not f.cysBandMade then
+                    f.cysBandMade = true
+                    local band = Own(f:CreateTexture(nil, "BACKGROUND"))
+                    band:SetColorTexture(T.selected[1], T.selected[2], T.selected[3], 1)
+                    band:SetPoint("TOPLEFT", r, "TOPLEFT", 4, -4)
+                    band:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", -4, 4)
+                    local line = Own(f:CreateTexture(nil, "BORDER"))
+                    line:SetColorTexture(T.border[1], T.border[2], T.border[3], 1)
+                    line:SetPoint("BOTTOMLEFT", band, "BOTTOMLEFT")
+                    line:SetPoint("BOTTOMRIGHT", band, "BOTTOMRIGHT")
+                    line:SetHeight(1)
+                    r.cysBand = band
+                end
+            end
+        end
+    end
+    for _, c in ipairs(Kids(f)) do ForeverFadeTree(c, depth + 1) end
+end
+
+local function SkinForeverSideTab(tab)
+    if not tab or tab.cysTab then return end
+    tab.cysTab = true
+    for _, k in ipairs({ "Background", "SelectedTexture", "TabGlow", "HighlightTexture" }) do
+        if tab[k] and tab[k].SetAlpha then tab[k]:SetAlpha(0) end
+    end
+    local icon = tab.Icon
+    if icon and tab.Mask and icon.RemoveMaskTexture then pcall(icon.RemoveMaskTexture, icon, tab.Mask) end
+    if icon and icon.SetTexCoord then icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    local box = Own(CreateFrame("Frame", nil, tab))
+    box:SetPoint("TOPLEFT", icon or tab, "TOPLEFT", -2, 2)
+    box:SetPoint("BOTTOMRIGHT", icon or tab, "BOTTOMRIGHT", 2, -2)
+    box:SetFrameLevel(max(tab:GetFrameLevel() - 1, 0))
+    W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
+    box.edges = W.Border(box, 1, T.line, "BORDER")
+    tab.cysBox = box
+    local function Paint()
+        local on = tab.SelectedTexture and tab.SelectedTexture:IsShown()
+        if tab.GetChecked then local okC, c = pcall(tab.GetChecked, tab); if okC and c ~= nil then on = c end end
+        W.SetBorder(box.edges, on and T.glow or T.line)
+    end
+    tab.cysPaint = Paint
+    if tab.SetChecked then hooksecurefunc(tab, "SetChecked", Paint) end
+    if tab.SelectedTexture then
+        hooksecurefunc(tab.SelectedTexture, "Show", Paint)
+        hooksecurefunc(tab.SelectedTexture, "Hide", Paint)
+        hooksecurefunc(tab.SelectedTexture, "SetShown", Paint)
+    end
+    tab:HookScript("OnEnter", function() W.SetBorder(box.edges, T.glow) end)
+    tab:HookScript("OnLeave", Paint)
+    Paint()
+end
+
+-- The small round tabs above the stats (stats / titles / equipment sets): square icons with a hairline edge
+local function SkinForeverStatTabs()
+    local tabs = {}
+    for i = 1, 6 do
+        local t = Get("PaperDollSidebarTab" .. i)
+        if t then tabs[#tabs + 1] = t end
+    end
+    local function PaintAll()
+        for _, t in ipairs(tabs) do
+            if t.cysBox then
+                local okC, on = pcall(t.GetChecked, t)
+                W.SetBorder(t.cysBox.edges, (okC and on) and T.glow or T.line)
+            end
+        end
+    end
+    for _, t in ipairs(tabs) do
+        if not t.cysBox then
+            local icon = t.Icon
+            Blank(t, function(r) return r == icon end)
+            local hl = t.GetHighlightTexture and t:GetHighlightTexture()
+            if hl then hl:SetAlpha(0) end
+            local ch = t.GetCheckedTexture and t:GetCheckedTexture()
+            if ch then ch:SetAlpha(0) end
+            -- (the icons are cut from one shared sheet, so their crop is left alone)
+            local box = Own(CreateFrame("Frame", nil, t))
+            box:SetPoint("TOPLEFT", icon or t, "TOPLEFT", -2, 2)
+            box:SetPoint("BOTTOMRIGHT", icon or t, "BOTTOMRIGHT", 2, -2)
+            box:SetFrameLevel(max(t:GetFrameLevel() - 1, 0))
+            W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
+            box.edges = W.Border(box, 1, T.line, "BORDER")
+            t.cysBox = box
+            if t.SetChecked then hooksecurefunc(t, "SetChecked", PaintAll) end
+            t:HookScript("OnClick", PaintAll)
+            t:HookScript("OnEnter", function() W.SetBorder(box.edges, T.glow) end)
+            t:HookScript("OnLeave", PaintAll)
+        end
+    end
+    PaintAll()
+end
+
+local function SkinCharacterForever()
+    local f = Get("CharacterFrame")
+    if not f or f.cysForeverSkin then return end
+    f.cysForeverSkin = true
+    Strip(f)
+    local panel = Panel(f, 0, 0, 0, 0)
+    SkinClose(f.CloseButton or Get("CharacterFrameCloseButton"), panel)
+    TitleText(Get("CharacterFrameTitleText"))
+    if f.TitleContainer then Blank(f.TitleContainer) end
+    -- a hairline between the model side and the stats side, in place of Blizzard's stone divider
+    local left = f.LeftPaneHost
+    if left then
+        local line = Own(f:CreateTexture(nil, "ARTWORK"))
+        line:SetColorTexture(T.line[1], T.line[2], T.line[3], 1)
+        line:SetWidth(1)
+        line:SetPoint("TOPLEFT", left, "TOPRIGHT", 0, 0)
+        line:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT", 0, 0)
+    end
+    -- left side: the rock strip behind "Level 5 Shaman" becomes a flat band with a gold line, and the race
+    -- picture behind the model goes, so the model stands on the dark panel
+    local pd = Get("PaperDollFrame")
+    local strip = pd and pd.TopBackgroundStripHost
+    if strip and not strip.cysBand then
+        for _, k in ipairs({ "TopBackgroundStrip", "TopBackgroundStripBottomEdge" }) do
+            if strip[k] then strip[k]:SetAlpha(0) end
+        end
+        -- same look as the stat headers on the right: a flat band set in from the edges, gold line under it
+        local src = strip.TopBackgroundStrip or strip
+        local band = Own(strip:CreateTexture(nil, "ARTWORK"))
+        band:SetColorTexture(T.selected[1], T.selected[2], T.selected[3], 1)
+        band:SetPoint("TOPLEFT", src, "TOPLEFT", 6, -3)
+        band:SetPoint("BOTTOMRIGHT", src, "BOTTOMRIGHT", -6, 3)
+        local line = Own(strip:CreateTexture(nil, "OVERLAY"))
+        line:SetColorTexture(T.border[1], T.border[2], T.border[3], 1)
+        line:SetHeight(1)
+        line:SetPoint("BOTTOMLEFT", band, "BOTTOMLEFT")
+        line:SetPoint("BOTTOMRIGHT", band, "BOTTOMRIGHT")
+        strip.cysBand = band
+    end
+    local function FadeModelBg()
+        local ms = Get("CharacterModelScene") or (pd and pd.CharacterModelScene)
+        if not ms then return end
+        for _, k in ipairs({ "BackgroundTopLeft", "BackgroundTopRight", "BackgroundBotLeft", "BackgroundBotRight",
+            "BackgroundOverlay" }) do
+            if ms[k] and ms[k].SetAlpha then ms[k]:SetAlpha(0) end
+        end
+    end
+    FadeModelBg()
+
+    local hooked = {}
+    local function HookLists(root, depth)
+        if depth > 6 then return end
+        for _, c in ipairs(Kids(root)) do
+            if not c.cysOwn then
+                if c.GetScrollTarget and not hooked[c] then
+                    hooked[c] = true
+                    local function Again() Safe(ForeverFadeTree, c, 0) end
+                    for _, m in ipairs({ "FullUpdate", "Update" }) do
+                        if type(c[m]) == "function" then pcall(hooksecurefunc, c, m, Again) end
+                    end
+                    if c.RegisterCallback and ScrollBoxListMixin and ScrollBoxListMixin.Event
+                        and ScrollBoxListMixin.Event.OnDataRangeChanged then
+                        pcall(c.RegisterCallback, c, ScrollBoxListMixin.Event.OnDataRangeChanged, Again, panel)
+                    end
+                end
+                HookLists(c, depth + 1)
+            end
+        end
+    end
+    local function Refresh()
+        Safe(FadeModelBg)
+        Safe(SkinForeverStatTabs)
+        Safe(ForeverFadeTree, f, 0)
+        Safe(HookLists, f, 0)
+        local tabs = f.ModeTabs and f.ModeTabs.Tabs
+        if tabs then for _, t in ipairs(tabs) do Safe(SkinForeverSideTab, t); if t.cysPaint then Safe(t.cysPaint) end end end
+    end
+    local function Later()
+        Refresh()
+        if C_Timer and C_Timer.After then C_Timer.After(0.05, Refresh) end
+    end
+    f:HookScript("OnShow", Later)
+    for _, m in ipairs({ "ShowSubFrame", "RefreshDisplay", "RefreshRightPane", "OnModeTabClicked" }) do
+        if type(f[m]) == "function" then pcall(hooksecurefunc, f, m, Later) end
+    end
+    Safe(SkinSlots, f)
+    Refresh()
+end
+
+--------------------------------------------------------------------------------
+-- WoW Forever's built-in damage meter (Blizzard_DamageMeter): flat dark windows with a hairline edge, a flat
+-- header band, flat bars on a dark track. Only looks are changed (textures, alpha); the numbers are the game's.
+--------------------------------------------------------------------------------
+local FLAT_TEX = "Interface\\Buttons\\WHITE8X8"
+
+local function SkinMeterEntry(e)
+    if not e or e.cysOwn or not e.GetStatusBar then return end
+    local okB, bar = pcall(e.GetStatusBar, e)
+    if not okB or not bar then return end
+    if not e.cysMeter then
+        e.cysMeter = true
+        -- keep Blizzard's colour (class / ally / enemy); only the glossy texture becomes flat
+        local tex = bar:GetStatusBarTexture()
+        local r, g, b = 1, 1, 1
+        if tex and tex.GetVertexColor then r, g, b = tex:GetVertexColor() end
+        bar:SetStatusBarTexture(FLAT_TEX)
+        tex = bar:GetStatusBarTexture()
+        if tex and r then tex:SetVertexColor(r, g, b) end
+        local track = Own(bar:CreateTexture(nil, "BACKGROUND", nil, -8))
+        track:SetAllPoints(bar)
+        track:SetColorTexture(T.field[1], T.field[2], T.field[3], 0.85)
+        e.cysTrack = track
+        local function Restyle()
+            for _, k in ipairs({ "Background", "BackgroundEdge" }) do
+                if bar[k] and bar[k].SetAlpha then bar[k]:SetAlpha(0) end
+            end
+            local t = bar:GetStatusBarTexture()
+            if t and t.GetTexture then
+                local okT, cur = pcall(t.GetTexture, t)
+                if okT and cur ~= nil and cur ~= FLAT_TEX and not (type(cur) == "string" and cur:find("WHITE8X8")) then
+                    local cr, cg, cb = t:GetVertexColor()
+                    bar:SetStatusBarTexture(FLAT_TEX)
+                    t = bar:GetStatusBarTexture()
+                    if t and cr then t:SetVertexColor(cr, cg, cb) end
+                end
+            end
+        end
+        e.cysRestyle = Restyle
+        for _, m in ipairs({ "UpdateStyle", "SetupSharedStyleBackground" }) do
+            if type(e[m]) == "function" then pcall(hooksecurefunc, e, m, function() Safe(Restyle) end) end
+        end
+        local okI, holder = pcall(e.GetIcon, e)
+        local iconFrame = e.Icon
+        if iconFrame and iconFrame.GetObjectType and iconFrame:GetObjectType() == "Frame" and not iconFrame.cysEdge then
+            iconFrame.cysEdge = W.Border(iconFrame, 1, T.line, "OVERLAY")
+        end
+    end
+    if e.cysRestyle then Safe(e.cysRestyle) end
+end
+
+local function SkinMeterWindow(w)
+    if not w or w.cysMeterWin then
+        return
+    end
+    w.cysMeterWin = true
+    if w.Header then w.Header:SetAlpha(0) end
+    -- dark panel behind the whole window, with the usual edge
+    local bd = Own(CreateFrame("Frame", nil, w))
+    bd:SetAllPoints(w)
+    bd:SetFrameLevel(max(w:GetFrameLevel() - 1, 0))
+    W.Texture(bd, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.8 }):SetAllPoints()
+    W.Border(bd, 1, T.border, "BORDER")
+    w.cysPanel = bd
+    -- the header becomes a flat band with a gold line under it
+    if w.Header then
+        local band = Own(w:CreateTexture(nil, "BACKGROUND", nil, 1))
+        band:SetColorTexture(T.selected[1], T.selected[2], T.selected[3], 1)
+        band:SetPoint("TOPLEFT", w.Header, "TOPLEFT", 1, -1)
+        band:SetPoint("BOTTOMRIGHT", w.Header, "BOTTOMRIGHT", -1, 2)
+        local line = Own(w:CreateTexture(nil, "BORDER"))
+        line:SetColorTexture(T.border[1], T.border[2], T.border[3], 1)
+        line:SetHeight(1)
+        line:SetPoint("BOTTOMLEFT", band, "BOTTOMLEFT")
+        line:SetPoint("BOTTOMRIGHT", band, "BOTTOMRIGHT")
+    end
+    -- the bars are made on demand in a scrolling list: restyle whenever the list updates
+    local mc = w.MinimizeContainer or w
+    local box = mc.ScrollBox or w.ScrollBox
+    local function Each()
+        if box and box.GetScrollTarget then
+            local okT, target = pcall(box.GetScrollTarget, box)
+            if okT and target then for _, c in ipairs(Kids(target)) do SkinMeterEntry(c) end end
+        end
+        if mc.LocalPlayerEntry then SkinMeterEntry(mc.LocalPlayerEntry) end
+    end
+    if box then
+        for _, m in ipairs({ "FullUpdate", "Update" }) do
+            if type(box[m]) == "function" then pcall(hooksecurefunc, box, m, function() Safe(Each) end) end
+        end
+        if box.RegisterCallback and ScrollBoxListMixin and ScrollBoxListMixin.Event
+            and ScrollBoxListMixin.Event.OnDataRangeChanged then
+            pcall(box.RegisterCallback, box, ScrollBoxListMixin.Event.OnDataRangeChanged, function() Safe(Each) end, bd)
+        end
+    end
+    w:HookScript("OnShow", function() Safe(Each) end)
+    Safe(Each)
+end
+
+local function SkinDamageMeter()
+    local dm = Get("DamageMeter")
+    if not dm then return end
+    local function All()
+        for i = 1, 5 do
+            local okW, w = pcall(dm.GetSessionWindow, dm, i)
+            if okW and w then SkinMeterWindow(w) end
+        end
+    end
+    All()
+    -- extra windows are made later (the + in the meter's settings)
+    for _, m in ipairs({ "SetupSessionWindow", "CreateWindowData", "RefreshLayout" }) do
+        if type(dm[m]) == "function" then pcall(hooksecurefunc, dm, m, function() Safe(All) end) end
+    end
+end
+
 -- Rank / subtext under spell names is dark grey by default; make it easy to read
 local function PaintSpellText()
     for i = 1, 12 do
@@ -1023,6 +1354,51 @@ local function SetColor(fs, c)
 end
 local LIGHT = { 0.88, 0.88, 0.88 }
 
+-- WoW Forever: quest titles carry a black colour code inside the text itself (|cff000000...), so a text colour
+-- can't brighten them. Swap that code for white. (Classic Era's titles have no such code, so nothing changes there.)
+local function LightenInlineBlack(fs)
+    if not (fs and fs.GetText and fs.SetText) then return end
+    local ok, t = pcall(fs.GetText, fs)
+    if not ok or type(t) ~= "string" or not t:find("|c[fF][fF]000000") then return end
+    fs:SetText((t:gsub("|c[fF][fF]000000", "|cffeeeeee")))
+end
+
+-- WoW Forever: windows built on the newer button-frame template put their bottom buttons and scroll bar on the
+-- themed border, outside the frame's own edges. Stretch our panel each time the window shows so they sit inside.
+local function FitPanelToButtons(f, panel, l, t)
+    if not (CysUICompat and CysUICompat.isForever) or not (f and panel) then return end
+    local function Fit()
+        local fb, fr = f:GetBottom(), f:GetRight()
+        if not (fb and fr) then return end
+        local minB, maxR = fb, fr
+        local function Look(frame, depth)
+            if depth > 3 then return end
+            for _, c in ipairs({ frame:GetChildren() }) do
+                if c ~= panel and c.IsShown and c:IsShown() and not c.cysOwn then
+                    local kind = c.GetObjectType and c:GetObjectType()
+                    local name = c.GetDebugName and c:GetDebugName() or ""
+                    if kind == "Button" or (type(name) == "string" and name:find("ScrollBar")) then
+                        local b, r = c:GetBottom(), c:GetRight()
+                        if b and b < minB then minB = b end
+                        if r and r > maxR then maxR = r end
+                    end
+                    Look(c, depth + 1)
+                end
+            end
+        end
+        Look(f, 0)
+        local dy = (minB < fb) and (minB - fb - 6) or 0
+        local dx = (maxR > fr) and (maxR - fr + 6) or 0
+        panel:ClearAllPoints()
+        panel:SetPoint("TOPLEFT", f, "TOPLEFT", l or 0, t or 0)
+        panel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", dx, dy)
+    end
+    f:HookScript("OnShow", function()
+        Safe(Fit)
+        if C_Timer and C_Timer.After then C_Timer.After(0.05, function() Safe(Fit) end) end
+    end)
+end
+
 local function PaintQuestDialog()
     local gold = T.accent
     local rf = Get("QuestInfoRewardsFrame")
@@ -1051,7 +1427,7 @@ local function PaintQuestDialog()
     for i = 1, 32 do -- the list of quests an NPC offers / wants back
         local b = Get("QuestTitleButton" .. i)
         local fs = b and b.GetFontString and b:GetFontString()
-        if fs then SetColor(fs, LIGHT) end
+        if fs then SetColor(fs, LIGHT); LightenInlineBlack(fs) end
     end
 end
 
@@ -1075,6 +1451,7 @@ local function SkinQuestDialog()
         end
     end
     local panel = Panel(f, 11, -12, -30, 60)
+    if CysUICompat and CysUICompat.isForever then FitPanelToButtons(f, panel, 0, 0) end -- Forever: new window shape
     SkinClose(Get("QuestFrameCloseButton"), panel)
     SkinTree(f, 3)
     PaintQuestDialog()
@@ -1092,6 +1469,7 @@ local function SkinGossip()
     Strip(f)
     Blank(f.GreetingPanel)
     local panel = Panel(f, 0, 0, 0, 0)
+    FitPanelToButtons(f, panel, 0, 0)
     SkinClose(f.CloseButton or Get("GossipFrameCloseButton"), panel)
     local sb = f.GreetingPanel and f.GreetingPanel.ScrollBar
     if sb then sb:SetAlpha(0.35) end
@@ -1104,6 +1482,7 @@ local function SkinGossip()
             SetColor(c.GreetingText, LIGHT)
             local fs = c.GetFontString and c:GetFontString()
             SetColor(fs, LIGHT)
+            LightenInlineBlack(fs)
         end
     end
     local function Later() Safe(Paint); if C_Timer and C_Timer.After then C_Timer.After(0.05, function() Safe(Paint) end) end end
@@ -1567,7 +1946,9 @@ local function SkinWorldMap()
     end
     -- The canvas turns the mouse position into a map position without allowing for the map's own scale (it only works at 100%),
     -- so with the map scaled down (CysMap uses 75%) the hover highlight and coordinates land on the wrong zone. Allow for it.
-    if sc and not sc.cysCursor then
+    -- WoW Forever's map already allows for its own scale, and replacing this function there taints the map
+    -- (quest pins then fail with SetPassThroughButtons blocked), so only Classic Era gets the fix.
+    if sc and not sc.cysCursor and not (CysUICompat and CysUICompat.isForever) then
         sc.cysCursor = true
         sc.GetCursorPosition = function(self)
             local x, y = GetCursorPosition()
@@ -1577,7 +1958,8 @@ local function SkinWorldMap()
         end
     end
     -- Coordinates strip along the bottom of the map: where you are and where the mouse is
-    if sc and not f.cysCoords then
+    -- (WoW Forever's map shows its own player / cursor coordinates, so ours are left off there)
+    if sc and not f.cysCoords and not (CysUICompat and CysUICompat.isForever) then
         local bar = Own(CreateFrame("Frame", nil, f))
         bar:SetFrameLevel(sc:GetFrameLevel() + 20)
         bar:SetPoint("BOTTOMLEFT", sc, "BOTTOMLEFT", 0, 0)
@@ -1976,6 +2358,7 @@ local function SkinTrainer()
     if not f then return end
     Strip(f)
     local panel = Panel(f, 11, -12, -32, 76)
+    if CysUICompat and CysUICompat.isForever then FitPanelToButtons(f, panel, 0, 0) end -- Forever: Train button / money sit lower
     SkinClose(Get("ClassTrainerFrameCloseButton"), panel)
     TitleText(Get("ClassTrainerNameText"))
     Strip(Get("ClassTrainerExpandButtonFrame"))
@@ -2147,6 +2530,8 @@ local function SkinTrade()
         local p = Get(n)
         if p and p.SetAlpha then p:SetAlpha(0) end
     end
+    -- WoW Forever: the other player's round portrait and its metal corner sit in their own overlay frame
+    if f.RecipientOverlay then f.RecipientOverlay:SetAlpha(0) end
     local panel = Panel(f, 0, 0, 0, 0)
     SkinClose(Get("TradeFrameCloseButton"), panel)
     TitleText(Get("TradeFramePlayerNameText"))
@@ -2998,17 +3383,28 @@ local function SkinRaidTab()
 end
 
 -- Pop-up dialogs (logout countdown, confirmations): flat dark box, gold edge, flat buttons
+local popupsHooked
 local function SkinPopups()
     for i = 1, 4 do
         local f = Get("StaticPopup" .. i)
         if f and not f.cysPopup then
             f.cysPopup = true
             Strip(f)
+            if f.BG then Blank(f.BG) end
             Panel(f, 0, 0, 0, 0)
             for j = 1, 4 do FlatButton(Get("StaticPopup" .. i .. "Button" .. j)) end
             FlatButton(Get("StaticPopup" .. i .. "ExtraButton"))
-            SkinTree(f, 2)
+            -- WoW Forever: the buttons live in a ButtonContainer and have no global names
+            local bc = f.ButtonContainer
+            if bc then for j = 1, 4 do if bc["Button" .. j] then FlatButton(bc["Button" .. j]) end end end
+            if f.ExtraButton then FlatButton(f.ExtraButton) end
+            SkinTree(f, 3)
         end
+    end
+    -- popups that are made later (newer clients build them on first use)
+    if not popupsHooked and hooksecurefunc and StaticPopup_Show then
+        popupsHooked = true
+        hooksecurefunc("StaticPopup_Show", function() Safe(SkinPopups) end)
     end
 end
 
@@ -3048,7 +3444,10 @@ local function SkinDropdowns()
     -- the newer menu system (Blizzard_Menu): frames are made on the fly, so look for their background art when a menu opens
     local function IsMenuBg(tex)
         local ok, atlas = pcall(tex.GetAtlas, tex)
-        return ok and type(atlas) == "string" and string.find(atlas, "^common%-dropdown%-classic") ~= nil
+        if not (ok and type(atlas) == "string") then return false end
+        -- Classic Era's menu art, and WoW Forever's (the retail-style menus: common-dropdown-bg / -c-bg)
+        return string.find(atlas, "^common%-dropdown%-classic") ~= nil
+            or atlas == "common-dropdown-bg" or atlas == "common-dropdown-c-bg"
     end
     local menuHits = 0
     local function SkinMenuFrame(fr, depth)
@@ -3154,11 +3553,13 @@ Skins.list = {
     { key = "popups",    label = "Pop-up dialogs (logout, confirmations)", apply = SkinPopups },
     { key = "dropdowns", label = "Right-click menus and dropdown lists", apply = SkinDropdowns },
     { key = "menu",      label = "Main Menu (Esc menu)", apply = SkinMenu },
-    { key = "character", label = "Character, Reputation and Skills", apply = SkinCharacter },
-    { key = "spellbook", label = "Spellbook", apply = SkinSpellbook },
+    { key = "character", label = "Character, Reputation and Skills", apply = SkinCharacter, forever = false }, -- Forever has a new window
+    { key = "damagemeterForever", label = "Damage meter (Blizzard's built-in one)", apply = SkinDamageMeter, addon = "Blizzard_DamageMeter", foreverOnly = true },
+    { key = "characterForever", label = "Character window (Reputation, Skills, PvP, Currency)", apply = SkinCharacterForever, foreverOnly = true },
+    { key = "spellbook", label = "Spellbook", apply = SkinSpellbook, forever = false }, -- Forever has a new spellbook
     { key = "talents",   label = "Talents",   apply = SkinTalents, addon = "Blizzard_TalentUI" },
     { key = "macros",    label = "Macros",    apply = SkinMacros,  addon = "Blizzard_MacroUI" },
-    { key = "quests",    label = "Quest Log", apply = SkinQuestLog },
+    { key = "quests",    label = "Quest Log", apply = SkinQuestLog, forever = false }, -- on Forever the quest log is part of the map
     { key = "loot",      label = "Loot window", apply = SkinLoot },
     { key = "questnpc",  label = "Quest dialogs (accept / turn in)", apply = SkinQuestDialog },
     { key = "gossip",    label = "NPC gossip window", apply = SkinGossip },
@@ -3198,7 +3599,15 @@ local function IsLoaded(addon)
     return fn and fn(addon)
 end
 
+-- Skins marked forever = false are for windows WoW Forever rebuilt; they stay off (and hidden) there
+local function Allowed(entry)
+    local isForever = CysUICompat and CysUICompat.isForever
+    if entry.foreverOnly and not isForever then return false end
+    return not (entry.forever == false and isForever)
+end
+
 local function Apply(entry)
+    if not Allowed(entry) then return end
     local ok, err = pcall(entry.apply)
     if not ok then CUI:Print("|cFFFF4040Skin '" .. entry.label .. "' failed:|r " .. tostring(err)) end
 end
@@ -3264,10 +3673,12 @@ CUI:RegisterPage("Skins", function(page)
     W.Header(page, "Skins", width):SetPoint("TOPLEFT", 0, -100)
     local y = -130
     for _, entry in ipairs(Skins.list) do
-        local cb = W.Checkbox(page, entry.label, function() return db[entry.key] end,
-            function(on) db[entry.key] = on end)
-        cb:SetPoint("TOPLEFT", 4, y)
-        y = y - 28
+        if Allowed(entry) then
+            local cb = W.Checkbox(page, entry.label, function() return db[entry.key] end,
+                function(on) db[entry.key] = on end)
+            cb:SetPoint("TOPLEFT", 4, y)
+            y = y - 28
+        end
     end
 
     local note = W.Notes(page, 4, y - 8, width, "", {

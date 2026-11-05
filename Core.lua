@@ -108,6 +108,8 @@ local DEFAULTS = {
 -- Cys's UI frame, the chat names and other addons that read it follow. Turning it off needs a /reload.
 function CUI:ApplyShamanColor()
     if not (CysUIDB and CysUIDB.blueShaman) then return end
+    -- WoW Forever: Shamans are blue already, and writing into the game's color table there would taint it
+    if CysUICompat and CysUICompat.isForever then return end
     local t = RAID_CLASS_COLORS and RAID_CLASS_COLORS.SHAMAN
     if not t then return end
     t.r, t.g, t.b = 0.0, 0.44, 0.87
@@ -212,6 +214,7 @@ end
 local FOREVER_HIDDEN_PAGES = {
     ["Interrupts"] = true, ["Taunt Alert"] = true, ["Tremor Alert"] = true,
     ["Combat Log"] = true, ["Combat Numbers"] = true,
+    ["Skill Tracker"] = true, -- the old skill list it reads is gone on Forever
 }
 function CUI:RegisterPage(title, build, onShow, class)
     if CUI.isForever and FOREVER_HIDDEN_PAGES[title] then return end
@@ -371,9 +374,37 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.57.0",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.0",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.0", date = "2026-11-04",
+              added = {
+                  "WoW Forever: Cys's UI runs on the new WoW Forever client. Anything Forever does not allow (it hides the combat log from addons) turns itself off there: Interrupt Announcer, Taunt Alert, Tremor Alert, Cys's Combat Log, Combat Numbers, Cys's Armory, the Equipment Flyout, the Skill Tracker and the heal test.",
+                  "Character window skin: Forever's new character window (Reputation, Skills, PvP, Currency and Statistics tabs) gets the flat dark look, square slots and side tabs.",
+                  "Damage meter skin: Blizzard's built-in damage meter on Forever gets flat bars, a dark panel and a flat header.",
+                  "Settings search: a search box in the /cui top bar finds settings by page name or by any label on a page, opens the page and lights up the match.",
+                  "Options window: Cys's UI has its own page under Options, AddOns, with a button that opens /cui.",
+                  "Totem Bar: the Keep action-bar macros option is now on the Totem Bar page too, and missing macros are put back by themselves while it is on.",
+              },
+              improved = {
+                  "Heal prediction: on Forever it shows real incoming heals from every healer, with an overheal sliver past the frame edge.",
+                  "Right-click menus: Forever's newer menus get the dark look too.",
+                  "Unit frames: on Forever, right-click opens Blizzard's unit menu, and out of range party and raid members still fade.",
+                  "Buff icons: right-click still cancels buffs on Forever.",
+                  "Aura timers: the game's own countdown on small aura icons is shrunk to fit the icon.",
+                  "Vendor: the Sell Junk button hides while auto-sell junk is on.",
+                  "Gossip, quest and trainer windows: quest names are easy to read and the panel wraps the buttons on Forever.",
+                  "Trade window and pop-ups: the Forever versions get the dark look too.",
+                  "Totem Bar: Blizzard's own totem bar is hidden on Forever while Cys's Totem Bar is on, and only one timer shows on each slot.",
+                  "Shaman blue options are hidden on Forever, where Shamans are already blue.",
+              },
+              fixed = {
+                  "Totem Bar: left-click drops the totem on clients that cast on key down.",
+                  "Forever: fixed errors from locked values in unit, raid and target frames, the totem bar, Upgrade, bags, the bank and Heal Advisor.",
+                  "Forever: action bar cooldowns, Edit Mode, party frames and the world map no longer break after Cys's UI loads.",
+                  "Forever: Blizzard's gryphons, bar art and bag bar are hidden again, and the pressed button square fits the button.",
+              },
+            },
             { version = "0.57.0", date = "2026-11-03",
               added = {
                   "Consumables: self-updating macros (Cys Food, Cys Drink, Cys HP Potion, Cys MP Potion, Cys Bandage, Cys Healthstone) that always use the best item you can use right now. Conjured food and water go first, and new items work without an update because each item is read from its own tooltip.",

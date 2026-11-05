@@ -164,14 +164,20 @@ local function UpdateHealth(b)
         pcall(b.health.SetMinMaxValues, b.health, 0, mx)
         pcall(b.health.SetValue, b.health, cur)
         b.healBar:Hide()
+        if CysUICompat.isForever then CysUICompat.ForeverHealBar(b, b.health, unit) end
         b.healthText:SetText("")
         return
     end
     b.health:SetMinMaxValues(0, max(mx, 1))
     b.health:SetValue(cur)
 
-    local incoming = UnitGetIncomingHeals and UnitGetIncomingHeals(unit) or 0
-    if (not incoming or incoming <= 0) and CysUI.HealEstimate then incoming = CysUI.HealEstimate(unit) end
+    local incoming = (not CysUICompat.isForever) and UnitGetIncomingHeals and UnitGetIncomingHeals(unit) or 0
+    if CysUICompat.isForever then
+        -- WoW Forever: the incoming-heal amount is locked; drawn as its own bar instead (see Compat)
+        CysUICompat.ForeverHealBar(b, b.health, unit)
+        incoming = 0
+    end
+    if (not incoming or incoming <= 0) and CysUI.HealEstimate and not CysUICompat.isForever then incoming = CysUI.HealEstimate(unit) end
     if incoming and incoming > 0 and cur < mx then
         b.healBar:SetMinMaxValues(0, max(mx, 1))
         b.healBar:SetValue(min(mx, cur + incoming))
@@ -197,9 +203,15 @@ local function UpdatePower(b)
     if not b.power or not b.power:IsShown() then return end
     local unit = b.unit
     if not unit or not UnitExists(unit) then return end
-    local mx = UnitPowerMax(unit)
-    b.power:SetMinMaxValues(0, max(mx, 1))
-    b.power:SetValue(UnitPower(unit))
+    local mx, cur = UnitPowerMax(unit), UnitPower(unit)
+    if Secret(mx) or Secret(cur) then
+        -- WoW Forever: locked power still fills the bar; no math on it
+        pcall(b.power.SetMinMaxValues, b.power, 0, mx)
+        pcall(b.power.SetValue, b.power, cur)
+    else
+        b.power:SetMinMaxValues(0, max(mx, 1))
+        b.power:SetValue(cur)
+    end
     local t = UnitPowerType(unit)
     local c = PowerBarColor and PowerBarColor[t]
     if c and c.r then b.power:SetStatusBarColor(c.r, c.g, c.b) else b.power:SetStatusBarColor(0.3, 0.5, 1) end
@@ -336,6 +348,12 @@ local function UpdateRange(b)
     local alpha = 1
     if DB().rangeFade and not UnitIsUnit(unit, "player") and UnitInRange then
         local inRange, checked = UnitInRange(unit)
+        if Secret(inRange) or Secret(checked) then
+            -- WoW Forever: range is a locked true/false; the button can still apply it as alpha
+            if UnitIsConnected and not UnitIsConnected(unit) then b:SetAlpha(0.5) return end
+            if b.SetAlphaFromBoolean then pcall(b.SetAlphaFromBoolean, b, inRange, 1, 0.4) end
+            return
+        end
         if checked and not inRange then alpha = 0.4 end
     end
     if UnitIsConnected and not UnitIsConnected(unit) then alpha = min(alpha, 0.5) end

@@ -238,12 +238,24 @@ local function SkinButton(b)
         end)
     end
 
+    -- Newer button art (WoW Forever) pins these to the top-left at a fixed 46x45, so on smaller buttons the
+    -- pressed square spills out past the edge. Stretch them over the button instead.
     local pushed = b.GetPushedTexture and b:GetPushedTexture()
-    if pushed then pushed:SetColorTexture(1, 1, 1, 0.25) end
+    if pushed then pushed:SetColorTexture(1, 1, 1, 0.25); pushed:ClearAllPoints(); pushed:SetAllPoints(b) end
     local checked = b.GetCheckedTexture and b:GetCheckedTexture()
-    if checked then checked:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.3) end
+    if checked then checked:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.3); checked:ClearAllPoints(); checked:SetAllPoints(b) end
     local highlight = b.GetHighlightTexture and b:GetHighlightTexture()
-    if highlight then highlight:SetColorTexture(1, 1, 1, 0.18) end
+    if highlight then highlight:SetColorTexture(1, 1, 1, 0.18); highlight:ClearAllPoints(); highlight:SetAllPoints(b) end
+
+    -- Newer button art only (nil on Classic Era): the stone slot behind empty buttons and the rounded icon
+    -- mask. Cys's UI draws its own flat slot and square icons.
+    if b.SlotArt then b.SlotArt:SetAlpha(0) end
+    if b.SlotBackground then b.SlotBackground:SetAlpha(0) end
+    if b.IconMask and icon and icon.RemoveMaskTexture then pcall(icon.RemoveMaskTexture, icon, b.IconMask) end
+    if b.cooldown and icon then
+        b.cooldown:ClearAllPoints()
+        b.cooldown:SetAllPoints(icon)
+    end
 
     if DB().hideNames then
         local name = Part(b, "Name")
@@ -327,7 +339,9 @@ function AB:LayoutBar(key)
         if not def.keepSize then b:SetSize(w, h) end
         b:SetPoint("TOPLEFT", bar.container, "TOPLEFT", col * (w + gap), -row * (h + gap))
         if def.skin then Guard(key .. " button", SkinButton, b) end
-        if (def.blizz or key == "main") and DB().showEmpty and not b.cysGrid then
+        -- WoW Forever: SetAttribute / ShowGrid from addon code taints the button (its cooldowns then break);
+        -- there, Edit Mode's "Always show buttons" setting shows empty slots instead.
+        if (def.blizz or key == "main") and DB().showEmpty and not b.cysGrid and not (CysUICompat and CysUICompat.isForever) then
             b.cysGrid = true -- ask the game to draw empty slots too
             b:SetAttribute("showgrid", 1)
             if ActionButton_ShowGrid then pcall(ActionButton_ShowGrid, b) end
@@ -412,10 +426,31 @@ local EDIT_FRAMES = { "MainActionBar", "MainMenuBar", "MultiBarBottomLeft", "Mul
                       "MicroMenuContainer", "BagsBar", "StatusTrackingBarManager", "MainStatusTrackingBarContainer",
                       "SecondaryStatusTrackingBarContainer", "MultiCastActionBarFrame" }
 local function Noop() end
+-- WoW Forever: replacing Blizzard's own functions (f.HighlightSystem = Noop) taints Edit Mode, and then
+-- opening it breaks party frames and blocks ClearTarget. There, hooksecurefunc (the safe way) hides the
+-- selection box right after Blizzard shows it, and nothing of Blizzard's is replaced.
+local function QuietEditModeForever(f)
+    -- the old bar holders stay where Blizzard put them; don't let them take clicks from the real buttons
+    if not InCombatLockdown() and f.EnableMouse then pcall(f.EnableMouse, f, false) end
+    if f.cysEditHooked then return end
+    f.cysEditHooked = true
+    local function HideSel(self)
+        local sel = self.Selection
+        if sel and sel.Hide then sel:Hide() end
+    end
+    for _, m in ipairs({ "HighlightSystem", "SelectSystem" }) do
+        if type(f[m]) == "function" then pcall(hooksecurefunc, f, m, HideSel) end
+    end
+    HideSel(f)
+end
+
 function AB:NeutralizeEditMode()
+    local isForever = CysUICompat and CysUICompat.isForever
     for _, name in ipairs(EDIT_FRAMES) do
         local f = _G[name]
-        if f then
+        if f and isForever then
+            QuietEditModeForever(f)
+        elseif f then
             pcall(function()
                 f.HighlightSystem = Noop
                 f.SelectSystem = Noop
@@ -444,6 +479,23 @@ local BAG_BUTTONS = { "MainMenuBarBackpackButton", "CharacterBag0Slot", "Charact
                       "CharacterBag3Slot", "KeyRingButton" }
 
 function AB:HideBagButtons()
+    -- WoW Forever: the bag buttons live in BagsBar, an Edit Mode piece with its own frame art. Fade it all out
+    -- and stop it taking clicks instead of moving Blizzard's buttons around.
+    local bagsBar = _G.BagsBar
+    if CysUICompat and CysUICompat.isForever and bagsBar then
+        pcall(bagsBar.SetAlpha, bagsBar, 0)
+        if not InCombatLockdown() then
+            if bagsBar.EnableMouse then pcall(bagsBar.EnableMouse, bagsBar, false) end
+            for _, c in ipairs({ bagsBar:GetChildren() }) do
+                if c.EnableMouse then pcall(c.EnableMouse, c, false) end
+            end
+            for _, name in ipairs(BAG_BUTTONS) do
+                local b = _G[name]
+                if b and b.EnableMouse then pcall(b.EnableMouse, b, false) end
+            end
+        end
+        return
+    end
     for _, name in ipairs(BAG_BUTTONS) do Kill(_G[name]) end
 end
 local ART = { "MainMenuBarLeftEndCap", "MainMenuBarRightEndCap", "MainMenuBarTexture0", "MainMenuBarTexture1",
@@ -474,8 +526,32 @@ local function SweepFrame(frame, depth)
         end
     end
 end
+-- WoW Forever: the main bar's gryphons, frame art and page arrows are Edit Mode pieces that re-show and
+-- re-anchor themselves after load, so parking them doesn't stick. Fade them to invisible instead: the game
+-- never resets their alpha, and alpha changes don't taint anything.
+local function FadeForeverArt()
+    if not (CysUICompat and CysUICompat.isForever) then return end
+    local mab = _G.MainActionBar
+    if not mab then return end
+    local caps = mab.EndCaps
+    local list = { mab.BorderArt, mab.ActionBarPageNumber, caps }
+    if caps then
+        for _, k in ipairs({ "LeftEndCap", "RightEndCap" }) do
+            local cap = caps[k]
+            if cap then list[#list + 1] = cap; list[#list + 1] = cap.Texture end
+        end
+    end
+    for _, o in pairs(list) do
+        if o and o.SetAlpha then pcall(o.SetAlpha, o, 0) end
+    end
+end
+AB.FadeForeverArt = FadeForeverArt
+
 function AB:SweepArt()
-    if not DB().art or InCombatLockdown() then return end
+    if CysUICompat and CysUICompat.isForever and DB().hideBagButtons then AB:HideBagButtons() end
+    if not DB().art then return end
+    FadeForeverArt()
+    if InCombatLockdown() then return end
     for _, parent in ipairs({ _G.MainMenuBar, _G.MainMenuBarArtFrame }) do SweepFrame(parent, 0) end
 end
 
@@ -624,7 +700,9 @@ function AB.Enable()
             for _, k in ipairs({ "BackgroundArtLeft", "BackgroundArtMiddle", "BackgroundArtRight" }) do Kill(_G.StanceBar[k]) end
         end
         -- newer client layouts keep the gryphons, background and page arrows as parts of the main bar
-        for _, parent in ipairs({ _G.MainMenuBar, _G.MainMenuBarArtFrame, _G.MainActionBar }) do
+        -- (WoW Forever fades them instead: see FadeForeverArt)
+        local isForever = CysUICompat and CysUICompat.isForever
+        for _, parent in pairs({ _G.MainMenuBar, _G.MainMenuBarArtFrame, (not isForever) and _G.MainActionBar or nil }) do
             if parent then
                 for _, k in ipairs({ "ActionBarPageNumber", "PageNumber", "UpButton", "DownButton", "EndCaps",
                                      "ActionBarUpButton", "ActionBarDownButton",
@@ -641,6 +719,9 @@ function AB.Enable()
     if EditModeManagerFrame and EditModeManagerFrame.HookScript and not AB.editHooked then
         AB.editHooked = true
         EditModeManagerFrame:HookScript("OnShow", function(self)
+            -- WoW Forever: closing Edit Mode from addon code taints it, and some settings (Always Show Buttons)
+            -- only live there, so it stays open on Forever
+            if CysUICompat and CysUICompat.isForever then return end
             if not DB().blockEditMode or InCombatLockdown() then return end
             if AB.editBlockedAt and GetTime() - AB.editBlockedAt < 2 then return end
             AB.editBlockedAt = GetTime()
@@ -695,6 +776,9 @@ function AB.Enable()
     local refreshQueued
     local function RefreshButtons()
         refreshQueued = false
+        -- WoW Forever: calling the game's button updates from addon code taints every action button (their
+        -- cooldowns then error on locked values). The retail client redraws its own buttons, so skip it there.
+        if CysUICompat and CysUICompat.isForever then return end
         -- the game's own "redraw every action bar" routine, when this client has it
         if ActionBarController_UpdateAll then pcall(ActionBarController_UpdateAll, true) end
         for _, def in pairs(DEFS) do
@@ -837,7 +921,10 @@ CUI:RegisterPage("Action Bars", function(page)
         function() if DB().hideStatusBars then AB:HideStatusBars() end end)
     Check("Hide Blizzard's bag buttons (turning off needs a /reload)", "hideBagButtons",
         function() if DB().hideBagButtons then AB:HideBagButtons() end end)
-    Check("Turn off Blizzard's Edit Mode (use /cui layout instead)", "blockEditMode")
+    -- WoW Forever: Edit Mode can't be closed from an addon without breaking it, and it holds settings Forever needs
+    if not (CysUICompat and CysUICompat.isForever) then
+        Check("Turn off Blizzard's Edit Mode (use /cui layout instead)", "blockEditMode")
+    end
     Check("Hide macro names", "hideNames", function() AB:ApplyNames() end)
     Check("Show cooldown numbers", "cooldownNumbers", function() AB:ApplyCooldownNumbers() end)
     Check("Red icon when my target is out of range", "rangeColor")

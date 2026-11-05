@@ -135,7 +135,8 @@ local function EnsureButtons()
 end
 
 local function UpdateButtons()
-    local show = V.merchantOpen and CysUIDB.vendor.showButton
+    -- with auto-sell on the junk is gone as soon as the vendor opens, so the button has nothing to do
+    local show = V.merchantOpen and CysUIDB.vendor.showButton and not CysUIDB.vendor.autoSell
     local junk = show and #ScanJunk() or 0
     for _, b in pairs(buttons) do
         b:SetShown(show and true or false)
@@ -253,7 +254,7 @@ CUI:RegisterPage("Vendor", function(page)
         cb:SetPoint("TOPLEFT", 4, y)
         return cb
     end
-    Toggle("Show a Sell Junk button when you're at a vendor", "showButton", -34)
+    Toggle("Show a Sell Junk button at vendors (hidden while auto-sell is on)", "showButton", -34)
     Toggle("Automatically sell junk when you open a vendor", "autoSell", -64)
     Toggle("Automatically repair your gear when you open a vendor", "autoRepair", -94)
     local coin = W.Checkbox(page, "Mark the quest reward that sells for the most with a gold coin",

@@ -33,6 +33,18 @@ CUI:RegisterPage("Totem Bar", function(page)
     end
     Check("Warn before a totem runs out", "alertExpiring")
     Check("Tell me when a totem is gone", "alertGone")
+    -- the action-bar macros (also in Drop All's right-click menu)
+    local mac = W.Checkbox(page, "Keep action-bar macros in step (CT_Earth, CT_Fire, CT_Water, CT_Air, CT_DropAll)",
+        function() return db.macros end,
+        function(on)
+            db.macros = on and true or false
+            if on and _G.CysTotemsSyncMacros then
+                _G.CysTotemsSyncMacros(true)
+                CUI:Print("Totem macros are ready in /macro (character macros). Drag them onto your bars; they follow your picks.")
+            end
+        end)
+    mac:SetPoint("TOPLEFT", 4, y)
+    y = y - 26
 
     y = y - 8
     local move = W.Button(page, 240, 22, "Move the bar (layout mode)")

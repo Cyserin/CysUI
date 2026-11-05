@@ -1,5 +1,6 @@
 CysUI:RegisterModule({
     key = "skills", name = "Cys's Skills",
+    forever = false, -- reads the old skill list (GetNumSkillLines / GetSkillLineInfo), which WoW Forever removed
     desc = "Weapon skill and profession tracker for the gear you have equipped. Move it in layout mode.",
     open = function() CysUI:OpenConfig("Skill Tracker") end,
     body = function(...)

@@ -46,10 +46,21 @@ local function PlaceTimer(f)
     end
 end
 
+-- WoW Forever only lets Blizzard's own secure code cancel buffs, so there the buff icons are secure buttons whose
+-- right-click runs the game's "cancelaura" action (set up in Fill). Secure buttons can't be changed in combat, which
+-- fits: auras are locked in combat on Forever anyway, so the icons are only updated out of combat there.
+local IS_FOREVER = CysUICompat and CysUICompat.isForever
+
 local function CreateAuraIcon(parent, size, isDebuff)
-    local f = CreateFrame("Button", nil, parent)
+    local secure = IS_FOREVER and not isDebuff
+    local f = CreateFrame("Button", nil, parent, secure and "SecureActionButtonTemplate" or nil)
     f:SetSize(size, size)
-    f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    if secure then
+        f:RegisterForClicks("RightButtonUp", "RightButtonDown")
+        f.cysSecure = true
+    else
+        f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    end
     f.isDebuff = isDebuff
 
     f.icon = f:CreateTexture(nil, "BACKGROUND")
@@ -70,14 +81,15 @@ local function CreateAuraIcon(parent, size, isDebuff)
     f:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- right-click takes a buff off, exactly like Blizzard's buff frame does
-    f:SetScript("OnClick", function(self, button)
+    -- (on WoW Forever the secure template's own click does it: see Fill)
+    if not f.cysSecure then f:SetScript("OnClick", function(self, button)
         if button ~= "RightButton" or self.isDebuff or not DB().rightClickCancel then return end
         if self.isWeaponEnchant then
             pcall(CancelItemTempEnchantment, self.isWeaponEnchant)
         elseif self.auraIndex then
             pcall(CancelUnitBuff, "player", self.auraIndex, "HELPFUL")
         end
-    end)
+    end) end
 
     f.count = f:CreateFontString(nil, "OVERLAY")
     f.count:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
@@ -155,6 +167,22 @@ local function Fill(list, holder, auras, limit, isDebuff)
         f.auraIndex = aura.auraIndex
         f.auraType = aura.auraType
         f.isWeaponEnchant = aura.isWeaponEnchant
+        if f.cysSecure then
+            -- Forever: tell the secure button what a right-click cancels (by name, so a shifted list can't
+            -- make it cancel the wrong buff; weapon enchants by their slot)
+            local cancel = db.rightClickCancel and "cancelaura" or nil
+            if aura.isWeaponEnchant then
+                -- Forever's secure cancel for weapon enchants is broken in the game itself (CANCELABLE_ITEMS is
+                -- missing), and only Blizzard's code may call the newer cancel. So no right-click cancel for them.
+                f:SetAttribute("type2", nil)
+                f:SetAttribute("spell2", nil)
+                f:SetAttribute("target-slot2", nil)
+            else
+                f:SetAttribute("type2", cancel)
+                f:SetAttribute("target-slot2", nil)
+                f:SetAttribute("spell2", aura.name)
+            end
+        end
         f:SetSize(size, size)
         local col = (shown - 1) % perRow
         local row = floor((shown - 1) / perRow)
@@ -174,6 +202,9 @@ end
 local function UpdateAuras()
     local db = DB()
     if not buffHolder or not debuffHolder then return end
+    -- WoW Forever: the buff icons are secure there, so nothing may be shown, hidden or moved in combat
+    -- (auras are locked in combat anyway); PLAYER_REGEN_ENABLED brings it up to date afterwards
+    if IS_FOREVER and InCombatLockdown() then return end
     if not db.enabled then buffHolder:Hide(); debuffHolder:Hide() return end
     buffHolder:Show()
     debuffHolder:Show()

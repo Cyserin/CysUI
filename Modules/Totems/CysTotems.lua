@@ -11,12 +11,23 @@ CysTotemsDB.selectedImbue = CysTotemsDB.selectedImbue or "Rockbiter Weapon"
 CysTotemsDB.choice = CysTotemsDB.choice or {}      -- [element key] = totem spell name
 CysTotemsDB.dropAll = CysTotemsDB.dropAll or {}    -- [element key] = false when left out of Drop All
 CysTotemsDB.loadouts = CysTotemsDB.loadouts or {}  -- [name] = { earth=..., fire=..., water=..., air=... }
-if CysTotemsDB.macros == nil then CysTotemsDB.macros = false end
+if CysTotemsDB.macros == nil then CysTotemsDB.macros = true end -- new setups get the action-bar macros
 if CysTotemsDB.alertExpiring == nil then CysTotemsDB.alertExpiring = true end
 if CysTotemsDB.alertGone == nil then CysTotemsDB.alertGone = true end
 local db = CysTotemsDB
 
 local f = CreateFrame("Frame", "CysTotemsFrame", UIParent)
+
+-- WoW Forever locks totem info like auras. TotemInfo returns plain values, or nils plus
+-- locked = true (and the raw start/duration, which the cooldown swipe can still take).
+local IsSecret = (CysUICompat and CysUICompat.Secret) or function() return false end
+local function TotemInfo(slot)
+    local have, name, start, dur, icon = GetTotemInfo(slot)
+    if IsSecret(have) or IsSecret(name) or IsSecret(start) or IsSecret(dur) then
+        return nil, nil, nil, nil, nil, true, start, dur
+    end
+    return have, name, start, dur, icon, false
+end
 f:SetSize(264, 42)
 f:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
 -- position comes from layout mode (/cui layout)
@@ -43,6 +54,9 @@ local function CreateIconBox(parent, size, labelText, secure, name)
     if secure then
         box = CreateFrame("Button", name, parent, "SecureActionButtonTemplate")
         box:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        -- act on the mouse release: with "cast on key down" (WoW Forever's default) secure buttons only act on the
+        -- press, which these buttons don't listen for, so a left-click did nothing there
+        box:SetAttribute("useOnKeyDown", false)
     else
         box = CreateFrame("Frame", nil, parent)
     end
@@ -67,6 +81,7 @@ local function CreateIconBox(parent, size, labelText, secure, name)
     box.icon:SetVertexColor(0.4, 0.4, 0.4)
 
     box.cd = CreateFrame("Cooldown", nil, box, "CooldownFrameTemplate")
+    if box.cd.SetHideCountdownNumbers then box.cd:SetHideCountdownNumbers(true) end -- our own timer text shows the time
     box.cd:SetAllPoints(box.icon)
     box.cd:SetDrawEdge(false)
 
@@ -152,6 +167,7 @@ imbueBox.icon:SetPoint("BOTTOMRIGHT", -2, 2)
 imbueBox.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
 imbueBox.cd = CreateFrame("Cooldown", nil, imbueBox, "CooldownFrameTemplate")
+if imbueBox.cd.SetHideCountdownNumbers then imbueBox.cd:SetHideCountdownNumbers(true) end
 imbueBox.cd:SetAllPoints(imbueBox.icon)
 imbueBox.cd:SetDrawEdge(false)
 
@@ -280,8 +296,28 @@ local function SetMacro(name, body, create)
 end
 
 -- keeps the macros in step with your picks (created the first time you switch the option on)
-local function SyncMacros(create)
+local SyncMacrosWarned
+-- The game loads your macros a moment after login; until then every macro looks missing, and creating them
+-- then would make duplicates. So new macros are only made once the macro list is known to be loaded.
+local macrosReady = false
+local SyncMacros
+do
+    local mev = CreateFrame("Frame")
+    mev:RegisterEvent("UPDATE_MACROS")
+    mev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    mev:SetScript("OnEvent", function(self, event)
+        if macrosReady then return end
+        C_Timer.After(event == "UPDATE_MACROS" and 0.5 or 3, function()
+            if macrosReady then return end
+            macrosReady = true -- the list has arrived (or, 3 s after loading in, surely has)
+            self:UnregisterAllEvents()
+            if not InCombatLockdown() and SyncMacros then SyncMacros(true) end
+        end)
+    end)
+end
+function SyncMacros(create) -- (the local declared above)
     if not db.macros or InCombatLockdown() then return end
+    if not macrosReady then create = false end
     local level = UnitLevel("player") or 1
     local failed = false
     for _, data in ipairs(elementData) do
@@ -293,7 +329,8 @@ local function SyncMacros(create)
     local text = DropAllText()
     if text and not SetMacro(MACRO_DROPALL, MacroBody(text), create) then failed = true end
     if not failed then db.macroIconFix = true end
-    if failed and create then
+    if failed and create and not SyncMacrosWarned then
+        SyncMacrosWarned = true -- once per session
         Say("|cFFFF4040Couldn't make every macro (you may be out of character macro slots).|r")
     end
 end
@@ -334,7 +371,7 @@ local function ApplyChoices()
         dropAll:SetAttribute("type1", nil)
         dropAll:SetAttribute("macrotext1", nil)
     end
-    SyncMacros(false)
+    SyncMacros(true) -- also puts back a missing one (a fresh client like WoW Forever, or one deleted by mistake)
     UpdateDropAllIcon()
 end
 
@@ -517,7 +554,7 @@ for _, box in ipairs(slots) do
             GameTooltip:AddLine("You don't know a " .. data.name:lower() .. " totem yet", 0.7, 0.7, 0.7)
         end
         GameTooltip:AddLine("Right-click: choose a different totem", 0.7, 0.7, 0.7)
-        local have, tName, start, dur = GetTotemInfo(data.elementID)
+        local have, tName, start, dur = TotemInfo(data.elementID)
         if have and tName and tName ~= "" and dur and dur > 0 then
             local rem = start + dur - GetTime()
             if rem > 0 then GameTooltip:AddLine(format("Down now: %s (%d sec left)", tName, rem), 0.4, 1, 0.4) end
@@ -560,9 +597,13 @@ local function UpdateTimersAndAlerts()
         local data = box.data
         local st = alertState[data.key]
         if not st then st = {}; alertState[data.key] = st end
-        local have, name, start, dur, icon = GetTotemInfo(data.elementID)
+        local have, name, start, dur, icon, locked, rawStart, rawDur = TotemInfo(data.elementID)
         local active = have and name and name ~= "" and dur and dur > 0
-        if active then
+        if locked then
+            -- WoW Forever: no timer text or alerts while totem info is locked; the swipe still runs
+            box.timer:SetText("")
+            pcall(box.cd.SetCooldown, box.cd, rawStart, rawDur)
+        elseif active then
             local endTime = start + dur
             local rem = endTime - now
             if rem < 0 then rem = 0 end
@@ -607,7 +648,12 @@ f:SetScript("OnUpdate", function(self, elapsed)
     self.tick = (self.tick or 0) + elapsed
     if self.tick < 0.1 then return end
     self.tick = 0
-    UpdateTimersAndAlerts()
+    if CysUICompat and CysUICompat.isForever then
+        local ok, err = pcall(UpdateTimersAndAlerts)
+        if not ok and not self.reported then self.reported = true; print("|cFFFFD100[Cys's UI]|r Totems: " .. tostring(err)) end
+    else
+        UpdateTimersAndAlerts()
+    end
 end)
 
 -- /cystotems for macros and quick use
@@ -693,10 +739,12 @@ local function UpdateLayoutAndTotems()
         box:SetPoint("LEFT", f, "LEFT", (i - 1) * 44, 0)
     end
         
-        local haveTotem, name, startTime, duration, icon = GetTotemInfo(box.elementID)
+        local haveTotem, name, startTime, duration, icon, locked = TotemInfo(box.elementID)
         local data = box.data
 
-        if haveTotem and name ~= "" and duration > 0 then
+        if locked then
+            -- WoW Forever: totem info locked; keep the slot as it was
+        elseif haveTotem and name ~= "" and duration > 0 then
             box.icon:SetTexture(icon)
             box.icon:SetDesaturated(false)
             box.icon:SetVertexColor(1, 1, 1)
@@ -809,6 +857,35 @@ local function UpdateImbue()
     end
 end
 _G.CysTotemsUpdateImbueVisual = UpdateImbue
+
+-- WoW Forever has Blizzard's own (Wrath-style) totem bar, MultiCastActionBarFrame, which shows up once you learn
+-- a totem. This bar does the same job, so Blizzard's is faded out and stops taking clicks. Only alpha and mouse
+-- are touched (no reparenting: it's a secure bar), and never in combat.
+do
+    local function HideBlizzardTotemBar()
+        local bar = _G.MultiCastActionBarFrame
+        if not bar or InCombatLockdown() then return end
+        pcall(bar.SetAlpha, bar, 0)
+        if bar.EnableMouse then pcall(bar.EnableMouse, bar, false) end
+        local function Quiet(fr, depth)
+            for _, c in ipairs({ fr:GetChildren() }) do
+                if c.EnableMouse then pcall(c.EnableMouse, c, false) end
+                if depth < 3 then Quiet(c, depth + 1) end
+            end
+        end
+        Quiet(bar, 0)
+        if not bar.cysHooked then
+            bar.cysHooked = true
+            bar:HookScript("OnShow", function() C_Timer.After(0, HideBlizzardTotemBar) end)
+        end
+    end
+    local hev = CreateFrame("Frame")
+    hev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    hev:RegisterEvent("SPELLS_CHANGED")
+    hev:RegisterEvent("PLAYER_REGEN_ENABLED")
+    hev:SetScript("OnEvent", function() C_Timer.After(0.5, HideBlizzardTotemBar) end)
+end
+_G.CysTotemsSyncMacros = function(create) if SyncMacros then SyncMacros(create) end end -- for the settings page
 
 
 

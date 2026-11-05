@@ -156,6 +156,17 @@ end
 --------------------------------------------------------------------------------
 local frame, header, sidebar, footer, scroll, content
 local holders, buttons = {}, {}
+
+-- WoW Forever runs on the retail client: item buttons are their own frame type ("ItemButton")
+-- and ItemButtonTemplate no longer exists as an XML template. Era keeps the old Button + template.
+local IS_FOREVER = CysUICompat and CysUICompat.isForever
+local function NewItemButton(name, parent, template)
+    if IS_FOREVER then
+        if template == "ItemButtonTemplate" then template = nil end
+        return CreateFrame("ItemButton", name, parent, template)
+    end
+    return CreateFrame("Button", name, parent, template)
+end
 local sidebarButtons = {}
 local sectionHeaders = {}
 local activeButtons = {}
@@ -351,7 +362,8 @@ end
 
 local function CreateItemButton(bag, slot)
     local name = "CysBagsItem" .. bag .. "_" .. slot
-    local btn = CreateFrame("Button", name, holders[bag], "ContainerFrameItemButtonTemplate")
+    local btn = NewItemButton(name, holders[bag], "ContainerFrameItemButtonTemplate")
+    if btn.SetBagID then btn:SetBagID(bag) end -- retail item buttons keep their own bag ID
     btn:SetID(slot)
     btn:SetSize(SLOT_SIZE, SLOT_SIZE)
 
@@ -1172,7 +1184,7 @@ end
 local function CreateBagSlotButton(i)
     local invID = GetBagInventorySlot(i)
     local name = "CysBagsBagSlot" .. i
-    local btn = CreateFrame("Button", name, footer, "ItemButtonTemplate")
+    local btn = NewItemButton(name, footer, "ItemButtonTemplate")
     btn:SetSize(BAGSLOT_SIZE, BAGSLOT_SIZE)
     btn:SetID(invID)
     btn.bagID = i
@@ -1563,6 +1575,7 @@ function CysBags:CreateFrames()
         local holder = CreateFrame("Frame", "CysBagsBagHolder" .. bag, content)
         holder:SetAllPoints(content)
         holder:SetID(bag)
+        holder.GetBagID = holder.GetID -- retail item button code asks its parent for GetBagID()
         holders[bag] = holder
         buttons[bag] = {}
     end

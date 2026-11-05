@@ -775,7 +775,7 @@ local function Refresh(fresh)
         y = y - 18
     end
     y = y - 10
-    y = y - Para(y, "Per mana is heal divided by mana cost. Bonus kept is how much of your bonus healing the rank keeps: spells learned under level 20 and ranks far below your level lose some, which is the downranking penalty. Group heals show the first target. Damage-over-time and heal-over-time parts of spells (Regrowth, Renew) are not counted. These are estimates; /cuiheal logs the heal preview next to the real heal if a number looks off.", T.dim) - 10
+    y = y - Para(y, "Per mana is heal divided by mana cost. Bonus kept is how much of your bonus healing the rank keeps: spells learned under level 20 and ranks far below your level lose some, which is the downranking penalty. Group heals show the first target. Damage-over-time and heal-over-time parts of spells (Regrowth, Renew) are not counted. These are estimates" .. ((CysUICompat and CysUICompat.isForever) and "." or "; /cuiheal logs the heal preview next to the real heal if a number looks off."), T.dim) - 10
 
     content:SetHeight(math.max(-y + 10, 100))
 end
@@ -1262,6 +1262,10 @@ end)
 SLASH_CUIHEAL1 = "/cuiheal"
 SlashCmdList["CUIHEAL"] = function(msg)
     msg = strtrim((msg or ""):lower())
+    if CysUICompat and CysUICompat.isForever then
+        CUI:Print("The heal test reads the combat log, which addons can't see on WoW Forever. /cuirank still works.")
+        return
+    end
     if not FAMILY[myClass] then
         CUI:Print("The heal test is for Druids, Paladins, Priests and Shamans.")
         return

@@ -614,14 +614,35 @@ local function CreateWindow()
             b.label = W.Text(b, 12, b.baseColor)
             b.label:SetPoint("LEFT", section.level == 2 and 36 or 14, 0)
             b.label:SetText(LABELS[CUI.pages[i].title] or CUI.pages[i].title)
-            b:SetScript("OnClick", function() SelectPage(i) end)
+            b:SetScript("OnClick", function()
+                SelectPage(i)
+                if f.searchHits and f.ShowHit then f.ShowHit(i) end
+            end)
             pageButtons[i] = b
-            entries[#entries + 1] = { page = b, level = section.level, hasHead = section.name ~= nil }
+            entries[#entries + 1] = { page = b, index = i, level = section.level, hasHead = section.name ~= nil }
         end
     end
     function Layout()
         local fold = Folded()
         local y = -8
+        -- while searching: just the matching pages, flat, no headings
+        if f.searchHits then
+            for _, e in ipairs(entries) do
+                if e.head then
+                    e.head:Hide()
+                elseif f.searchHits[e.index] then
+                    e.page:ClearAllPoints()
+                    e.page:SetPoint("TOPLEFT", 0, y); e.page:SetPoint("TOPRIGHT", 0, y)
+                    e.page:Show()
+                    y = y - 27
+                else
+                    e.page:Hide()
+                end
+            end
+            side:SetHeight(max(-y + 8, 100))
+            sideScroll:SetVerticalScroll(0)
+            return
+        end
         local topFolded, subFolded = false, false
         for _, e in ipairs(entries) do
             if e.head then
@@ -661,6 +682,132 @@ local function CreateWindow()
         side:SetHeight(max(-y + 8, 100))
     end
     Layout()
+    f.Layout = Layout
+
+    -- Search: finds pages by their name and by any text on them (setting labels, notes), so a setting can be
+    -- found without knowing which page it's on. Every page is built the first time you search.
+    local index
+    local function BuildIndex()
+        index = {}
+        for i, def in ipairs(CUI.pages) do
+            local page = EnsurePage(i)
+            local list = { { text = ((LABELS[def.title] or def.title) .. " " .. def.title):lower() } }
+            local function Walk(fr, depth)
+                if depth > 8 then return end
+                local okR, regions = pcall(function() return { fr:GetRegions() } end)
+                if okR then
+                    for _, r in ipairs(regions) do
+                        if r.GetObjectType and r:GetObjectType() == "FontString" then
+                            local okT, t = pcall(r.GetText, r)
+                            if okT and type(t) == "string" and t ~= "" then
+                                list[#list + 1] = { text = t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower(), fs = r }
+                            end
+                        end
+                    end
+                end
+                local okC, kids = pcall(function() return { fr:GetChildren() } end)
+                if okC then for _, c in ipairs(kids) do Walk(c, depth + 1) end end
+            end
+            Walk(page, 0)
+            index[i] = list
+        end
+    end
+
+    local function Matches(i, q)
+        local found
+        for _, item in ipairs(index[i] or {}) do
+            if item.text:find(q, 1, true) then
+                if not item.fs then return true, nil end -- the page name itself
+                found = found or item.fs
+            end
+        end
+        return found ~= nil, found
+    end
+
+    -- jump to and briefly light up the first matching line on a page
+    local function ShowHit(i)
+        local q = f.searchText
+        if not q then return end
+        local _, fs = Matches(i, q)
+        local page = pageFrames[i]
+        if not (fs and page) then return end
+        C_Timer.After(0, function()
+            local pt, ft = page:GetTop(), fs:GetTop()
+            if pt and ft then
+                local range = f.scroll:GetVerticalScrollRange() or 0
+                f.scroll:SetVerticalScroll(max(0, math.min(range, pt - ft - 40)))
+            end
+            local r, g, b = fs:GetTextColor()
+            fs:SetTextColor(T.glow[1], T.glow[2], T.glow[3])
+            C_Timer.After(2, function() if r then fs:SetTextColor(r, g, b) end end)
+        end)
+    end
+    f.ShowHit = ShowHit
+
+    local box = CreateFrame("EditBox", nil, header)
+    box:SetSize(170, 22)
+    box:SetPoint("RIGHT", layoutBtn, "LEFT", -8, 0)
+    box:SetAutoFocus(false)
+    box:SetFontObject(ChatFontNormal)
+    box:SetFont(STANDARD_TEXT_FONT, 11, "")
+    box:SetTextInsets(8, 22, 0, 0)
+    box:SetMaxLetters(40)
+    W.Texture(box, "BACKGROUND", T.field or T.bg):SetAllPoints()
+    box.edges = W.Border(box, 1, T.line, "BORDER")
+    local hint = W.Text(box, 11, T.desc)
+    hint:SetPoint("LEFT", 8, 0)
+    hint:SetText("Search settings")
+    local clear = CreateFrame("Button", nil, box)
+    clear:SetSize(18, 18)
+    clear:SetPoint("RIGHT", -2, 0)
+    clear.text = W.Text(clear, 12, T.desc, "CENTER")
+    clear.text:SetPoint("CENTER")
+    clear.text:SetText("x")
+    clear:Hide()
+    local noHits = W.Text(side, 11, T.desc)
+    noHits:SetPoint("TOPLEFT", 14, -14)
+    noHits:SetWidth(SIDEBAR_W - 28)
+    noHits:SetJustifyH("LEFT")
+    noHits:SetText("Nothing matches.")
+    noHits:Hide()
+
+    local function Run()
+        local q = strtrim(box:GetText() or ""):lower()
+        hint:SetShown(q == "" and not box:HasFocus())
+        clear:SetShown(q ~= "")
+        if #q < 2 then
+            f.searchHits, f.searchText = nil, nil
+            noHits:Hide()
+            Layout()
+            return
+        end
+        if not index then BuildIndex() end
+        local hits, first, count = {}, nil, 0
+        for i in ipairs(CUI.pages) do
+            if pageButtons[i] and Matches(i, q) then
+                hits[i] = true
+                count = count + 1
+                first = first or i
+            end
+        end
+        f.searchHits, f.searchText = hits, q
+        noHits:SetShown(count == 0)
+        Layout()
+        -- open the first hit unless the page you're on already matches
+        if count > 0 then
+            if not (current and hits[current]) then SelectPage(first) end
+            ShowHit(current)
+        end
+    end
+    box:SetScript("OnTextChanged", Run)
+    box:SetScript("OnEditFocusGained", function() hint:Hide(); W.SetBorder(box.edges, T.glow) end)
+    box:SetScript("OnEditFocusLost", function() W.SetBorder(box.edges, T.line); Run() end)
+    box:SetScript("OnEscapePressed", function(self)
+        if (self:GetText() or "") ~= "" then self:SetText("") else self:ClearFocus() end
+    end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    clear:SetScript("OnClick", function() box:SetText(""); box:ClearFocus() end)
+    f.searchBox = box
 
     -- Collapse all / Expand all, under the list
     local foldBar = CreateFrame("Frame", nil, sidebar)
@@ -745,4 +892,35 @@ function CUI:OpenConfig(pageTitle)
     for i, page in ipairs(CUI.pages) do
         if page.title == pageTitle then SelectPage(i) return end
     end
+end
+
+--------------------------------------------------------------------------------
+-- An entry under Options > AddOns with a button that opens the /cui window. (WoW Forever only shows the
+-- Game / AddOns tabs once some addon has a page there, so without this they were missing.)
+--------------------------------------------------------------------------------
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_LOGIN")
+    ev:SetScript("OnEvent", function(self)
+        self:UnregisterAllEvents()
+        if not (Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory) then return end
+        local panel = CreateFrame("Frame")
+        panel:Hide()
+        local title = W.Text(panel, 16, T.accent)
+        title:SetPoint("TOPLEFT", 16, -16)
+        title:SetText("Cys's UI")
+        local desc = W.Text(panel, 12, T.text)
+        desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+        desc:SetWidth(520)
+        desc:SetJustifyH("LEFT")
+        desc:SetText("All of Cys's UI's settings live in its own window. Type /cui any time, or press the button below.")
+        local open = W.Button(panel, 220, 26, "Open Cys's UI settings")
+        open:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -16)
+        open:SetScript("OnClick", function()
+            if not (window and window:IsShown()) then CUI:ToggleConfig() end
+            if window then window:Raise() end
+        end)
+        local ok, category = pcall(Settings.RegisterCanvasLayoutCategory, panel, "Cys's UI")
+        if ok and category then pcall(Settings.RegisterAddOnCategory, category) end
+    end)
 end

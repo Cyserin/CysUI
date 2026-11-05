@@ -53,6 +53,13 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.
 
+## Added in 0.58.0
+- **WoW Forever support**: runs on the Forever client; modules that need the combat log (hidden from addons there) switch themselves off, and everything else works around Forever's locked values.
+- **Forever skins**: the new character window and Blizzard's built-in damage meter, plus Forever's right-click menus.
+- **Settings search** in the `/cui` top bar, and a **Cys's UI page under Options > AddOns**.
+- **Heal prediction** on Forever uses real incoming heals from every healer.
+- **Totem Bar**: macros option on its settings page; missing macros come back by themselves.
+
 ## Added in 0.57.0
 - **Consumables**: self-updating Food, Drink, HP Potion, MP Potion, Bandage and Healthstone macros (conjured first), plus a per-character restock list bought at vendors.
 - **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, group level check (LFG listing and inside dungeons).

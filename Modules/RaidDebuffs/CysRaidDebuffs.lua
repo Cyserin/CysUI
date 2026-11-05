@@ -168,6 +168,7 @@ local function MakeBox(ci)
     b.cd = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
     b.cd:SetAllPoints()
     b.cd:SetDrawEdge(false)
+    CysUICompat.SmallCooldownText(b.cd, b:GetHeight() > 0 and b:GetHeight() or 20)
     b.cd.noCooldownCount = true   -- keeps cooldown-number addons (OmniCC and the like) from drawing a second counter
     if b.cd.SetHideCountdownNumbers then b.cd:SetHideCountdownNumbers(true) end
     local over = CreateFrame("Frame", nil, b)

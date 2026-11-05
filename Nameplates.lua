@@ -160,6 +160,7 @@ local function UpdateAuras(p)
                 a.cd = CreateFrame("Cooldown", nil, a, "CooldownFrameTemplate")
                 a.cd:SetAllPoints(a.icon)
                 if a.cd.SetDrawEdge then a.cd:SetDrawEdge(false) end
+                CysUICompat.SmallCooldownText(a.cd, a:GetHeight() > 0 and a:GetHeight() or 18)
                 p.auras[shown] = a
             end
             local size = max(db.height + 6, 14)

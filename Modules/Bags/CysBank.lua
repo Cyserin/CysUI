@@ -815,7 +815,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         if BankFrame and BankFrame.UnregisterAllEvents then pcall(BankFrame.UnregisterAllEvents, BankFrame) end
         for _, e in ipairs({ "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "BAG_UPDATE", "PLAYERBANKSLOTS_CHANGED",
                              "PLAYERBANKBAGSLOTS_CHANGED", "ITEM_LOCK_CHANGED", "PLAYER_MONEY" }) do
-            events:RegisterEvent(e)
+            pcall(events.RegisterEvent, events, e) -- WoW Forever lacks some bank events (PLAYERBANKBAGSLOTS_CHANGED)
         end
     elseif event == "BANKFRAME_OPENED" then
         CysBank.interacting = true

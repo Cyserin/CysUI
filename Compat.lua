@@ -52,6 +52,67 @@ function Compat.Flag(v)
     return v and true or false
 end
 
+-- WoW Forever heal prediction. The game gives real incoming heals there (every healer, not just you), but as a
+-- locked number, so no math: a status bar that starts where the health fill ends takes the locked amount as its
+-- value over max health, and the health bar clips it at the frame's edge. Overheal: an identical bar inside a
+-- clipping strip just past the frame's right edge, so only the part beyond full health shows there (one colour:
+-- telling a small overheal from a big one would need math on the locked number).
+-- owner: the frame to keep the bar on; health: its health StatusBar; color: { r, g, b, a }.
+function Compat.ForeverHealBar(owner, health, unit, color)
+    local bar = owner.cysForeverHeal
+    if not bar then
+        bar = CreateFrame("StatusBar", nil, health)
+        bar.cysOwn = true
+        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        local c = color or { 0.0, 0.75, 0.45, 0.6 }
+        bar:SetStatusBarColor(c[1], c[2], c[3], c[4] or 0.6)
+        local fill = health:GetStatusBarTexture()
+        bar:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+        bar:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT", 0, 0)
+        bar:SetFrameLevel(health:GetFrameLevel())
+        if health.SetClipsChildren then health:SetClipsChildren(true) end
+        owner.cysForeverHeal = bar
+
+        local strip = CreateFrame("Frame", nil, owner)
+        strip.cysOwn = true
+        strip:SetPoint("TOPLEFT", health, "TOPRIGHT", 1, 0)
+        strip:SetPoint("BOTTOMLEFT", health, "BOTTOMRIGHT", 1, 0)
+        strip:SetClipsChildren(true)
+        strip:SetFrameLevel(health:GetFrameLevel() + 2)
+        local over = CreateFrame("StatusBar", nil, strip)
+        over.cysOwn = true
+        over:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        over:SetStatusBarColor(0.0, 0.9, 0.8, 0.75)
+        over:SetPoint("TOPLEFT", fill, "TOPRIGHT", -1, 0) -- -1: the strip starts 1px past the frame
+        over:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT", -1, 0)
+        owner.cysForeverOver, owner.cysForeverStrip = over, strip
+    end
+    local w = math.max(health:GetWidth() or 1, 1)
+    bar:SetWidth(w)
+    local over, strip = owner.cysForeverOver, owner.cysForeverStrip
+    over:SetWidth(w)
+    strip:SetWidth(math.max(w * 0.6, 2)) -- up to 60% of the frame's width, like on Classic Era
+    local incoming = UnitGetIncomingHeals and UnitGetIncomingHeals(unit)
+    local mx = UnitHealthMax(unit)
+    local dead = UnitIsDeadOrGhost and Compat.Flag(UnitIsDeadOrGhost(unit)) -- may be locked for others
+    if incoming == nil or mx == nil or (dead == true) then bar:Hide(); strip:Hide() return end
+    local ok = pcall(bar.SetMinMaxValues, bar, 0, mx) and pcall(bar.SetValue, bar, incoming)
+    local ok2 = pcall(over.SetMinMaxValues, over, 0, mx) and pcall(over.SetValue, over, incoming)
+    bar:SetShown(ok)
+    strip:SetShown(ok2)
+end
+
+-- The game's own countdown text on a cooldown swipe ("59m") is drawn at full size; on small aura icons it spills
+-- far past the icon (WoW Forever shows it by default). Shrink it to fit an icon of `iconSize` pixels.
+function Compat.SmallCooldownText(cd, iconSize)
+    if not (cd and cd.GetCountdownFontString) then return end
+    local ok, fs = pcall(cd.GetCountdownFontString, cd)
+    if not ok or not (fs and fs.SetFont) then return end
+    local size = math.max(7, math.floor((iconSize or 20) * 0.45))
+    fs:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+    if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, 90) end -- "2m" not "120"
+end
+
 -- true while the game is hiding aura data (in combat on WoW Forever)
 function Compat.AurasLocked()
     if not (C_Secrets and C_Secrets.ShouldAurasBeSecret) then return false end
@@ -127,6 +188,17 @@ if C_Item then
     Shim("GetItemInfoInstant", C_Item.GetItemInfoInstant)
     Shim("GetItemCount", C_Item.GetItemCount)
     Shim("GetItemIcon", C_Item.GetItemIconByID)
+    Shim("GetItemStats", C_Item.GetItemStats)
+    Shim("EquipItemByName", C_Item.EquipItemByName)
+    Shim("GetItemQualityColor", C_Item.GetItemQualityColor)
+    Shim("IsEquippableItem", C_Item.IsEquippableItem)
+    Shim("IsEquippedItem", C_Item.IsEquippedItem)
+    Shim("IsUsableItem", C_Item.IsUsableItem)
+    Shim("GetItemSpell", C_Item.GetItemSpell)
+    Shim("GetItemCooldown", C_Item.GetItemCooldown)
+    Shim("GetDetailedItemLevelInfo", C_Item.GetDetailedItemLevelInfo)
+    Shim("GetItemClassInfo", C_Item.GetItemClassInfo)
+    Shim("GetItemSubClassInfo", C_Item.GetItemSubClassInfo)
 end
 
 -- auras: old UnitAura / UnitBuff / UnitDebuff return values in a list, the new call returns a table.
