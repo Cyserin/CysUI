@@ -162,7 +162,8 @@ end
 -- Saved settings
 --------------------------------------------------------------------------------
 local DEFAULTS = {
-    borderColor = "gold", -- gold / class / black / grey
+    borderColor = "gold", -- gold / brightgold / class / black / grey
+    windowStyle = "soft", -- soft / classic (panel colours; needs a /reload)
     modules = {}, -- [key] = false when switched off; missing = on
     vendor = { autoRepair = true, autoSell = false, showButton = true },
     tooltip = { skin = true, qualityBorder = true, sellPrice = true, classColors = true, healthBar = true,
@@ -177,7 +178,8 @@ local DEFAULTS = {
     scale = { mode = "off", percent = 100, prompted = false },
     nameplates = { width = 112, height = 10, showLevel = true, healthText = true, classColors = true,
                    targetHighlight = true, myDebuffs = true, castBar = true, threat = "auto", debuffSize = 20 },
-    chat = { skin = true, hideButtons = true, tabsSolid = true, classColors = true, timestamps = false, use24h = false, fontSize = 14 },
+    chat = { skin = true, hideButtons = true, tabsSolid = true, classColors = true, timestamps = false, use24h = false, fontSize = 14,
+             shortChannels = true },
     layout = {},      -- saved positions / sizes / scales from layout mode
     blueShaman = false, -- draw Shamans blue (the later-expansion color) instead of Classic Era's pink
     snap = true,      -- snap dragged elements to a grid
@@ -387,6 +389,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         -- per-character module switches; a character's first login copies the account-wide ones
         CysUICharDB = CysUICharDB or {}
         if type(CysUICharDB.modules) ~= "table" then CUI:SetModuleSwitches(CysUIDB.modules) end
+        if CUI.W and CUI.W.ApplyWindowStyle then CUI.W.ApplyWindowStyle() end -- before any window is built
         if CUI.W and CUI.W.ApplyBorderStyle then CUI.W.ApplyBorderStyle() end
         CUI:ApplyShamanColor()
         -- modules registered before the settings existed (the ones living in this addon)
@@ -461,9 +464,40 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.3",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.4",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.4", date = "2026-11-06",
+              improved = {
+                  "Chat: short channel names - [1. General] becomes [Gen], [2. Trade] becomes [T], [Guild] becomes [G] (switch on the Chat page).",
+                  "Chat: the tabs are flat Cys plates (Blizzard's tab art is gone) with the gold line under the open one, and the input box only shows its dark panel while you type.",
+                  "Cys's Bags: slightly smaller slots, 12 per row, and each section's last row is finished with empty dark slots so every section is a neat block.",
+                  "Cys's Bags: the window grows and shrinks to fit your items, so there is nothing to scroll (up to most of the screen height); the top edge stays where you put it. Switch on the Automation page.",
+                  "Cys's Bags: a < button at the bottom of the sidebar collapses it to icons only (hover an icon for its name), so the items get more room; > opens it again.",
+                  "Character window (Forever): the three small tabs above the stats lose Blizzard's round rings and get an even quiet edge, gold on the open one; the Equipment Manager's Equip, Save and New Set buttons are flat Cys buttons instead of red ones.",
+                  "Windows: looting no longer pushes an open Cys's UI window aside and back.",
+                  "Skills: the Skill Tracker box is replaced by skill-up text. When a weapon skill, Defense or profession goes up, a line like Axes 13 / 85 floats up above your player frame and fades. It moves in layout mode and now works on WoW Forever too.",
+                  "Windows: the Cys's UI settings, Friends and Heal Advisor windows no longer jump to the left a moment after opening; they only move aside when a Blizzard window is open.",
+                  "Esc menu: a gold Cys's UI button (between Shop and AddOns) opens the settings, like other big UIs have. Switch on the General page.",
+                  "Cys's Bags: Sort and Junk are now small icons beside the search box (Sort turns red while sorting; click again to stop), the old Guide button is gone, and each Armory set has its own row under Armory Sets in the sidebar.",
+                  "Cys's Bags: a small icon in front of each sidebar category, a quieter Inventory count in the title, and no more white edge on common items.",
+                  "Cys's Bags: categories with nothing in them are hidden from the sidebar (they come back while you hold an item, so you can still drop it there), and the bags open by themselves at a vendor, bank, mailbox or Auction House and close again when you leave. Both have switches on the Automation page.",
+                  "Quest tracker (Forever): the Cys dark background with the gold edge, a little roomier around the quests (switch on the Skins page). Map & Quest Log: zone names in the quest list are gold.",
+                  "Quest objectives are coloured by progress (soft red, amber, yellow; finished ones dim green) in the quest tracker on Forever and in mob tooltips on both clients. Switch on the Skins page.",
+                  "Classic Era: clams, sacks and other openable items in your bags open by themselves out of combat (switch on the Automation page).",
+                  "Roll Tracker: no longer pops open by itself when people join or leave the group; it opens when someone in the group does a /roll (passes typed in chat are still counted).",
+                  "Group invites: optionally accepted straight away when they come from a friend or guildmate (hold Shift to see the popup). Off until you tick it on the Automation page.",
+                  "Deleting an item: the DELETE word is typed in for you, so you only confirm (switch on the Automation page).",
+                  "Action bars: the gold slot edges are now 1 pixel thin by default, so the bars look lighter. Thin slot borders on the Action Bars page brings back the 2 pixel edge.",
+                  "Window style: a new Soft look (the default) with warm charcoal panels that let a touch of the world through and quieter frame edges; hover and selected highlights stay bright. Classic keeps the old flat black. Settings > Skins (needs a /reload).",
+                  "Windows: Cys's Bags, Cys's Bank, Roll Tracker, Friends and Skill Tracker (and the Level-up spells box) are dragged by their title bar (the Skill Tracker and Level-up box by their body) to any spot, and Bags, Bank and Friends get a small resize grip in the bottom-right corner. Layout mode no longer shows boxes for them, so it only holds bars, unit frames, chat, minimap, tooltips and alerts.",
+                  "World map on Forever: keeps Blizzard's own size, spot and title bar (with its + and X) and only gets the dark look, instead of being shrunk and moved, which squeezed the window.",
+                  "Border color: Gold is now a softer, muted gold so frames look calmer. The old bright gold is still there as Bright gold (Settings > Skins) for bright zones like the Barrens.",
+                  "Target frame and nameplates: new icon size settings for target buffs and debuffs (bigger by default) and for your debuffs on nameplates.",
+                  "Target frame: buffs and debuffs now really show in combat on Forever, with icons, stacks, timers and debuff-type borders. The game draws them into Cys's UI icons, so they work even while it locks aura details.",
+                  "Nameplates: your debuffs on enemies now show in combat on Forever.",
+              },
+            },
             { version = "0.58.3", date = "2026-11-05",
               improved = {
                   "Target frame and nameplates: new icon size settings for target buffs and debuffs (bigger by default) and for your debuffs on nameplates.",

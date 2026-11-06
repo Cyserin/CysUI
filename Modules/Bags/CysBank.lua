@@ -577,7 +577,9 @@ function CysBank:CreateFrames()
             maxW = SIDEBAR_W + PAD * 2 + 2 + (S.MAX_COLS or 16) * STEP - SLOT_GAP,
             minH = 300, maxH = 1000,
             onResize = function(_, w) CysBank:ApplySize(w) end,
+            freeMove = true, -- dragged by the title bar, resized by the corner grip
         })
+        if CysUI.MakeResizeGrip then CysUI:MakeResizeGrip("bank") end
     end
     tinsert(UISpecialFrames, "CysBankFrame")
 
@@ -592,9 +594,16 @@ function CysBank:CreateFrames()
     header:EnableMouse(true)
     header:RegisterForDrag("LeftButton")
     local function LayoutControlled() return CysUI and CysUI.movers and CysUI.movers.bank end
-    header:SetScript("OnDragStart", function() if not LayoutControlled() then frame:StartMoving() end end)
+    header:SetScript("OnDragStart", function()
+        if LayoutControlled() then
+            if CysUI.StartWindowDrag then CysUI:StartWindowDrag("bank") end
+        else frame:StartMoving() end
+    end)
     header:SetScript("OnDragStop", function()
-        if LayoutControlled() then return end
+        if LayoutControlled() then
+            if CysUI.StopWindowDrag then CysUI:StopWindowDrag("bank") end
+            return
+        end
         frame:StopMovingOrSizing()
         CysBank:SavePosition()
     end)

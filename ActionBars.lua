@@ -47,6 +47,7 @@ local DEFAULTS = {
     manaColor = true,      -- the icon turns blue when you don't have the mana / rage / energy
     showEmpty = true,      -- draw a dark slot behind every button, even empty ones
     goldBorders = true,    -- Cys gold edge on every slot (off = a quiet dark edge)
+    thinBorders = true,    -- the slot edge is 1 pixel (off = the older 2 pixel edge)
     blockEditMode = true,  -- Blizzard's HUD Edit Mode is switched off (it puts the old bars back); use /cui layout
     hideStatusBars = true, -- hide Blizzard's experience / reputation bars (Cys's XP bar replaces them)
     hideBagButtons = true, -- hide Blizzard's backpack / bag slot buttons (Cys's Bags has its own bag bar)
@@ -353,7 +354,7 @@ function AB:LayoutBar(key)
             slot = CreateFrame("Frame", nil, bar.container)
             slot:SetFrameStrata("BACKGROUND")
             W.Texture(slot, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.85 }):SetAllPoints()
-            -- the edge sits one pixel outside the slot so it stays two pixels thick around the icon
+            -- the edge sits one pixel outside the slot (1 pixel thick, or 2 with Thin slot borders off)
             local host = CreateFrame("Frame", nil, slot)
             host:SetPoint("TOPLEFT", slot, "TOPLEFT", -1, 1)
             host:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", 1, -1)
@@ -365,6 +366,9 @@ function AB:LayoutBar(key)
         slot:SetSize(w, h)
         slot:SetPoint("TOPLEFT", bar.container, "TOPLEFT", col * (w + gap), -row * (h + gap))
         W.SetBorder(slot.edges, DB().goldBorders and T.border or T.line)
+        local px = DB().thinBorders and 1 or 2
+        local e = slot.edges
+        e[1]:SetHeight(px); e[2]:SetHeight(px); e[3]:SetWidth(px); e[4]:SetWidth(px)
         slot:SetShown(def.skin and DB().showEmpty)
     end
     for i = n + 1, #bar.slots do bar.slots[i]:Hide() end
@@ -917,6 +921,7 @@ CUI:RegisterPage("Action Bars", function(page)
     Check("Short key text (S1, C2, WU)", "shortKeys", function() AB:RefreshKeys() end)
     Check("Show empty slots", "showEmpty", function() for key in pairs(AB.bars) do AB:LayoutBar(key) end end)
     Check("Gold borders", "goldBorders", function() for key in pairs(AB.bars) do AB:LayoutBar(key) end end)
+    Check("Thin slot borders (1 pixel instead of 2)", "thinBorders", function() for key in pairs(AB.bars) do AB:LayoutBar(key) end end)
     Check("Hide the experience and reputation bars (turning off needs a /reload)", "hideStatusBars",
         function() if DB().hideStatusBars then AB:HideStatusBars() end end)
     Check("Hide Blizzard's bag buttons (turning off needs a /reload)", "hideBagButtons",

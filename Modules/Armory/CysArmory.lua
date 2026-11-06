@@ -38,15 +38,16 @@ local function Hex(hex, a)
 end
 
 local C = {
-    bg        = Hex("111111"),
-    header    = Hex("141414"),
-    field     = Hex("0A0A0A"),
-    card      = Hex("151515"),
-    cardHover = Hex("1D1D1D"),
-    button    = Hex("1A1A1A"),
+    -- panel colours are the shared ones, so they follow the Window style setting
+    bg        = CysUI.W.T.bg,
+    header    = CysUI.W.T.header,
+    field     = CysUI.W.T.field,
+    card      = CysUI.W.T.card,
+    cardHover = CysUI.W.T.cardHover,
+    button    = CysUI.W.T.button,
     border    = CysUI.W.T.border, -- frame colour (follows the Border color setting)
     accent    = Hex("FFD100"), -- bright gold: active / hover / primary
-    line      = Hex("2A2A2A"),
+    line      = CysUI.W.T.line,
     text      = Hex("E0E0E0"),
     dim       = Hex("777777"),
     cyan      = Hex("00D9FF"), -- "this item belongs to a set"

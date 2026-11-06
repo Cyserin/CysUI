@@ -166,6 +166,10 @@ CUI:RegisterPage("General", function(page)
         function() return CysUIDB.stackWindows ~= false end,
         function(v) CysUIDB.stackWindows = v and true or false end)
     stack:SetPoint("TOPLEFT", 4, -170)
+    local menuBtn = W.Checkbox(page, "Cys's UI button in the Esc menu (reload)",
+        function() return CysUIDB.menuButton ~= false end,
+        function(v) CysUIDB.menuButton = v and true or false end)
+    menuBtn:SetPoint("TOPLEFT", 4, -192)
 
     local memHeader = W.Header(page, "Memory use", CONTENT_W)
     memHeader:SetPoint("TOPLEFT", 0, -212)
@@ -991,4 +995,69 @@ do
         local ok, category = pcall(Settings.RegisterCanvasLayoutCategory, panel, "Cys's UI")
         if ok and category then pcall(Settings.RegisterAddOnCategory, category) end
     end)
+end
+
+--------------------------------------------------------------------------------
+-- A "Cys's UI" button in the Esc menu (like ElvUI / EllesmereUI), between Shop and AddOns in its own section.
+-- WoW Forever (new-style menu): added through the menu's own AddButton each time it builds its buttons, slotted in
+-- by layout order. Classic Era (old-style menu): our button takes the AddOns button's spot and AddOns moves below it.
+-- The Esc menu skin restyles it with the other buttons. Switch: General page.
+--------------------------------------------------------------------------------
+do
+    local function MenuLabel()
+        local c = (CUI.W and CUI.W.T and CUI.W.T.brand) or { 0.85, 0.64, 0.13 }
+        return string.format("|cff%02x%02x%02xCys's|r UI", c[1] * 255, c[2] * 255, c[3] * 255)
+    end
+    local function OpenFromMenu()
+        if GameMenuFrame and GameMenuFrame:IsShown() then HideUIPanel(GameMenuFrame) end
+        CUI:OpenConfig()
+    end
+    local done
+    local function Setup()
+        local gm = GameMenuFrame
+        if done or not gm or (CysUIDB and CysUIDB.menuButton == false) then return end
+        done = true
+        if gm.InitButtons and gm.AddButton and gm.buttonPool then
+            hooksecurefunc(gm, "InitButtons", function(self)
+                local addons
+                for b in self.buttonPool:EnumerateActive() do
+                    if b.GetText and b:GetText() == ADDONS then addons = b end
+                end
+                local mine = self:AddButton(MenuLabel(), OpenFromMenu)
+                if mine and addons and addons.layoutIndex then
+                    local k = addons.layoutIndex
+                    for b in self.buttonPool:EnumerateActive() do
+                        if b ~= mine and b.layoutIndex and b.layoutIndex >= k then b.layoutIndex = b.layoutIndex + 1 end
+                    end
+                    mine.layoutIndex = k
+                    mine.topPadding = addons.topPadding or 20 -- its own section; AddOns keeps its gap below it
+                    addons.topPadding = 20
+                    if self.MarkDirty then self:MarkDirty() end
+                end
+            end)
+        elseif _G.GameMenuButtonAddons then
+            local addons = GameMenuButtonAddons
+            local btn = CreateFrame("Button", "CysUIGameMenuButton", gm, "GameMenuButtonTemplate")
+            btn:SetText(MenuLabel())
+            btn:SetScript("OnClick", OpenFromMenu)
+            local p, rel, rp, x, y = addons:GetPoint(1)
+            if p then btn:SetPoint(p, rel, rp, x, y) end
+            addons:ClearAllPoints()
+            addons:SetPoint("TOP", btn, "BOTTOM", 0, -16)
+            local extra = (btn:GetHeight() or 21) + 16
+            if GameMenuFrame_UpdateVisibleButtons then
+                -- Blizzard sets the menu height here every time it opens: add our row on top of it
+                hooksecurefunc("GameMenuFrame_UpdateVisibleButtons", function() gm:SetHeight(gm:GetHeight() + extra) end)
+            else
+                local base
+                gm:HookScript("OnShow", function(self)
+                    base = base or self:GetHeight()
+                    self:SetHeight(base + extra)
+                end)
+            end
+        end
+    end
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_LOGIN")
+    ev:SetScript("OnEvent", function() pcall(Setup) end)
 end

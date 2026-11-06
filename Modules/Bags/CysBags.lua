@@ -36,15 +36,16 @@ local function Hex(hex, a)
 end
 
 local C = {
-    bg       = Hex("111111"),
+    -- panel colours are the shared ones, so they follow the Window style setting
+    bg       = CysUI.W.T.bg,
     border   = CysUI.W.T.border, -- frame colour (follows the Border color setting)
-    header   = Hex("141414"),
-    sidebar  = Hex("0D0D0D"),
-    field    = Hex("0A0A0A"),
-    slot     = Hex("1A1A1A"),
-    hover    = Hex("181818"),
-    selected = Hex("1E1E1E"),
-    line     = Hex("2A2A2A"),
+    header   = CysUI.W.T.header,
+    sidebar  = CysUI.W.T.sidebar,
+    field    = CysUI.W.T.field,
+    slot     = CysUI.W.T.button,
+    hover    = CysUI.W.T.hover,
+    selected = CysUI.W.T.selected,
+    line     = CysUI.W.T.line,
     text     = Hex("E0E0E0"),
     dim      = Hex("777777"),
     accent   = Hex("FFD100"), -- gold: active category, focus rings, active bag slot
@@ -53,10 +54,13 @@ local C = {
 }
 
 -- Layout
-local SLOT_SIZE, SLOT_GAP, COLS = 37, 4, 8 -- COLS changes when the window is resized in layout mode
+local SLOT_SIZE, SLOT_GAP, COLS = 34, 3, 12 -- COLS follows the window width (corner grip)
 local STEP        = SLOT_SIZE + SLOT_GAP
 local CONTENT_W   = COLS * STEP - SLOT_GAP
 local SIDEBAR_W   = 190
+local SIDEBAR_SLIM = 36 -- collapsed sidebar: icons only
+local function Slim() return CysBagsDB and CysBagsDB.sidebarSlim and true or false end
+local function SideW() return Slim() and SIDEBAR_SLIM or SIDEBAR_W end
 local HEADER_H    = 34
 local FOOTER_H    = 30
 local PAD         = 12
@@ -89,6 +93,15 @@ local CLASS_CATEGORY = {
     [12] = "QUEST",
 }
 
+-- A small icon in front of each sidebar category
+local SIDEBAR_ICONS = {
+    ALL = "Interface\\Icons\\INV_Misc_Bag_08",        SLOTS = "Interface\\Icons\\INV_Misc_Bag_10",
+    SETS = "Interface\\Icons\\INV_Chest_Chain_05",    CONSUMABLE = "Interface\\Icons\\INV_Potion_54",
+    GEAR = "Interface\\Icons\\INV_Sword_04",          BOE = "Interface\\Icons\\INV_Jewelry_Ring_03",
+    QUEST = "Interface\\Icons\\INV_Misc_Note_01",     TRADE = "Interface\\Icons\\INV_Fabric_Linen_01",
+    MISC = "Interface\\Icons\\INV_Misc_Gear_01",      JUNK = "Interface\\Icons\\INV_Misc_Coin_03",
+}
+
 -- Sidebar entries (label) and main-panel section order (title)
 local SIDEBAR = {
     { key = "ALL",        label = "All Items" },
@@ -98,7 +111,7 @@ local SIDEBAR = {
     { key = "GEAR",       label = "Armor / Weapons" },
     { key = "BOE",        label = "Bind on Equip" },
     { key = "QUEST",      label = "Quest Items" },       
-    { key = "TRADE",      label = "Trade Goods / Professions" },
+    { key = "TRADE",      label = "Trade Goods" }, -- short in the sidebar (room for the icon); the section keeps the full title
     { key = "MISC",       label = "Miscellaneous" },
     { key = "JUNK",       label = "Junk" },
 }
@@ -425,6 +438,8 @@ local function CreateItemButton(bag, slot)
     for _, key in ipairs({ "IconBorder", "IconOverlay", "IconOverlay2", "NewItemTexture",
                            "BattlepayItemTexture", "JunkIcon", "UpgradeIcon", "flash" }) do
         local t = btn[key]
+        -- faded rather than only hidden: Blizzard shows IconBorder again on every update (the white edge on common items)
+        if t and t.SetAlpha then t:SetAlpha(0) end
         if t and t.Hide then t:Hide() end
     end
 
@@ -629,6 +644,24 @@ function CysBags:Layout()
     end
     for _, h in pairs(sectionHeaders) do h:Hide() end
     wipe(activeButtons)
+    for _, f in ipairs(self.fillers or {}) do f:Hide() end
+    local usedFillers = 0
+    -- empty dark slots that finish a section's last row, so every section is a neat block (look only)
+    local function Filler(x, yy)
+        usedFillers = usedFillers + 1
+        self.fillers = self.fillers or {}
+        local f = self.fillers[usedFillers]
+        if not f then
+            f = CreateFrame("Frame", nil, content)
+            f:SetSize(SLOT_SIZE, SLOT_SIZE)
+            SolidTexture(f, "BACKGROUND", { C.slot[1], C.slot[2], C.slot[3], 0.45 }):SetAllPoints()
+            CreateBorder(f, 1, C.line, "BORDER")
+            self.fillers[usedFillers] = f
+        end
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", content, "TOPLEFT", x, -yy)
+        f:Show()
+    end
 
     local filter, y, any = self.filter, 0, false
 
@@ -656,6 +689,9 @@ function CysBags:Layout()
                 UpdateButton(btn, e)
                 btn:Show()
                 activeButtons[#activeButtons + 1] = btn
+            end
+            for i = n + 1, ceil(n / COLS) * COLS do
+                Filler(((i - 1) % COLS) * STEP, y + floor((i - 1) / COLS) * STEP)
             end
             y = y + ceil(n / COLS) * STEP - SLOT_GAP + SECTION_GAP
         end
@@ -706,6 +742,11 @@ function CysBags:Layout()
         end
     end
 
+    -- 2b. One Armory set picked in the sidebar (its row under Armory Sets)
+    if filter:find("^SET_") then
+        RenderSection(filter, dynamicSetTitles[filter] or filter)
+    end
+
     -- 3. Render standard non-set categories
     for _, sec in ipairs(SECTIONS) do
         if sec.key ~= "SETS" and (filter == "ALL" or filter == sec.key) then
@@ -716,13 +757,54 @@ function CysBags:Layout()
     local contentH = max(y - SECTION_GAP, 1)
     content:SetHeight(contentH)
     self.emptyText:SetShown(not any)
-    -- The window keeps one fixed size (FRAME_H); only the scrolling content changes.
+    -- Auto-size (switch: /cui > Automation): the window grows or shrinks to fit the items, so nothing scrolls,
+    -- up to 85% of the screen height. Otherwise it keeps its own height and the content scrolls.
+    self:FitHeight(contentH)
+end
+
+local function AutoSize()
+    local auto = CysUIDB and CysUIDB.automation
+    return not (auto and auto.bagsAutoSize == false)
+end
+
+-- Set the window height for the content; the top edge stays where it is (the window grows downwards)
+function CysBags:FitHeight(contentH)
+    if not (frame and AutoSize()) or self.fitting then return end
+    local want = HEADER_H + FOOTER_H + PAD * 2 + 2 + contentH + 6 -- a few pixels spare so the list never scrolls
+    local minH = max(HEADER_H + FOOTER_H + (self.sidebarH or 320), 200) -- the sidebar's rows must still fit
+    local maxH = floor((UIParent:GetHeight() or 900) * 0.85)
+    want = floor(max(minH, min(want, maxH)) + 0.5)
+    if math.abs((frame:GetHeight() or 0) - want) < 1 then return end
+    self.fitting = true
+    local s = (frame:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
+    local top = frame:GetTop()
+    local cx = frame:GetCenter()
+    frame:SetHeight(want)
+    local m = CysUI and CysUI.movers and CysUI.movers.bags
+    if m and top and cx and CysUI.ApplyLayout then
+        -- with Cys's UI the window hangs off its layout spot by its centre: move that spot so the top stays put
+        CysUIDB.layout = CysUIDB.layout or {}
+        local e = CysUIDB.layout.bags or {}
+        CysUIDB.layout.bags = e
+        local ux, uy = UIParent:GetCenter()
+        e.point = "CENTER"
+        e.x = floor(cx * s - ux + 0.5)
+        e.y = floor(top * s - want * s / 2 - uy + 0.5)
+        e.width = e.width or floor(frame:GetWidth() + 0.5)
+        e.height = want
+        CysUI:ApplyLayout("bags")
+    elseif top then
+        local left = frame:GetLeft()
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    end
+    self.fitting = false
 end
 
 -- Layout mode resizes the window: its width decides how many item columns fit (the height just
 -- gives the list more or less room), so the content is re-flowed whenever the column count changes.
 function CysBags:ApplySize(w)
-    local cols = floor((w - SIDEBAR_W - PAD * 2 - 2 + SLOT_GAP) / STEP)
+    local cols = floor((w - SideW() - PAD * 2 - 2 + SLOT_GAP) / STEP)
     cols = max(MIN_COLS, min(cols, MAX_COLS))
     if cols == COLS then return end
     COLS = cols
@@ -736,8 +818,90 @@ function CysBags:ApplySize(w)
     end
 end
 
+-- Sub-category rows: one per Armory set, indented under Armory Sets
+local setButtons = {}
+local function SetChildButton(key)
+    local b = setButtons[key]
+    if b then return b end
+    b = CreateFrame("Button", nil, sidebar)
+    b.key = key
+    b:SetHeight(22)
+    b.bg = SolidTexture(b, "BACKGROUND", C.hover)
+    b.bg:SetAllPoints()
+    b.bg:Hide()
+    b.accent = SolidTexture(b, "ARTWORK", C.accent)
+    b.accent:SetPoint("TOPLEFT"); b.accent:SetPoint("BOTTOMLEFT"); b.accent:SetWidth(2)
+    b.accent:Hide()
+    b.label = CreateText(b, 10, C.text)
+    b.label:SetPoint("LEFT", 40, 0)
+    b.count = CreateText(b, 10, C.dim, "RIGHT")
+    b.count:SetPoint("RIGHT", -10, 0)
+    b:SetScript("OnEnter", function(s) s.hover = true; CysBags:UpdateSidebar() end)
+    b:SetScript("OnLeave", function(s) s.hover = false; CysBags:UpdateSidebar() end)
+    b:SetScript("OnClick", function(s) if not CursorHasItem() then CysBags:SetFilter(s.key) end end)
+    setButtons[key] = b
+    return b
+end
+
+-- collapse / expand the sidebar (icons only <-> icons and names); the items get the room
+function CysBags:SetSidebarSlim(on)
+    if CysBagsDB then CysBagsDB.sidebarSlim = on and true or nil end
+    if not sidebar then return end
+    sidebar:SetWidth(SideW())
+    if self.slimBtn then self.slimBtn.text:SetText(on and ">" or "<") end
+    COLS = nil -- re-flow the columns for the new width
+    if frame then self:ApplySize(frame:GetWidth()) end
+    self:UpdateSidebar()
+end
+
 function CysBags:UpdateSidebar()
     local dropping = CursorHasItem() and true or false
+    -- empty categories leave the sidebar (switch: /cui > Automation); they come back while an item is on the cursor
+    local auto = CysUIDB and CysUIDB.automation
+    local hideEmpty = not (auto and auto.hideEmptyBagCats == false) and not dropping
+    -- the Armory sets in your bags, by name (their rows go under Armory Sets)
+    local slim = Slim()
+    local sets = {}
+    for key, title in pairs(slim and {} or dynamicSetTitles) do
+        if (counts[key] or 0) > 0 then sets[#sets + 1] = { key = key, title = (title:gsub("^Set: ", "")) } end
+    end
+    table.sort(sets, function(a, b) return a.title < b.title end)
+    for _, cb in pairs(setButtons) do cb:Hide() end
+    local y = 8
+    for _, sb in ipairs(sidebarButtons) do
+        local cnt = counts[sb.key] or 0
+        local keep = sb.key == "ALL" or sb.key == "SLOTS" or sb.key == self.filter or cnt > 0
+            or (sb.key == "SETS" and self.filter and self.filter:find("^SET_"))
+        if hideEmpty and not keep then
+            sb:Hide()
+        else
+            sb:Show()
+            sb:ClearAllPoints()
+            sb:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 0, -y)
+            sb:SetPoint("TOPRIGHT", sidebar, "TOPRIGHT", -1, -y)
+            y = y + 27
+            if sb.key == "SETS" then
+                for _, s in ipairs(sets) do
+                    local cb = SetChildButton(s.key)
+                    cb:ClearAllPoints()
+                    cb:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 0, -y)
+                    cb:SetPoint("TOPRIGHT", sidebar, "TOPRIGHT", -1, -y)
+                    cb.label:SetText(s.title)
+                    cb.count:SetText(counts[s.key] or 0)
+                    local sel = self.filter == s.key
+                    cb.accent:SetShown(sel)
+                    if sel then cb.bg:SetColorTexture(unpack(C.selected)); cb.bg:Show()
+                    elseif cb.hover then cb.bg:SetColorTexture(unpack(C.hover)); cb.bg:Show()
+                    else cb.bg:Hide() end
+                    if sel then cb.label:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+                    else cb.label:SetTextColor(0.75, 0.75, 0.75) end
+                    cb:Show()
+                    y = y + 23
+                end
+            end
+        end
+    end
+    self.sidebarH = y + 34 -- the rows plus room for the collapse button (used by auto-size)
     for _, sb in ipairs(sidebarButtons) do
         -- Check if this sidebar button is selected OR if it's the Armory Sets tab and a dynamic set is filtered
         local selected = (sb.key == self.filter) or (sb.key == "SETS" and self.filter and self.filter:find("^SET_"))
@@ -751,6 +915,8 @@ function CysBags:UpdateSidebar()
         else
             sb.bg:Hide()
         end
+        if sb.icon then sb.icon:SetDesaturated(n == 0 and not selected); sb.icon:SetAlpha((selected or n > 0) and 1 or 0.5) end
+        sb.label:SetShown(not slim); sb.count:SetShown(not slim)
         if selected then
             sb.label:SetTextColor(C.accent[1], C.accent[2], C.accent[3]) -- gold: active category
         elseif n == 0 then
@@ -763,7 +929,8 @@ function CysBags:UpdateSidebar()
 end
 
 function CysBags:UpdateHeader()
-    header.title:SetFormattedText("|cFFFFD100Inventory|r |cFFFFFFFF[%d / %d Items]|r", self.used, self.total)
+    -- quiet title: light word, dim count (the gold stays on the Cys's Bags name)
+    header.title:SetFormattedText("|cFFE0E0E0Inventory|r   |cFF8C8C8C%d / %d|r", self.used, self.total)
 end
 
 function CysBags:UpdateBagSlots()
@@ -956,7 +1123,7 @@ local function StopSort(message)
     sorter.running = false
     sorter.returnTo = nil
     sorter:Hide()
-    if CysBags.sortBtn then CysBags.sortBtn.text:SetText("Sort") end
+    if CysBags.sortBtn then CysBags.sortBtn.icon:SetVertexColor(0.8, 0.8, 0.8) end
     CysBags.dirty = true
     if message then print("|cFFFFD100Cys's Bags|r: " .. message) end
 end
@@ -1108,7 +1275,7 @@ function CysBags:ToggleSort()
     end
     sorter.running = true
     sorter.moves, sorter.same, sorter.lastSig, sorter.returnTo, sorter.elapsed = 0, 0, nil, nil, 0
-    if CysBags.sortBtn then CysBags.sortBtn.text:SetText("Stop") end
+    if CysBags.sortBtn then CysBags.sortBtn.icon:SetVertexColor(1, 0.35, 0.35) end -- red while sorting: click again to stop
     sorter:Show()
 end
 
@@ -1397,7 +1564,17 @@ function CysBags:CreateFrames()
             maxW = SIDEBAR_W + PAD * 2 + 2 + MAX_COLS * STEP - SLOT_GAP,
             minH = 300, maxH = 1000,
             onResize = function(_, w) CysBags:ApplySize(w) end,
+            freeMove = true, -- dragged by the title bar, resized by the corner grip
         })
+        if CysUI.MakeResizeGrip then CysUI:MakeResizeGrip("bags") end
+        -- once: back to 12 columns (an earlier auto-size widened windows to 16)
+        if CysBagsDB and not CysBagsDB.cols12 and CysUIDB then
+            CysBagsDB.cols12 = true
+            CysUIDB.layout = CysUIDB.layout or {}
+            local e = CysUIDB.layout.bags
+            if e then e.width = SIDEBAR_W + PAD * 2 + 2 + 12 * STEP - SLOT_GAP; e.height = nil end
+            if CysUI.ApplyLayout then CysUI:ApplyLayout("bags") end
+        end
     end
     tinsert(UISpecialFrames, "CysBagsFrame") -- Esc closes the bags
 
@@ -1412,9 +1589,17 @@ function CysBags:CreateFrames()
     header:EnableMouse(true)
     header:RegisterForDrag("LeftButton")
     local function LayoutControlled() return CysUI and CysUI.movers and CysUI.movers.bags end
-    header:SetScript("OnDragStart", function() if not LayoutControlled() then frame:StartMoving() end end)
+    -- with Cys's UI the drop spot is saved as the layout position (layout mode and dragging agree)
+    header:SetScript("OnDragStart", function()
+        if LayoutControlled() then
+            if CysUI.StartWindowDrag then CysUI:StartWindowDrag("bags") end
+        else frame:StartMoving() end
+    end)
     header:SetScript("OnDragStop", function()
-        if LayoutControlled() then return end
+        if LayoutControlled() then
+            if CysUI.StopWindowDrag then CysUI:StopWindowDrag("bags") end
+            return
+        end
         frame:StopMovingOrSizing()
         CysBags:SavePosition()
     end)
@@ -1456,10 +1641,11 @@ function CysBags:CreateFrames()
         GameTooltip:Hide()
     end)
     gearBtn:SetScript("OnClick", function() CysBags:ToggleGuide() end)
+    gearBtn:Hide() -- the old standalone guide button: gone from the header (Sort and Junk icons sit by the search box)
 
     local sb = CreateFrame("EditBox", "CysBagsSearchBox", header)
-    sb:SetSize(190, 22)
-    sb:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
+    sb:SetSize(160, 22)
+    sb:SetPoint("RIGHT", close, "LEFT", -10, 0)
     sb:SetAutoFocus(false)
     sb:SetMaxLetters(40)
     sb:SetFont(STANDARD_TEXT_FONT, 11, "")
@@ -1524,39 +1710,41 @@ function CysBags:CreateFrames()
     end
 
     -- Sort and "destroy cheapest junk" live down here, next to the bag slots
-    local sortBtn = CreateFrame("Button", nil, footer)
-    sortBtn:SetSize(46, 22)
-    sortBtn:SetPoint("LEFT", footer.bagSlots[4], "RIGHT", 14, 0)
-    SolidTexture(sortBtn, "BACKGROUND", C.field):SetAllPoints()
-    local sortBorder = CreateBorder(sortBtn, 1, C.border, "BORDER")
-    sortBtn.text = CreateText(sortBtn, 11, C.accent, "CENTER")
-    sortBtn.text:SetPoint("CENTER", 0, 0)
-    sortBtn.text:SetText("Sort")
+    -- (both are small icons in the header, just left of the search box)
+    local function HeaderIcon(btn, texture)
+        btn:SetSize(18, 18)
+        btn.icon = btn:CreateTexture(nil, "ARTWORK")
+        btn.icon:SetAllPoints()
+        btn.icon:SetTexture(texture)
+        btn.icon:SetVertexColor(0.8, 0.8, 0.8)
+        btn.text = btn:CreateFontString(nil, "OVERLAY") -- kept for older calls; the icon tells the state now
+        btn.text:SetFont(STANDARD_TEXT_FONT, 10, ""); btn.text:Hide()
+    end
+    local sortBtn = CreateFrame("Button", nil, header)
+    HeaderIcon(sortBtn, "Interface\\Buttons\\UI-RefreshButton")
+    local sortBorder = {}
     sortBtn:SetScript("OnEnter", function(s)
-        SetBorderColor(sortBorder, C.accent[1], C.accent[2], C.accent[3])
+        if not (sorter and sorter.running) then s.icon:SetVertexColor(1, 1, 1) end
         GameTooltip:SetOwner(s, "ANCHOR_TOP")
         GameTooltip:SetText("Sort bags", 1, 1, 1)
         GameTooltip:AddLine("Merges partial stacks and packs items into your first slots, ordered by category.", 0.8, 0.8, 0.8, true)
         GameTooltip:AddLine("Ammo and profession bags are left alone.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
-    sortBtn:SetScript("OnLeave", function()
-        SetBorderColor(sortBorder, C.border[1], C.border[2], C.border[3])
+    sortBtn:SetScript("OnLeave", function(s)
+        if not (sorter and sorter.running) then s.icon:SetVertexColor(0.8, 0.8, 0.8) end
         GameTooltip:Hide()
     end)
     sortBtn:SetScript("OnClick", function() CysBags:ToggleSort() end)
     self.sortBtn = sortBtn
 
-    local junkBtn = CreateFrame("Button", nil, footer)
-    junkBtn:SetSize(46, 22)
-    junkBtn:SetPoint("LEFT", sortBtn, "RIGHT", 6, 0)
-    SolidTexture(junkBtn, "BACKGROUND", C.field):SetAllPoints()
-    local junkBorder = CreateBorder(junkBtn, 1, C.border, "BORDER")
-    junkBtn.text = CreateText(junkBtn, 11, C.accent, "CENTER")
-    junkBtn.text:SetPoint("CENTER", 0, 0)
-    junkBtn.text:SetText("Junk")
+    local junkBtn = CreateFrame("Button", nil, header)
+    HeaderIcon(junkBtn, "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01")
+    junkBtn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    junkBtn:SetPoint("RIGHT", self.searchBox, "LEFT", -10, 0)
+    sortBtn:SetPoint("RIGHT", junkBtn, "LEFT", -8, 0)
     junkBtn:SetScript("OnEnter", function(s)
-        SetBorderColor(junkBorder, C.accent[1], C.accent[2], C.accent[3])
+        s.icon:SetVertexColor(1, 1, 1)
         GameTooltip:SetOwner(s, "ANCHOR_TOP")
         GameTooltip:SetText("Destroy Cheapest Junk", 1, 1, 1)
         GameTooltip:AddLine("Click to delete the cheapest grey junk item in your bags.", 0.8, 0.8, 0.8, true)
@@ -1571,23 +1759,43 @@ function CysBags:CreateFrames()
         end
         GameTooltip:Show()
     end)
-    junkBtn:SetScript("OnLeave", function()
-        SetBorderColor(junkBorder, C.border[1], C.border[2], C.border[3])
+    junkBtn:SetScript("OnLeave", function(s)
+        s.icon:SetVertexColor(0.8, 0.8, 0.8)
         GameTooltip:Hide()
     end)
     junkBtn:SetScript("OnClick", function() DeleteCheapestJunk() end)
     -- picked DropTheCheapestThing over this button in /cui > Conflicts: leave the job to it
     local cf = CysUIDB and CysUIDB.conflicts
-    if cf and cf.DropTheCheapestThing == "theirs" then junkBtn:Hide() end
+    if cf and cf.DropTheCheapestThing == "theirs" then
+        junkBtn:Hide()
+        sortBtn:ClearAllPoints(); sortBtn:SetPoint("RIGHT", self.searchBox, "LEFT", -10, 0)
+    end
 
     ---------------------------------------------------------------- sidebar
     sidebar = CreateFrame("Frame", nil, frame)
     sidebar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     sidebar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, FOOTER_H + 1)
-    sidebar:SetWidth(SIDEBAR_W)
+    sidebar:SetWidth(SideW())
     SolidTexture(sidebar, "BACKGROUND", C.sidebar):SetAllPoints()
     local sline = SolidTexture(sidebar, "BORDER", C.border)
     sline:SetPoint("TOPRIGHT"); sline:SetPoint("BOTTOMRIGHT"); sline:SetWidth(1)
+
+    -- < / > at the bottom of the sidebar: collapse it to icons only, or open it again
+    local slimBtn = CreateFrame("Button", nil, sidebar)
+    slimBtn:SetSize(20, 20)
+    slimBtn:SetPoint("BOTTOMRIGHT", sidebar, "BOTTOMRIGHT", -8, 6)
+    slimBtn.text = CreateText(slimBtn, 14, C.dim, "CENTER")
+    slimBtn.text:SetPoint("CENTER")
+    slimBtn.text:SetText(Slim() and ">" or "<")
+    slimBtn:SetScript("OnEnter", function(s)
+        s.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:SetText(Slim() and "Expand sidebar" or "Collapse sidebar", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    slimBtn:SetScript("OnLeave", function(s) s.text:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
+    slimBtn:SetScript("OnClick", function() CysBags:SetSidebarSlim(not Slim()) end)
+    self.slimBtn = slimBtn
 
     for i, cat in ipairs(SIDEBAR) do
         local b = CreateFrame("Button", nil, sidebar)
@@ -1601,8 +1809,13 @@ function CysBags:CreateFrames()
         b.accent = SolidTexture(b, "ARTWORK", C.accent)
         b.accent:SetPoint("TOPLEFT"); b.accent:SetPoint("BOTTOMLEFT"); b.accent:SetWidth(2)
         b.accent:Hide()
+        b.icon = b:CreateTexture(nil, "ARTWORK")
+        b.icon:SetSize(16, 16)
+        b.icon:SetPoint("LEFT", 10, 0)
+        b.icon:SetTexture(SIDEBAR_ICONS[cat.key] or "Interface\\Icons\\INV_Misc_Bag_08")
+        b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         b.label = CreateText(b, 11, C.text)
-        b.label:SetPoint("LEFT", 14, 0)
+        b.label:SetPoint("LEFT", 32, 0)
         b.label:SetText(cat.label)
         b.count = CreateText(b, 11, C.dim, "RIGHT")
         b.count:SetPoint("RIGHT", -10, 0)
@@ -1619,6 +1832,12 @@ function CysBags:CreateFrames()
                     GameTooltip:SetText("Move to " .. (CATEGORY_TITLE[s.key] or s.key), 1, 1, 1)
                 end
                 GameTooltip:AddLine("Drop the item here.", 0.8, 0.8, 0.8)
+                GameTooltip:Show()
+            elseif Slim() then
+                -- collapsed sidebar: the name and count in a tooltip
+                GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+                GameTooltip:SetText(s.label:GetText() or s.key, 1, 1, 1)
+                GameTooltip:AddLine((s.count:GetText() or "0") .. " items", 0.8, 0.8, 0.8)
                 GameTooltip:Show()
             end
         end)

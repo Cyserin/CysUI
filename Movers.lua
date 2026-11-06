@@ -116,7 +116,8 @@ function CUI:ApplyLayoutFilter()
     local firstVisible
     for _, key in ipairs(self.moverOrder) do
         local m = self.movers[key]
-        local show = self.layoutMode and not m.disabled and (f == "all" or CategoryOf(m) == f)
+        -- free-move windows (bags, bank, friends...) are dragged by their title bar, so no box for them here
+        local show = self.layoutMode and not m.disabled and not m.opts.freeMove and (f == "all" or CategoryOf(m) == f)
         m.mover:SetShown(show and true or false)
         if show and not firstVisible then firstVisible = key end
     end
@@ -295,6 +296,94 @@ function CUI:RegisterMovable(frame, key, label, opts)
     frame:SetPoint("CENTER", mover, "CENTER", 0, 0)
     self:ApplyLayout(key)
     return m
+end
+
+--------------------------------------------------------------------------------
+-- Free drag: windows (bags, bank, friends...) can also be dragged by their own title bar outside
+-- layout mode. The drop spot is saved as the layout position, so layout mode and the window agree.
+--------------------------------------------------------------------------------
+function CUI:StartWindowDrag(key)
+    local m = self.movers[key]
+    if not m or self.layoutMode then return end
+    local f = m.frame
+    if InCombatLockdown() and f.IsProtected and f:IsProtected() then return end
+    if not f:IsMovable() then f:SetMovable(true) end
+    f:SetClampedToScreen(true)
+    m.freeDrag = true
+    f:StartMoving()
+end
+
+-- save where a window was dropped (or resized to) as its layout position, then hang it back on its mover
+local function SaveDropSpot(m, key)
+    local f = m.frame
+    if f.SetUserPlaced then pcall(f.SetUserPlaced, f, false) end -- our layout keeps the spot, not the game
+    f.cysDragged = true -- window stacking leaves a dragged window where it was put until it closes
+    local cx, cy = f:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if cx and ux then
+        local s = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        local e = Entry(key, true)
+        e.point, e.x, e.y = "CENTER", floor(cx * s - ux + 0.5), floor(cy * s - uy + 0.5)
+    end
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", m.mover, "CENTER", 0, 0)
+    CUI:ApplyLayout(key)
+    if panel then panel:RefreshAll() end
+end
+
+function CUI:StopWindowDrag(key)
+    local m = self.movers[key]
+    if not (m and m.freeDrag) then return end
+    m.freeDrag = nil
+    m.frame:StopMovingOrSizing()
+    SaveDropSpot(m, key)
+end
+
+-- A small grip in the bottom-right corner to resize a free-move window (they have no layout-mode box)
+function CUI:MakeResizeGrip(key)
+    local m = self.movers[key]
+    if not m or m.grip then return end
+    local f, o = m.frame, m.opts
+    local g = CreateFrame("Button", nil, f)
+    g:SetSize(14, 14)
+    g:SetPoint("BOTTOMRIGHT", -1, 1)
+    g:SetFrameLevel(f:GetFrameLevel() + 20)
+    local t = g:CreateTexture(nil, "OVERLAY")
+    t:SetAllPoints()
+    t:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    t:SetDesaturated(true)
+    local function Paint(c) t:SetVertexColor(c[1], c[2], c[3], 0.9) end
+    Paint(T.border)
+    g:SetScript("OnEnter", function() Paint(T.glow) end)
+    g:SetScript("OnLeave", function() Paint(T.border) end)
+    g:SetScript("OnMouseDown", function(_, button)
+        if button ~= "LeftButton" or CUI.layoutMode then return end
+        if InCombatLockdown() and f.IsProtected and f:IsProtected() then return end
+        f:SetResizable(true)
+        local minW, minH, maxW, maxH = o.minW or 150, o.minH or 100, o.maxW or 2000, o.maxH or 2000
+        if f.SetResizeBounds then f:SetResizeBounds(minW, minH, maxW, maxH)
+        elseif f.SetMinResize then f:SetMinResize(minW, minH); f:SetMaxResize(maxW, maxH) end
+        m.sizing = true
+        f:StartSizing("BOTTOMRIGHT")
+    end)
+    g:SetScript("OnMouseUp", function()
+        if not m.sizing then return end
+        m.sizing = nil
+        f:StopMovingOrSizing()
+        local e = Entry(key, true)
+        e.width, e.height = floor(f:GetWidth() + 0.5), floor(f:GetHeight() + 0.5)
+        SaveDropSpot(m, key)
+    end)
+    m.grip = g
+    return g
+end
+
+-- Turn a title bar (any frame) into a drag handle for a registered window
+function CUI:MakeDragHandle(handle, key)
+    handle:EnableMouse(true)
+    handle:RegisterForDrag("LeftButton")
+    handle:HookScript("OnDragStart", function() CUI:StartWindowDrag(key) end)
+    handle:HookScript("OnDragStop", function() CUI:StopWindowDrag(key) end)
 end
 
 function CUI:ResetMover(key)

@@ -20,13 +20,17 @@ local function Enabled()
 end
 
 -- right edge (in UIParent units) of the Blizzard windows that are open right now, or nil
+-- short-lived panels our windows should not move aside for (looting would shuffle them left and back)
+local IGNORE = { LootFrame = true, GroupLootHistoryFrame = true, StackSplitFrame = true }
+
 local function BlizzardRightEdge()
     if not GetUIPanel then return nil end
     local edge
     local uiScale = UIParent:GetEffectiveScale() or 1
     for _, key in ipairs(SLOTS) do
         local ok, f = pcall(GetUIPanel, key)
-        if ok and f and not managed[f] and f.IsShown and f:IsShown() then
+        local okN, name = pcall(function() return f and f.GetName and f:GetName() end)
+        if ok and f and not managed[f] and not (okN and name and IGNORE[name]) and f.IsShown and f:IsShown() then
             local okR, r = pcall(f.GetRight, f)
             if okR and type(r) == "number" then
                 r = r * (f:GetEffectiveScale() or 1) / uiScale
@@ -40,10 +44,13 @@ end
 local arranging = false
 local function Arrange()
     if arranging or not Enabled() then return end
+    -- only when a Blizzard window is open: on their own, our windows stay where they open (no jump to the left)
+    local edge = BlizzardRightEdge()
+    if not edge then return end
     arranging = true
-    local x = (BlizzardRightEdge() or 0) + (BlizzardRightEdge() and GAP or LEFT_OFFSET)
+    local x = edge + GAP
     for _, f in ipairs(order) do
-        if f:IsShown() and not (f.IsProtected and f:IsProtected() and InCombatLockdown()) then
+        if f:IsShown() and not f.cysDragged and not (f.IsProtected and f:IsProtected() and InCombatLockdown()) then
             local scale = (f:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
             f:ClearAllPoints()
             f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x / scale, TOP_OFFSET / scale)
@@ -64,9 +71,11 @@ function CUI:ManageWindow(frame, area, pushable, extra)
     frame:HookScript("OnShow", function(self)
         for i = #order, 1, -1 do if order[i] == self then table.remove(order, i) end end
         order[#order + 1] = self -- newest opens furthest right
+        Arrange() -- right away, so the window doesn't show in its old spot first
         Later()
     end)
     frame:HookScript("OnHide", function(self)
+        self.cysDragged = nil -- dragged by hand: stacks again next time it opens
         for i = #order, 1, -1 do if order[i] == self then table.remove(order, i) end end
         Later()
     end)

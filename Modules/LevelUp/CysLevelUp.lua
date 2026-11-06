@@ -155,7 +155,7 @@ local function Build()
     box.foot:SetWidth(ROW_W)
     box.foot:SetJustifyV("TOP")
 
-    CUI:RegisterMovable(box, "levelup", "Level-up spells", { point = "RIGHT", x = -60, y = 60 })
+    CUI:RegisterMovable(box, "levelup", "Level-up spells", { point = "RIGHT", x = -60, y = 60, freeMove = true })
 
     -- left-click and drag the box itself to move it (same saved position as layout mode)
     box:EnableMouse(true)

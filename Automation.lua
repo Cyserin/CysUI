@@ -28,6 +28,12 @@ local DEFAULTS = {
     declineCharters = false,
     cursorRing = false,
     groupCheck = false,
+    autoDelete = true,       -- type DELETE into the "destroy a good item" box
+    autoBags = true,         -- open Cys's Bags at a vendor / bank / mailbox / Auction House, close them after
+    hideEmptyBagCats = true, -- Cys's Bags sidebar leaves out empty categories
+    bagsAutoSize = true,     -- Cys's Bags grows to fit its items (no scrolling)
+    acceptInvites = false,   -- accept group invites from friends and guildmates
+    openContainers = true,   -- open clams, sacks and other openable bag items (Classic Era)
 }
 
 local function DB()
@@ -304,6 +310,91 @@ local function GroupCheck()
 end
 
 --------------------------------------------------------------------------------
+-- Delete confirmation: the DELETE word typed in for you (classic and Forever popups)
+--------------------------------------------------------------------------------
+local DELETE_POPUPS = { DELETE_GOOD_ITEM = true, DELETE_GOOD_QUEST_ITEM = true }
+local function FillDelete(which)
+    if not DB().autoDelete or not DELETE_POPUPS[which] or not DELETE_ITEM_CONFIRM_STRING then return end
+    local dialog = StaticPopup_FindVisible and StaticPopup_FindVisible(which)
+    if not dialog then return end
+    local eb = dialog.editBox or dialog.EditBox or (dialog.GetEditBox and dialog:GetEditBox())
+    if eb and eb.SetText then eb:SetText(DELETE_ITEM_CONFIRM_STRING) end
+end
+
+--------------------------------------------------------------------------------
+-- Bags open at a vendor, bank, mailbox or Auction House (and close again only if we opened them)
+--------------------------------------------------------------------------------
+local OPEN_EVENTS  = { MERCHANT_SHOW = true, BANKFRAME_OPENED = true, MAIL_SHOW = true, AUCTION_HOUSE_SHOW = true }
+local CLOSE_EVENTS = { MERCHANT_CLOSED = true, BANKFRAME_CLOSED = true, MAIL_CLOSED = true, AUCTION_HOUSE_CLOSED = true }
+local bagsOpenedByUs
+local function AutoBags(open)
+    local bags = _G.CysBags
+    if not (DB().autoBags and bags and bags.IsShown and bags.Open) then return end
+    if open then
+        if not bags:IsShown() then bags:Open(); bagsOpenedByUs = true end
+    else
+        if bagsOpenedByUs and bags:IsShown() then bags:Close() end
+        bagsOpenedByUs = nil
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Openable bag items (clams, sacks, unlocked boxes) are opened one at a time, out of combat, when nothing
+-- else is going on. Each item is tried once per session, so a locked box doesn't keep failing.
+-- Classic Era only for now (WoW Forever may block opening items from addon code).
+--------------------------------------------------------------------------------
+local tried, busy = {}, false
+local function OpenOne()
+    if not DB().openContainers or (CysUICompat and CysUICompat.isForever) then return end
+    if busy or InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
+    if (LootFrame and LootFrame:IsShown()) or (MerchantFrame and MerchantFrame:IsShown())
+        or (BankFrame and BankFrame:IsShown()) or (MailFrame and MailFrame:IsShown()) or CursorHasItem() then return end
+    if not (C_Container and C_Container.GetContainerItemInfo and C_Container.UseContainerItem) then return end
+    for bag = 0, 4 do
+        for slot = 1, (C_Container.GetContainerNumSlots(bag) or 0) do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.hasLoot and not info.isLocked and info.hyperlink and not tried[info.hyperlink .. bag .. slot] then
+                tried[info.hyperlink .. bag .. slot] = true
+                busy = true
+                C_Timer.After(1, function() busy = false end)
+                C_Container.UseContainerItem(bag, slot)
+                return
+            end
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Group invites from friends and guildmates are accepted (hold Shift to see the popup instead)
+--------------------------------------------------------------------------------
+local function Plain(name) return name and (name:gsub("%-.*$", "")) end
+local function IsFriendOrGuild(name)
+    name = Plain(name)
+    if not name then return false end
+    if C_FriendList and C_FriendList.GetNumFriends then
+        for i = 1, C_FriendList.GetNumFriends() or 0 do
+            local info = C_FriendList.GetFriendInfoByIndex(i)
+            if info and Plain(info.name) == name then return true end
+        end
+    end
+    if IsInGuild() and GetNumGuildMembers then
+        for i = 1, GetNumGuildMembers() or 0 do
+            local n = GetGuildRosterInfo(i)
+            if Plain(n) == name then return true end
+        end
+    end
+    return false
+end
+local function OnInvite(name)
+    if not DB().acceptInvites or IsShiftKeyDown() then return end
+    if CysUICompat and CysUICompat.Secret and CysUICompat.Secret(name) then return end
+    if IsFriendOrGuild(name) then
+        AcceptGroup()
+        if StaticPopup_Hide then StaticPopup_Hide("PARTY_INVITE") end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 local frame
@@ -314,11 +405,27 @@ local function Enable()
     for _, e in ipairs({ "LOOT_READY", "LOOT_OPENED", "QUEST_DETAIL", "QUEST_ACCEPT_CONFIRM", "QUEST_PROGRESS",
                          "QUEST_COMPLETE", "GOSSIP_SHOW", "QUEST_GREETING", "PLAYER_DEAD", "PLAYER_LEVEL_UP",
                          "DUEL_REQUESTED", "PETITION_SHOW", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
-                         "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "LFG_LIST_ACTIVE_ENTRY_UPDATE" }) do
+                         "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "LFG_LIST_ACTIVE_ENTRY_UPDATE",
+                         "MERCHANT_SHOW", "MERCHANT_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "MAIL_SHOW",
+                         "MAIL_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PARTY_INVITE_REQUEST",
+                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
+    if StaticPopup_Show then
+        hooksecurefunc("StaticPopup_Show", function(which)
+            if DELETE_POPUPS[which] and C_Timer and C_Timer.After then
+                C_Timer.After(0, function() pcall(FillDelete, which) end)
+            end
+        end)
+    end
     frame:SetScript("OnEvent", function(_, event, arg1)
-        if event == "LOOT_READY" or event == "LOOT_OPENED" then
+        if event == "PARTY_INVITE_REQUEST" then
+            pcall(OnInvite, arg1)
+        elseif event == "BAG_UPDATE_DELAYED" or event == "LOOT_CLOSED" then
+            C_Timer.After(0.3, function() pcall(OpenOne) end)
+        elseif OPEN_EVENTS[event] or CLOSE_EVENTS[event] then
+            AutoBags(OPEN_EVENTS[event])
+        elseif event == "LOOT_READY" or event == "LOOT_OPENED" then
             FastLoot()
         elseif event == "PLAYER_DEAD" then
             OnDeath()
@@ -364,7 +471,7 @@ CUI:RegisterPage("Automation", function(page)
     intro:SetWidth(width - 8)
     intro:SetJustifyV("TOP")
     intro:SetSpacing(3)
-    intro:SetText("Each one is off until you tick it. Changes work straight away, no reload needed.")
+    intro:SetText("Tick what you want. Changes work straight away, no reload needed.")
 
     local y = -70
     local function Check(label, key)
@@ -381,6 +488,16 @@ CUI:RegisterPage("Automation", function(page)
     Check("Gold ring around the mouse cursor while in combat", "cursorRing")
     Check("Show who in the group is below the dungeon's level range (while listed in LFG, and inside)", "groupCheck")
     Check("Say Ding when you level up", "ding")
+    Check("Type DELETE for you when you destroy a good item", "autoDelete")
+    Check("Open Cys's Bags at a vendor, bank, mailbox or Auction House (and close them after)", "autoBags")
+    local hideEmpty = Check("Cys's Bags: hide empty categories in the sidebar", "hideEmptyBagCats")
+    hideEmpty:HookScript("OnClick", function() if _G.CysBags and CysBags.UpdateSidebar then pcall(CysBags.UpdateSidebar, CysBags) end end)
+    Check("Accept group invites from friends and guildmates (hold Shift to see the popup)", "acceptInvites")
+    if not (CysUICompat and CysUICompat.isForever) then
+        Check("Open clams, sacks and other openable items in your bags (out of combat)", "openContainers")
+    end
+    local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls (up to most of the screen)", "bagsAutoSize")
+    fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)
 
     local chLabel = W.Text(page, 12, T.accent)
     chLabel:SetPoint("TOPLEFT", 4, y - 8)

@@ -34,6 +34,7 @@ local T = {
     sidebar  = Hex("0D0D0D"),
     field    = Hex("0A0A0A"),
     card     = Hex("151515"),
+    cardHover = Hex("1D1D1D"),
     button   = Hex("1A1A1A"),
     hover    = Hex("181818"),
     selected = Hex("1E1E1E"),
@@ -50,6 +51,33 @@ local T = {
     dark     = Hex("111111"),
 }
 W.T = T
+
+-- Window style: Soft (default) = warm charcoal panels that let a touch of the world through and quieter
+-- frame edges (hover and selected highlights stay bright); Classic = the original flat black with full edges.
+-- Applied once at load, before any window is built (changing it needs a /reload).
+W.WINDOW_STYLES = {
+    { key = "soft",    label = "Soft" },
+    { key = "classic", label = "Classic" },
+}
+local PALETTES = {
+    classic = { bg = "111111", header = "141414", sidebar = "0D0D0D", field = "0A0A0A", card = "151515",
+                cardHover = "1D1D1D", button = "1A1A1A", hover = "181818", selected = "1E1E1E", line = "2A2A2A" },
+    soft    = { bg = "16130F", header = "1B1713", sidebar = "12100D", field = "0E0C0A", card = "1C1814",
+                cardHover = "231E19", button = "201B16", hover = "1E1A15", selected = "27211B", line = "332C24" },
+}
+W.edgeAlpha = 1
+function W.ApplyWindowStyle(key)
+    key = key or (CysUIDB and CysUIDB.windowStyle) or "soft"
+    local p = PALETTES[key] or PALETTES.soft
+    for name, hex in pairs(p) do
+        local c = Hex(hex)
+        T[name][1], T[name][2], T[name][3] = c[1], c[2], c[3] -- in place: everything holding these tables follows
+    end
+    local soft = (PALETTES[key] or PALETTES.soft) == PALETTES.soft
+    T.bg[4] = soft and 0.95 or 1
+    W.edgeAlpha = soft and 0.7 or 1
+    T.border[4] = W.edgeAlpha
+end
 
 --------------------------------------------------------------------------------
 -- Primitives
@@ -100,6 +128,7 @@ end
 -- Border color setting: gold (the default), class color, black or grey
 W.BORDER_STYLES = {
     { key = "gold",  label = "Gold" },
+    { key = "brightgold", label = "Bright gold" },
     { key = "class", label = "Class color" },
     { key = "black", label = "Black" },
     { key = "grey",  label = "Grey" },
@@ -130,9 +159,12 @@ function W.BorderStyleColor(key)
         return { 0, 0, 0 }
     elseif key == "grey" then
         return { 0.5, 0.5, 0.5 }
+    elseif key == "brightgold" then
+        -- the bright gold: stands out against the orange zones (the Barrens)
+        return { T.accent[1], T.accent[2], T.accent[3] }
     end
-    -- the brighter gold: the brand gold washes out against the orange zones
-    return { T.accent[1], T.accent[2], T.accent[3] }
+    -- Gold (default): a soft, muted antique gold so edges frame things without shouting
+    return { 0.72, 0.57, 0.24 }
 end
 
 local styleCallbacks = {}
@@ -143,7 +175,8 @@ function W.OnBorderStyle(fn) styleCallbacks[#styleCallbacks + 1] = fn end
 local function ThemeColors(key, c)
     if key == "black" then return { 0.42, 0.42, 0.42 }, { 0.78, 0.78, 0.78 } end
     if key == "grey" then return { 0.55, 0.55, 0.55 }, { 0.85, 0.85, 0.85 } end
-    if key == "gold" or not key then return { 0.851, 0.643, 0.129 }, { 1, 0.82, 0 } end
+    if key == "brightgold" then return { 0.851, 0.643, 0.129 }, { 1, 0.82, 0 } end
+    if key == "gold" or not key then return { 0.72, 0.57, 0.24 }, { 0.92, 0.76, 0.32 } end
     -- class colours / Shaman blue: the colour itself, a touch brighter for hover
     local function lift(v) return math.min(1, v * 1.2 + 0.08) end
     return { c[1], c[2], c[3] }, { lift(c[1]), lift(c[2]), lift(c[3]) }
@@ -154,12 +187,12 @@ end
 function W.ApplyBorderStyle(key)
     key = key or (CysUIDB and CysUIDB.borderColor) or "gold"
     local c = W.BorderStyleColor(key)
-    T.border[1], T.border[2], T.border[3], T.border[4] = c[1], c[2], c[3], 1
+    T.border[1], T.border[2], T.border[3], T.border[4] = c[1], c[2], c[3], W.edgeAlpha or 1
     local fill, glow = ThemeColors(key, c)
     T.brand[1], T.brand[2], T.brand[3] = fill[1], fill[2], fill[3]
     T.glow[1], T.glow[2], T.glow[3] = glow[1], glow[2], glow[3]
     for t in pairs(frameTex) do
-        if t.cysFrame then t:SetColorTexture(c[1], c[2], c[3], 1)
+        if t.cysFrame then t:SetColorTexture(c[1], c[2], c[3], W.edgeAlpha or 1)
         elseif t.cysTheme then t:SetColorTexture(t.cysTheme[1], t.cysTheme[2], t.cysTheme[3], 1) end
     end
     for _, fn in ipairs(styleCallbacks) do pcall(fn) end

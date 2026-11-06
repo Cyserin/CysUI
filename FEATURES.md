@@ -1,6 +1,6 @@
 # What Cys's UI does
 
-Every item below has its own switch in `/cui`. Anything marked *(layout)* can be moved and resized in `/cui layout`.
+Every item below has its own switch in `/cui`. Anything marked *(layout)* can be moved and resized in `/cui layout`. Windows (Bags, Bank, Friends, Roll Tracker, Level-up spells) are not in layout mode: drag them by their title bar, and resize Bags, Bank and Friends by the grip in their bottom-right corner.
 
 ## Frames and combat
 - **Action bars** *(layout)*: bars 1-8, pet bar and stance bar, flat and resizable, using Blizzard's own buttons so keybinds and macros behave. Rarity and gold edges.
@@ -26,7 +26,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Bags** *(layout)*: one categorized window with a sidebar, search, sort, an "All slots" view, drag to recategorize. **Bank** does the same at any banker.
 - **Armory**: save gear as named sets and put them back on in one click; bind sets to a spec. **Equipment flyout**: hold Alt over a character slot to see bag items that fit it.
 - **Upgrade**: scores gear with stat weights you choose, shows the score and Upgrade / Downgrade on item tooltips, marks bag items that beat what you wear. SixtyUpgrades CSV import, weapon speed counts, profiles switch with your talent spec.
-- **Skills** *(layout)*: weapon skill and profession tracker for the gear you have equipped.
+- **Skills** *(layout)*: when a weapon skill, Defense or profession goes up, a short line like "Axes 13 / 85" floats up above the player frame and fades. Classic Era and WoW Forever.
 - **Mail**: tick mails, shift-click for a range, Open or Return the ticked ones.
 - **Roll Tracker** *(layout)*: tracks /roll and pass results for loot and announces the winner; in raids only the leader, assistants and master looter announce.
 - **Raid Debuffs** *(layout)*: tracks the key debuffs on your target (armor, fire, shadow, attack power, Hunter's Mark, Judgements and more) and only shows the ones your group can apply.

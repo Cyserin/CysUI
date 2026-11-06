@@ -1043,7 +1043,16 @@ local function Build()
         point = "LEFT", x = 40, y = 0,
         resizable = true, minW = 300, maxW = 600, minH = 320, maxH = 900,
         onResize = function() Layout() end,
+        freeMove = true, -- dragged by the title strip, resized by the corner grip
     })
+    CUI:MakeResizeGrip("friends")
+    -- drag the title strip to move the window (the close button keeps its clicks)
+    local drag = CreateFrame("Frame", nil, f)
+    drag:SetPoint("TOPLEFT", 1, -1)
+    drag:SetPoint("TOPRIGHT", -30, -1)
+    drag:SetHeight(29)
+    drag:SetFrameLevel(f:GetFrameLevel())
+    CUI:MakeDragHandle(drag, "friends")
 end
 
 --------------------------------------------------------------------------------

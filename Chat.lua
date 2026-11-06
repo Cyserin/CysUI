@@ -160,11 +160,38 @@ local function ReliftTabs()
     end
 end
 
+-- Short channel names: [1. General - Westfall] -> [Gen], [2. Trade - City] -> [T], [Guild] -> [G] ...
+-- Other channels keep their name without the number and zone. Unknown/locked text is left alone.
+local SHORT = {
+    general = "Gen", trade = "T", localdefense = "LD", worlddefense = "WD", lookingforgroup = "LFG",
+    guildrecruitment = "GR", guild = "G", officer = "O", party = "P", partyleader = "PL", raid = "R",
+    raidleader = "RL", raidwarning = "RW", instance = "I", instanceleader = "IL",
+    battleground = "BG", battlegroundleader = "BGL",
+}
+local function ShortChannels(text)
+    return (text:gsub("(|Hchannel:[^|]*|h)%[([^%]]*)%](|h)", function(open, label, close)
+        local name = label:gsub("^%d+%.%s*", ""):gsub("%s+%-%s+.*$", "")
+        local short = SHORT[(name:lower():gsub("%s", ""))] or name
+        return open .. "[" .. short .. "]" .. close
+    end))
+end
+
 local function SkinWindow(i)
     local cf = _G["ChatFrame" .. i]
     if not cf or cf.cysSkinned then return end
     cf.cysSkinned = true
     local db = DB()
+
+    -- short channel names (switch: Chat page). Chat windows are not protected, so wrapping their AddMessage is
+    -- safe (it is how chat addons rename channels); locked Forever lines pass through untouched.
+    local origAdd = cf.AddMessage
+    cf.AddMessage = function(self, text, ...)
+        if DB().shortChannels and not CysUICompat.Secret(text) and type(text) == "string" then
+            local ok, s = pcall(ShortChannels, text)
+            if ok and s then text = s end
+        end
+        return origAdd(self, text, ...)
+    end
 
     -- capture lines for the Copy window (works even if the skin is off)
     buffers[i] = {}
@@ -188,6 +215,11 @@ local function SkinWindow(i)
     if eb then
         for _, part in ipairs(EDIT_PARTS) do Kill(_G["ChatFrame" .. i .. "EditBox" .. part]) end
         eb.cysPanel = Panel(eb, eb, 2, T.field, 0.95)
+        -- only while typing (on WoW Forever the input box stays on screen faded, which left a faint box)
+        local function ShowPanel() if eb.cysPanel then eb.cysPanel:SetShown(eb:HasFocus() and true or false) end end
+        eb:HookScript("OnEditFocusGained", ShowPanel)
+        eb:HookScript("OnEditFocusLost", ShowPanel)
+        ShowPanel()
         if eb.SetAltArrowKeyMode then pcall(eb.SetAltArrowKeyMode, eb, false) end -- arrow keys walk chat history
     end
 
@@ -337,6 +369,19 @@ local function UpdateTabLines()
     for i = 1, (NUM_CHAT_WINDOWS or 10) do
         local tab, cf = _G["ChatFrame" .. i .. "Tab"], _G["ChatFrame" .. i]
         if tab and cf then
+            if not tab.cysFlat then
+                -- Cys tabs: Blizzard's tab art faded out, a flat dark plate behind the name instead
+                tab.cysFlat = true
+                for _, r in ipairs({ tab:GetRegions() }) do
+                    if r.GetObjectType and r:GetObjectType() == "Texture" and r ~= tab.glow and r ~= tab.cysLine then r:SetAlpha(0) end
+                end
+                local plate = tab:CreateTexture(nil, "BACKGROUND", nil, -8)
+                plate:SetColorTexture(T.bg[1], T.bg[2], T.bg[3], 0.82)
+                plate:SetPoint("TOPLEFT", 2, -4)
+                plate:SetPoint("BOTTOMRIGHT", -2, 0)
+                local hl = tab.GetHighlightTexture and tab:GetHighlightTexture()
+                if hl then hl:SetAlpha(0) end
+            end
             if not tab.cysLine then
                 local line = tab:CreateTexture(nil, "OVERLAY")
                 line:SetColorTexture(T.border[1], T.border[2], T.border[3], 1)
@@ -473,21 +518,22 @@ CUI:RegisterPage("Chat", function(page)
     Check("Class-colored names", "classColors", -34, function(on) Chat:ApplyColors(on) end)
     Check("Show timestamps", "timestamps", -60, function() Chat:ApplyTimestamps() end)
     Check("24-hour timestamps", "use24h", -86, function() if db.timestamps then Chat:ApplyTimestamps() end end)
+    Check("Short channel names ([1. General] becomes [Gen], [2. Trade] becomes [T], [Guild] becomes [G])", "shortChannels", -112)
 
     local size = W.Stepper(page, "Font size", function() return db.fontSize end,
         function(v) db.fontSize = v; Chat:ApplyFontSize() end, 9, 22, 1)
-    size:SetPoint("TOPLEFT", 4, -118)
+    size:SetPoint("TOPLEFT", 4, -144)
 
-    W.Header(page, "Look (needs a /reload)", width):SetPoint("TOPLEFT", 0, -158)
-    Check("Restyle the chat windows", "skin", -188)
-    Check("Hide the scroll and menu buttons", "hideButtons", -214)
-    Check("Chat tabs always visible, above the window border, gold line under the active one", "tabsSolid", -240)
+    W.Header(page, "Look (needs a /reload)", width):SetPoint("TOPLEFT", 0, -184)
+    Check("Restyle the chat windows", "skin", -214)
+    Check("Hide the scroll and menu buttons", "hideButtons", -240)
+    Check("Chat tabs always visible, above the window border, gold line under the active one", "tabsSolid", -266)
 
     local copy = W.Button(page, 110, 22, "Copy chat")
-    copy:SetPoint("TOPLEFT", 4, -280)
+    copy:SetPoint("TOPLEFT", 4, -306)
     copy:SetScript("OnClick", function() Chat:ShowCopy(1) end)
 
-    local note = W.Notes(page, 4, -318, width, "", {
+    local note = W.Notes(page, 4, -344, width, "", {
             "Chat window 1 can be moved and resized in layout mode.",
             "Every chat window also has a small Copy button in its top-right corner.",
             "If anything looks off, untick Chat under Modules and reload: the game's own chat comes straight back.",

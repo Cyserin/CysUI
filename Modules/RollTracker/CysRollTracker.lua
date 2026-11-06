@@ -33,12 +33,12 @@ local DB = {} -- replaced by the saved table on ADDON_LOADED
 -- Style
 --------------------------------------------------------------------------------
 local C = {
-    bg     = { 0.067, 0.067, 0.067 },
-    header = { 0.078, 0.078, 0.078 },
+    bg     = CysUI.W.T.bg, -- shared panel colours: follow the Window style setting
+    header = CysUI.W.T.header,
     gold   = CysUI.W.T.border, -- follows the Border color setting
     accent = { 1, 0.82, 0 },
-    line   = { 0.165, 0.165, 0.165 },
-    button = { 0.102, 0.102, 0.102 },
+    line   = CysUI.W.T.line,
+    button = CysUI.W.T.button,
     text   = { 0.88, 0.88, 0.88 },
     dim    = { 0.47, 0.47, 0.47 },
     dark   = { 0.067, 0.067, 0.067 },
@@ -312,17 +312,13 @@ end
 --------------------------------------------------------------------------------
 -- Window visibility
 --------------------------------------------------------------------------------
--- Parties: open by themselves. Raids: only for people who can announce (so 40 players
--- don't all get a popup), but anyone can open it by hand with /crt.
+-- The window opens only when someone in the group does a /roll (raids: only for people who can announce,
+-- so 40 players don't all get a popup); anyone can open it by hand with /crt. Group changes never open it.
 local function CheckGroupStatus()
     if not frame then return end
     local size = GetNumGroupMembers and GetNumGroupMembers() or 0
     if size >= 2 then
-        if not IsInRaid() or CanAnnounce() then
-            frame:Show()
-        elseif not manualOpen then
-            frame:Hide()
-        end
+        if IsInRaid() and not CanAnnounce() and not manualOpen then frame:Hide() end
     else
         manualOpen = false
         frame:Hide()
@@ -330,9 +326,10 @@ local function CheckGroupStatus()
     RequestRefresh()
 end
 
-local function OnActivity()
-    if IsInRaid() and DB.raidAutoAnnounce and CanAnnounce() then StartWindow() end
-    if frame and not frame:IsShown() and (not IsInRaid() or CanAnnounce() or manualOpen) then frame:Show() end
+local function OnActivity(isRoll)
+    local inGroup = (GetNumGroupMembers and GetNumGroupMembers() or 0) >= 2
+    if isRoll and inGroup and IsInRaid() and DB.raidAutoAnnounce and CanAnnounce() then StartWindow() end
+    if isRoll and inGroup and frame and not frame:IsShown() and (not IsInRaid() or CanAnnounce() or manualOpen) then frame:Show() end
     RequestRefresh()
 end
 
@@ -346,7 +343,7 @@ local function OnSystemMessage(msg)
     name = ShortName(name)
     rolls[name] = tonumber(roll)
     passes[name] = nil -- rolling overrides an earlier pass
-    OnActivity()
+    OnActivity(true)
 end
 
 local function OnGroupChat(msg, sender)
@@ -447,7 +444,7 @@ local function CreateFrames()
     end
     -- With Cys's UI, position and scale come from layout mode (/cui layout)
     if CysUI and CysUI.RegisterMovable then
-        CysUI:RegisterMovable(f, "rolls", "Roll Tracker", { point = "CENTER", x = 0, y = 0 })
+        CysUI:RegisterMovable(f, "rolls", "Roll Tracker", { point = "CENTER", x = 0, y = 0, freeMove = true })
     end
     Texture(f, "BACKGROUND", C.bg, 0.96):SetAllPoints()
     Border(f, C.gold)
@@ -462,9 +459,16 @@ local function CreateFrames()
     header:EnableMouse(true)
     header:RegisterForDrag("LeftButton")
     local function LayoutControlled() return CysUI and CysUI.movers and CysUI.movers.rolls end
-    header:SetScript("OnDragStart", function() if not LayoutControlled() then f:StartMoving() end end)
+    header:SetScript("OnDragStart", function()
+        if LayoutControlled() then
+            if CysUI.StartWindowDrag then CysUI:StartWindowDrag("rolls") end
+        else f:StartMoving() end
+    end)
     header:SetScript("OnDragStop", function()
-        if LayoutControlled() then return end
+        if LayoutControlled() then
+            if CysUI.StopWindowDrag then CysUI:StopWindowDrag("rolls") end
+            return
+        end
         f:StopMovingOrSizing()
         local point, _, relPoint, x, y = f:GetPoint(1)
         if point then DB.pos = { point, relPoint, x, y } end
