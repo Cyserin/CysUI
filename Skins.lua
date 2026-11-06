@@ -3165,12 +3165,29 @@ local function SkinObjectiveTracker()
         bd:SetHeight(max(top - bottom + 18, 20))
         bd:Show()
     end
-    if type(ot.Update) == "function" then hooksecurefunc(ot, "Update", function() Safe(Fit) end) end
-    for _, m in ipairs(ot.modules or {}) do
-        if type(m.Update) == "function" then hooksecurefunc(m, "Update", function() Safe(Fit) end) end
+    -- measure a frame after Blizzard's update (sections are moved into place after it), and hook sections
+    -- that join later (Profession, Achievements...) the first time they show up
+    local hooked, pending = {}, false
+    local Later
+    local function HookModules()
+        for _, m in ipairs(ot.modules or {}) do
+            if not hooked[m] and type(m.Update) == "function" then
+                hooked[m] = true
+                hooksecurefunc(m, "Update", function() Later() end)
+            end
+        end
     end
-    ot:HookScript("OnShow", function() Safe(Fit) end)
-    Safe(Fit)
+    Later = function()
+        if pending then return end
+        pending = true
+        C_Timer.After(0, function() pending = false; Safe(HookModules); Safe(Fit) end)
+    end
+    if type(ot.Update) == "function" then hooksecurefunc(ot, "Update", Later) end
+    if type(ot.AddModule) == "function" then hooksecurefunc(ot, "AddModule", Later) end
+    ot:HookScript("OnShow", Later)
+    ot:HookScript("OnSizeChanged", Later)
+    HookModules()
+    Later()
 end
 
 -- Questie's quest tracker: a dark panel with the gold edge
