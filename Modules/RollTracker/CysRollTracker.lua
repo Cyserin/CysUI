@@ -134,7 +134,7 @@ local windowToken, windowEnd = 0, nil
 local manualOpen = false
 local frame, body, status, hint, btnAnnounce, btnRules
 
-local function ShortName(name) return name and (name:match("^([^-]+)") or name) end
+local function ShortName(name) return type(name) == "string" and (name:match("^([^-]+)") or name) or nil end
 
 local function Count(t)
     local n = 0
@@ -340,6 +340,7 @@ end
 -- Events
 --------------------------------------------------------------------------------
 local function OnSystemMessage(msg)
+    if type(msg) ~= "string" then return end
     local name, roll = msg:match(ROLL_PATTERN)
     if not name then return end
     name = ShortName(name)
@@ -557,6 +558,10 @@ local function CreateFrames()
     SafeRegister(f, "CHAT_MSG_SYSTEM")
     for _, e in ipairs(ROSTER_EVENTS) do SafeRegister(f, e) end
     f:SetScript("OnEvent", function(_, event, msg, sender)
+        -- WoW Forever hides chat text and names from addons while in combat ("secret" values); those
+        -- messages are skipped. Rolls and passes made out of combat are read as normal.
+        local Plain = CysUICompat and CysUICompat.Plain
+        if Plain then msg, sender = Plain(msg), Plain(sender) end
         if event == "CHAT_MSG_SYSTEM" then
             OnSystemMessage(msg)
         elseif event:find("^CHAT_MSG_") then
