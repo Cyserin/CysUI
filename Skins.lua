@@ -3819,9 +3819,9 @@ Skins.list = {
     { key = "tradeskill", label = "Profession windows (Alchemy, Cooking...)", apply = SkinTradeSkill, addon = "Blizzard_TradeSkillUI" },
     { key = "trade",     label = "Player trade window", apply = SkinTrade },
     { key = "craft",     label = "Enchanting window", apply = SkinCraft, addon = "Blizzard_CraftUI" },
-    { key = "inspect",   label = "Inspect window", apply = SkinInspect, addon = "Blizzard_InspectUI" },
+    { key = "inspect",   label = "Inspect window", apply = SkinInspect, addon = "Blizzard_InspectUI", forever = false }, -- Forever has a new inspect window (reskin after 1.0)
     { key = "battleground", label = "Battleground queue and scoreboard", apply = SkinBattleground },
-    { key = "dressup",   label = "Dressing room", apply = SkinDressUp },
+    { key = "dressup",   label = "Dressing room", apply = SkinDressUp, forever = false }, -- Forever has a new dressing room with outfit list (reskin after 1.0)
     { key = "questie",   label = "Questie quest tracker", apply = SkinQuestie, addon = "Questie" },
     { key = "questwatch", label = "The game's own quest tracker", apply = SkinQuestWatch },
     { key = "options",   label = "Game options and key bindings", apply = SkinOptions },
