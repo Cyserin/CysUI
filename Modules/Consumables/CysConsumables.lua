@@ -33,7 +33,7 @@ local function IsWellFed()
             name = UnitBuff("player", i)
             if not name then break end
         end
-        if name == WELL_FED then return true end
+        if name == WELL_FED or name == "Well Fed" then return true end
     end
     return false
 end
@@ -161,8 +161,10 @@ local function Scan()
     end
     wipe(best)
     -- "only while unbuffed": not Well Fed -> buff food is preferred over any plain food
-    local preferBuff = db.buffFoodUnfed and not IsWellFed()
-    local allowBuff = db.buffFood or preferBuff
+    -- and while you are Well Fed it is left out, even with "allow buff food" on
+    local fedNow = db.buffFoodUnfed and IsWellFed()
+    local preferBuff = db.buffFoodUnfed and not fedNow
+    local allowBuff = (db.buffFood or preferBuff) and not fedNow
     for _, kind in ipairs(KINDS) do
         local top, topConj
         for id, it in pairs(items) do
