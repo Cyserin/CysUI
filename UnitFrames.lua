@@ -878,7 +878,41 @@ local function BuildParty()
         end
         UF.party[i] = f
         UF.frames["party" .. i] = f
+        -- healer marker: a small healer icon in the top-right corner of a party member who heals
+        local role = f:CreateTexture(nil, "OVERLAY", nil, 7)
+        role:SetSize(14, 14)
+        role:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
+        role:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+        role:SetTexCoord(0.3125, 0.609375, 0.015625, 0.3125) -- the healer cross
+        role:Hide()
+        f.cysHealer = role
     end
+    -- who heals: a role set by hand on the Raid Frames page, the game's assigned role, or a Priest by default
+    local function IsHealer(unit)
+        local okN, name = pcall(UnitName, unit)
+        local roles = CysUIDB and CysUIDB.raidframes and CysUIDB.raidframes.roles
+        if okN and type(name) == "string" and roles and roles[name] then return roles[name] == "HEALER" end
+        if UnitGroupRolesAssigned then
+            local okR, r = pcall(UnitGroupRolesAssigned, unit)
+            if okR and r and r ~= "NONE" then return r == "HEALER" end
+        end
+        local okC, _, class = pcall(UnitClass, unit)
+        return okC and class == "PRIEST"
+    end
+    local function UpdateHealers()
+        for i = 1, 4 do
+            local f = UF.party[i]
+            if f and f.cysHealer then
+                local on = UnitExists("party" .. i) and IsHealer("party" .. i)
+                f.cysHealer:SetShown(on and true or false)
+            end
+        end
+    end
+    local ev = CreateFrame("Frame")
+    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD" }) do pcall(ev.RegisterEvent, ev, e) end
+    ev:SetScript("OnEvent", function() pcall(UpdateHealers) end)
+    UF.UpdateHealers = UpdateHealers
+    pcall(UpdateHealers)
     HideBlizzard("party")
 end
 

@@ -470,11 +470,14 @@ if CysChangelog then
             { version = "0.58.5", date = "2026-11-06",
               improved = {
                   "Minimap Button: the Cys's UI crest is a bit smaller, in line with the other minimap icons.",
+                  "Character window: chest, wrists, hands, legs and feet show their enchant beside the slot, or No enchant in red (switch on the Skins page).",
+                  "Party frames: healers get a small healer cross in the corner (a Priest by default; set other healers on the Raid Frames page).",
                   "Minimap: the zone name bar is flat, a soft dark strip with a thin line under it instead of a gold box.",
                   "Minimap (Forever): Blizzard's tracking and AddOns buttons no longer float beside the map. Right-click the minimap for tracking; the Cys's UI crest holds your addon buttons.",
                   "Spelling: settings and notes use American spelling (color, colored).",
               },
               fixed = {
+                  "Flight map (Forever): shows the map again (the skin covered it and resized the window); Blizzard's own flight map is used there for now.",
                   "Quest tracker (Forever): its background now grows and shrinks with the quest list.",
               },
             },

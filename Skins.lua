@@ -2238,6 +2238,67 @@ local function QuestColors()
     end
 end
 
+-- Character window: enchant check on the slots that take armor kits and enchants (chest, wrists, hands,
+-- legs, feet). Enchanted: the enchant's name (Forever) or "Enchanted" (Era) in green; missing: dim red.
+local ENCHANT_SLOTS = {
+    { "CharacterChestSlot", 5, "LEFT" }, { "CharacterWristSlot", 9, "LEFT" },
+    { "CharacterHandsSlot", 10, "RIGHT" }, { "CharacterLegsSlot", 7, "RIGHT" }, { "CharacterFeetSlot", 8, "RIGHT" },
+}
+local enchantText = setmetatable({}, { __mode = "k" })
+local function EnchantName(slot)
+    if not (C_TooltipInfo and C_TooltipInfo.GetInventoryItem and Enum and Enum.TooltipDataLineType) then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
+    if not ok or not data or not data.lines then return nil end
+    local want = Enum.TooltipDataLineType.ItemEnchantmentPermanent
+    for _, line in ipairs(data.lines) do
+        if want and line.type == want and type(line.leftText) == "string" then
+            return (line.leftText:gsub("^Enchanted: ", ""))
+        end
+    end
+end
+local function UpdateEnchants()
+    for _, s in ipairs(ENCHANT_SLOTS) do
+        local btn = _G[s[1]]
+        if btn then
+            local fs = enchantText[btn]
+            if not fs then
+                fs = btn:CreateFontString(nil, "OVERLAY")
+                fs:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+                if s[3] == "LEFT" then
+                    fs:SetPoint("LEFT", btn, "RIGHT", 4, 0); fs:SetJustifyH("LEFT")
+                else
+                    fs:SetPoint("RIGHT", btn, "LEFT", -4, 0); fs:SetJustifyH("RIGHT")
+                end
+                fs:SetWidth(100); fs:SetWordWrap(true) -- long names wrap onto a second line
+                if fs.SetMaxLines then fs:SetMaxLines(2) end
+                enchantText[btn] = fs
+            end
+            local link = GetInventoryItemLink("player", s[2])
+            if not link then
+                fs:SetText("")
+            else
+                local enchant = tonumber(link:match("item:%d+:(%d*)") or "") or 0
+                if enchant > 0 then
+                    fs:SetText(EnchantName(s[2]) or "Enchanted")
+                    fs:SetTextColor(0.45, 0.85, 0.45)
+                else
+                    fs:SetText("No enchant")
+                    fs:SetTextColor(0.75, 0.35, 0.32)
+                end
+            end
+        end
+    end
+end
+local function SkinEnchants()
+    if not CharacterFrame then return end
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+    ev:RegisterUnitEvent("UNIT_INVENTORY_CHANGED", "player")
+    ev:SetScript("OnEvent", function() if CharacterFrame:IsShown() then Safe(UpdateEnchants) end end)
+    CharacterFrame:HookScript("OnShow", function() Safe(UpdateEnchants) end)
+    Safe(UpdateEnchants)
+end
+
 local function SkinWorldMap()
     local f = Get("WorldMapFrame")
     if not f then return end
@@ -4033,7 +4094,8 @@ Skins.list = {
     { key = "objtracker", label = "Quest tracker: soft dark background", apply = SkinObjectiveTracker, foreverOnly = true },
     { key = "options",   label = "Game options and key bindings", apply = SkinOptions },
     { key = "chatconfig", label = "Chat settings window", apply = SkinChatConfig },
-    { key = "taxi",      label = "Flight map", apply = SkinTaxi },
+    { key = "enchants",  label = "Character window: enchant check (chest, wrists, hands, legs, feet)", apply = SkinEnchants },
+    { key = "taxi",      label = "Flight map", apply = SkinTaxi, forever = false }, -- Forever: covered the map art; Blizzard's own shows until it gets a proper skin
     { key = "smallwin",  label = "Small windows (stack split, ready check, color picker, breath bar)", apply = SkinSmallWindows },
     { key = "extras",    label = "Pet stable, tabard and charters", apply = SkinExtras },
     { key = "timemanager", label = "Clock and stopwatch", apply = SkinTimeManager, addon = "Blizzard_TimeManager" },
