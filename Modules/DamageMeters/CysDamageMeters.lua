@@ -86,7 +86,7 @@ local function BuildSkin(D)
     s.author = "Cys's UI"
     s.version = "1.0"
     s.site = ""
-    s.desc = "Flat dark window with a gold edge and flat class-coloured bars, to match Cys's UI."
+    s.desc = "Flat dark window with a gold edge and flat class-colored bars, to match Cys's UI."
     s.no_cache = true
     s.callback = function(_, instance) pcall(Decorate, instance) end
     s.skin_options = nil

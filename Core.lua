@@ -464,9 +464,20 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.4",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.5",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.5", date = "2026-11-06",
+              improved = {
+                  "Minimap Button: the Cys's UI crest is a bit smaller, in line with the other minimap icons.",
+                  "Minimap: the zone name bar is flat, a soft dark strip with a thin line under it instead of a gold box.",
+                  "Minimap (Forever): the tracking button and the AddOns button sit inside the map's top corners instead of floating beside it.",
+                  "Spelling: settings and notes use American spelling (color, colored).",
+              },
+              fixed = {
+                  "Quest tracker (Forever): its background now grows and shrinks with the quest list.",
+              },
+            },
             { version = "0.58.4", date = "2026-11-06",
               improved = {
                   "Chat: short channel names - [1. General] becomes [Gen], [2. Trade] becomes [T], [Guild] becomes [G] (switch on the Chat page).",
@@ -483,7 +494,7 @@ if CysChangelog then
                   "Cys's Bags: a small icon in front of each sidebar category, a quieter Inventory count in the title, and no more white edge on common items.",
                   "Cys's Bags: categories with nothing in them are hidden from the sidebar (they come back while you hold an item, so you can still drop it there), and the bags open by themselves at a vendor, bank, mailbox or Auction House and close again when you leave. Both have switches on the Automation page.",
                   "Quest tracker (Forever): the Cys dark background with the gold edge, a little roomier around the quests (switch on the Skins page). Map & Quest Log: zone names in the quest list are gold.",
-                  "Quest objectives are coloured by progress (soft red, amber, yellow; finished ones dim green) in the quest tracker on Forever and in mob tooltips on both clients. Switch on the Skins page.",
+                  "Quest objectives are colored by progress (soft red, amber, yellow; finished ones dim green) in the quest tracker on Forever and in mob tooltips on both clients. Switch on the Skins page.",
                   "Classic Era: clams, sacks and other openable items in your bags open by themselves out of combat (switch on the Automation page).",
                   "Roll Tracker: no longer pops open by itself when people join or leave the group; it opens when someone in the group does a /roll (passes typed in chat are still counted).",
                   "Group invites: optionally accepted straight away when they come from a friend or guildmate (hold Shift to see the popup). Off until you tick it on the Automation page.",
@@ -920,7 +931,7 @@ if CysChangelog then
               fixed = {
                   "Mailbox: the tick boxes next to each mail are now inside the window (the rows are moved right and made slightly narrower).",
                   "Breath bar: the text sits slightly lower.",
-                  "Options window: near-black boxes drawn by other addons' option pages are brought to the panel colour.",
+                  "Options window: near-black boxes drawn by other addons' option pages are brought to the panel color.",
               },
             },
             { version = "0.38.25", date = "2026-10-29",
@@ -1011,7 +1022,7 @@ if CysChangelog then
             },
             { version = "0.38.10", date = "2026-10-29",
               fixed = {
-                  "Character window: item slot edges now show. Green and better items glow in their item colour; plain items and empty slots get a quiet dark edge.",
+                  "Character window: item slot edges now show. Green and better items glow in their item color; plain items and empty slots get a quiet dark edge.",
                   "Damage Meters: the gold edge now sits fully outside the window, so nothing (like the class icon) can overlap it.",
               },
             },
@@ -1028,7 +1039,7 @@ if CysChangelog then
             },
             { version = "0.38.7", date = "2026-10-29",
               improved = {
-                  "Damage Meters: gold edge around the title strip (\"Damage Done\" / \"Healing Done\"), fainter bar colours, and white names and numbers on the bars. Press the skin button again to apply the bar and text changes.",
+                  "Damage Meters: gold edge around the title strip (\"Damage Done\" / \"Healing Done\"), fainter bar colors, and white names and numbers on the bars. Press the skin button again to apply the bar and text changes.",
               },
             },
             { version = "0.38.6", date = "2026-10-29",
@@ -1065,7 +1076,7 @@ if CysChangelog then
             },
             { version = "0.38.0", date = "2026-10-29",
               added = {
-                  "Damage Meters: a \"Cys's UI\" skin for the Details! damage meter (flat dark window, gold edge, flat class-coloured bars). It installs into Details' skin list; the new Damage Meters page has a button to use it on all windows and a switch for the gold edge. Nothing in Details changes until you pick the skin. Blizzard's own meter will follow after Forever.",
+                  "Damage Meters: a \"Cys's UI\" skin for the Details! damage meter (flat dark window, gold edge, flat class-colored bars). It installs into Details' skin list; the new Damage Meters page has a button to use it on all windows and a switch for the gold edge. Nothing in Details changes until you pick the skin. Blizzard's own meter will follow after Forever.",
               },
             },
             { version = "0.37.5", date = "2026-10-29",
@@ -1133,7 +1144,7 @@ if CysChangelog then
             },
             { version = "0.35.9", date = "2026-10-29",
               improved = {
-                  "Character window: the equipment slots are flat dark boxes with a thin edge in the item's quality colour (gold when empty or plain), instead of Blizzard's stone slot art.",
+                  "Character window: the equipment slots are flat dark boxes with a thin edge in the item's quality color (gold when empty or plain), instead of Blizzard's stone slot art.",
                   "Character window: the name, level/class and guild lines are centred on the window (they sat to the right, which pushed the guild line under the Sets button).",
               },
             },
@@ -1387,12 +1398,12 @@ if CysChangelog then
                   "Experience bar: the text sits a little lower so it looks centered in the bar.",
               },
               improved = {
-                  "Heal prediction: the overheal bar now reaches out past the player and target frames in proportion to how much of the heal would be wasted, and changes colour (teal, yellow, red) the more of it is wasted. It also shows when the unit is at full health.",
+                  "Heal prediction: the overheal bar now reaches out past the player and target frames in proportion to how much of the heal would be wasted, and changes color (teal, yellow, red) the more of it is wasted. It also shows when the unit is at full health.",
               },
             },
             { version = "0.30.0", date = "2026-10-29",
               fixed = {
-                  "Heal prediction on the player, target, target-of-target and party frames: the incoming-heal colour now starts where your health ends and covers only the missing health, instead of washing over the whole frame. A heal that would overheal shows as a thin sliver just outside the frame.",
+                  "Heal prediction on the player, target, target-of-target and party frames: the incoming-heal color now starts where your health ends and covers only the missing health, instead of washing over the whole frame. A heal that would overheal shows as a thin sliver just outside the frame.",
                   "Chat: the window can now be moved all the way to the left and bottom edges of the screen (Blizzard kept it 35 and 50 pixels away). The edit box goes above the window when the window sits at the very bottom.",
                   "Info bars, Micro Menu and XP bar: text is centred on whole pixels, sized from the bar's height, and shrinks to fit when a readout is too long for its slot (the XP bar's quest and rested text now counts towards the centring).",
                   "Action Bars: Blizzard's page arrows and bar art stay hidden even when Edit Mode re-shows them.",
@@ -1411,7 +1422,7 @@ if CysChangelog then
               },
               added = {
                   "Player Auras settings page: toggles for right-click cancel, timers on or under the icons, and how many buffs and debuffs to show. Timers show hours, turn red under 10 seconds and update smoothly.",
-                  "Group Loot Boxes: the border and timer bar take the colour of the item being rolled on (switch off on the settings page). The settings page uses the same +/- steppers as the rest of /cui.",
+                  "Group Loot Boxes: the border and timer bar take the color of the item being rolled on (switch off on the settings page). The settings page uses the same +/- steppers as the rest of /cui.",
               } },
             { version = "0.29.0", date = "2026-10-29",
               added = {
@@ -1561,7 +1572,7 @@ if CysChangelog then
               } },
             { version = "0.16.0", date = "2026-10-28",
               added = {
-                  "Friends window: new Guild tab. Shows the guild message of the day (hover for all of it) and the roster, online members first by rank with class-coloured names, level, zone and notes, offline members with how long ago they were on. Search by name, rank, note or zone, hide offline members with the button at the bottom, and whisper, invite or add friends from the right-click menu.",
+                  "Friends window: new Guild tab. Shows the guild message of the day (hover for all of it) and the roster, online members first by rank with class-colored names, level, zone and notes, offline members with how long ago they were on. Search by name, rank, note or zone, hide offline members with the button at the bottom, and whisper, invite or add friends from the right-click menu.",
               } },
             { version = "0.15.1", date = "2026-10-28",
               fixed = {
@@ -1569,11 +1580,11 @@ if CysChangelog then
               } },
             { version = "0.15.0", date = "2026-10-28",
               added = {
-                  "Friends window: new Who tab. Type a name, level range, class or zone and press Enter (empty = everyone in your zone). Results are class-coloured with level, race, zone and guild; double-click or right-click to whisper, invite or add as a friend.",
+                  "Friends window: new Who tab. Type a name, level range, class or zone and press Enter (empty = everyone in your zone). Results are class-colored with level, race, zone and guild; double-click or right-click to whisper, invite or add as a friend.",
               } },
             { version = "0.14.2", date = "2026-10-28",
               fixed = {
-                  "Friends: game names now have their own colours (WoW blue, Diablo red, Hearthstone orange...), the grey text is lighter so it reads on the dark panel, and rows have a little more breathing room.",
+                  "Friends: game names now have their own colors (WoW blue, Diablo red, Hearthstone orange...), the grey text is lighter so it reads on the dark panel, and rows have a little more breathing room.",
               } },
             { version = "0.14.1", date = "2026-10-28",
               added = {
@@ -1581,7 +1592,7 @@ if CysChangelog then
               } },
             { version = "0.14.0", date = "2026-10-28",
               added = {
-                  "New Friends window (/cfriends, or the Social key and micro menu button): game and Battle.net friends grouped into Favorites / Online / Offline with class-coloured names, level and zone, search, whisper, invite and remove, plus an Ignore tab. Move and resize it in /cui layout; switch it off on the Modules page. Blizzard's own friends window is untouched.",
+                  "New Friends window (/cfriends, or the Social key and micro menu button): game and Battle.net friends grouped into Favorites / Online / Offline with class-colored names, level and zone, search, whisper, invite and remove, plus an Ignore tab. Move and resize it in /cui layout; switch it off on the Modules page. Blizzard's own friends window is untouched.",
               } },
             { version = "0.13.2", date = "2026-10-28",
               fixed = {
@@ -1597,7 +1608,7 @@ if CysChangelog then
               } },
             { version = "0.12.0", date = "2026-10-28",
               added = {
-                  "Skins: the quest dialogs (accepting, progress and turn-in windows, plus the quest list an NPC offers) and the NPC gossip window now use the dark Cys look, with the dark ink text recoloured (gold headings, light body text, green finished objectives).",
+                  "Skins: the quest dialogs (accepting, progress and turn-in windows, plus the quest list an NPC offers) and the NPC gossip window now use the dark Cys look, with the dark ink text recolored (gold headings, light body text, green finished objectives).",
               } },
             { version = "0.11.4", date = "2026-10-28",
               fixed = {
@@ -1621,7 +1632,7 @@ if CysChangelog then
               } },
             { version = "0.11.0", date = "2026-10-28",
               added = {
-                  "Skins: the Quest Log now has the gold-and-dark look - flat panel, plain X, flat Abandon / Share / Exit buttons, a slim scrollbar, and the quest text is recoloured (gold titles, light body text, green finished objectives) so it reads on the dark background instead of the old parchment.",
+                  "Skins: the Quest Log now has the gold-and-dark look - flat panel, plain X, flat Abandon / Share / Exit buttons, a slim scrollbar, and the quest text is recolored (gold titles, light body text, green finished objectives) so it reads on the dark background instead of the old parchment.",
               } },
             { version = "0.10.4", date = "2026-10-28",
               improved = {

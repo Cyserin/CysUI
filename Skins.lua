@@ -4019,7 +4019,7 @@ Skins.list = {
     { key = "betterfriends", label = "BetterFriendlist addon window", apply = SkinBetterFriends, addon = "BetterFriendlist" },
     { key = "communities", label = "Guild & Communities window", apply = SkinCommunities, addon = "Blizzard_Communities" },
     { key = "worldmap",  label = "World map", apply = SkinWorldMap },
-    { key = "questcolors", label = "Quest objectives coloured by progress (tracker and tooltips)", apply = QuestColors },
+    { key = "questcolors", label = "Quest objectives colored by progress (tracker and tooltips)", apply = QuestColors },
     { key = "mail",      label = "Mailbox",   apply = SkinMail },
     { key = "trainer",   label = "Class trainer", apply = SkinTrainer, addon = "Blizzard_TrainerUI" },
     { key = "tradeskill", label = "Profession windows (Alchemy, Cooking...)", apply = SkinTradeSkill, addon = "Blizzard_TradeSkillUI" },

@@ -244,7 +244,7 @@ function MB.Enable()
     if not db.enable then return end
 
     button = CreateFrame("Button", "CysUIMinimapButton", UIParent)
-    button:SetSize(34, 34)
+    button:SetSize(26, 26) -- the same size as the other icons on the minimap
     button:SetFrameStrata("MEDIUM")
     button:SetFrameLevel(30)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")

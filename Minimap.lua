@@ -322,6 +322,35 @@ function MM.Enable()
         end
     end
 
+    -- WoW Forever: the tracking button and the Addon Compartment (the numbered AddOns button) sit inside the
+    -- map's top corners instead of floating beside it. Blizzard re-anchors them on its own layout, so put them
+    -- back whenever that happens. Only position and size change.
+    local FOREVER_ICONS = {
+        { function() return MinimapCluster and (MinimapCluster.Tracking or MinimapCluster.TrackingFrame) end, "TOPLEFT", 3, -3 },
+        { function() return _G.AddonCompartmentFrame end, "TOPRIGHT", -3, -28 },
+    }
+    for _, icon in ipairs(FOREVER_ICONS) do
+        local okF, f = pcall(icon[1])
+        if okF and f and f.SetPoint then
+            Step("forever icon", function()
+                local placing = false
+                local function Place()
+                    if placing or InCombatLockdown() then return end
+                    placing = true
+                    f:ClearAllPoints()
+                    f:SetPoint(icon[2], Minimap, icon[2], icon[3], icon[4])
+                    f:SetFrameStrata(Minimap:GetFrameStrata())
+                    f:SetFrameLevel(Minimap:GetFrameLevel() + 8)
+                    placing = false
+                end
+                local w = f:GetWidth()
+                if w and w > 0 then f:SetScale(max(0.4, min(1.2, ICON_SIZE / w))) end
+                Place()
+                hooksecurefunc(f, "SetPoint", function() if not placing then C_Timer.After(0, Place) end end)
+            end)
+        end
+    end
+
     -- gold edge + overlay for coordinates (children of the map so they draw above it)
     Step("border", function()
         local overlay = CreateFrame("Frame", nil, Minimap)
@@ -340,8 +369,11 @@ function MM.Enable()
         zoneBar:SetHeight(20)
         zoneBar:SetPoint("BOTTOMLEFT", holder, "TOPLEFT", 0, 3)
         zoneBar:SetPoint("BOTTOMRIGHT", holder, "TOPRIGHT", 0, 3)
-        W.Texture(zoneBar, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.9 }):SetAllPoints()
-        W.Border(zoneBar, 1, T.border, "BORDER")
+        -- flat: a soft dark strip with a thin line under it, no box (the zone name carries the color)
+        W.Texture(zoneBar, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.65 }):SetAllPoints()
+        local underline = zoneBar:CreateTexture(nil, "BORDER")
+        underline:SetColorTexture(T.border[1], T.border[2], T.border[3], 0.35)
+        underline:SetPoint("BOTTOMLEFT"); underline:SetPoint("BOTTOMRIGHT"); underline:SetHeight(1)
         zoneBar.text = W.Text(zoneBar, 11, T.accent, "CENTER")
         zoneBar.text:SetPoint("CENTER", 0, 0)
         zoneBar.text:SetWidth(size - 8)
