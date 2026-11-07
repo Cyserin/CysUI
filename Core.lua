@@ -471,7 +471,7 @@ if CysChangelog then
               improved = {
                   "Minimap Button: the Cys's UI crest is a bit smaller, in line with the other minimap icons.",
                   "Minimap: the zone name bar is flat, a soft dark strip with a thin line under it instead of a gold box.",
-                  "Minimap (Forever): the tracking button and the AddOns button sit inside the map's top corners instead of floating beside it.",
+                  "Minimap (Forever): Blizzard's tracking and AddOns buttons no longer float beside the map. Right-click the minimap for tracking; the Cys's UI crest holds your addon buttons.",
                   "Spelling: settings and notes use American spelling (color, colored).",
               },
               fixed = {
