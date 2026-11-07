@@ -477,6 +477,7 @@ if CysChangelog then
                   "Spelling: settings and notes use American spelling (color, colored).",
               },
               fixed = {
+                  "Nameplates: a raid marker (skull, star...) shows on the nameplate as soon as it is set, without swapping targets.",
                   "Flight map (Forever): shows the map again (the skin covered it and resized the window); Blizzard's own flight map is used there for now.",
                   "Quest tracker (Forever): its background now grows and shrinks with the quest list.",
               },

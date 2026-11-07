@@ -627,6 +627,7 @@ function NP.Enable()
     f:RegisterEvent("NAME_PLATE_UNIT_ADDED")
     f:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
     f:RegisterEvent("PLAYER_TARGET_CHANGED")
+    f:RegisterEvent("RAID_TARGET_UPDATE") -- a skull or other marker set or cleared: show it right away
     f:SetScript("OnEvent", function(_, event, unit)
         if event == "NAME_PLATE_UNIT_ADDED" then
             NP:Add(unit)
