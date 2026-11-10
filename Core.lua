@@ -467,9 +467,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.8",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.9",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.9", date = "2026-11-10",
+              added = {
+                  "Cys's own cooldown bars: an icon turns red while your target is out of range for that ability (Charge too far away, for example). Switch on the Cooldown Manager page.",
+              },
+            },
             { version = "0.58.8", date = "2026-11-10",
               improved = {
                   "Cooldown Manager, Your bars: a spell you added before learning it now shows as a greyed box at the end of its bar, so you can see it is waiting and take it off again.",

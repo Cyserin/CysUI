@@ -24,7 +24,7 @@ local T = W.T
 CysUIDB.cooldowns = CysUIDB.cooldowns or {}
 local db = CysUIDB.cooldowns
 local DEFAULTS = { look = true, bars = true, timerBig = 18, timerSmall = 12, stacks = 12, gap = 2, shade = true,
-    own = false, grey = true, gcd = false, tips = false, carry = false, pack = true }
+    own = false, grey = true, gcd = false, tips = false, carry = false, pack = true, range = true }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
@@ -262,6 +262,25 @@ local function MakeIcon(bar)
     return f
 end
 
+-- Range. The game tells us when a spell goes in or out of range of the current target, once we ask it to watch
+-- that spell (the same service its own cooldown rows use). Nothing is polled.
+local rangeWatched, outOfRange = {}, {}
+local function WatchRange(spell)
+    if rangeWatched[spell] or not (C_Spell.EnableSpellRangeCheck and C_Spell.IsSpellInRange) then return end
+    rangeWatched[spell] = true
+    local ok, has = pcall(C_Spell.SpellHasRange, spell)
+    if not ok or Secret(has) or not has then return end
+    pcall(C_Spell.EnableSpellRangeCheck, spell, true) -- never switched off again: the game's own rows share it
+    local ok2, inRange = pcall(C_Spell.IsSpellInRange, spell)
+    outOfRange[spell] = ok2 and not Secret(inRange) and inRange == false or nil
+end
+local function RecheckRange()
+    for spell in pairs(rangeWatched) do
+        local ok, inRange = pcall(C_Spell.IsSpellInRange, spell)
+        outOfRange[spell] = ok and not Secret(inRange) and inRange == false or nil
+    end
+end
+
 -- one icon's picture, cooldown, count and usable tint. Every game answer that could be locked goes straight
 -- into a widget (or through pcall); none is compared or used in math here.
 local function UpdateIcon(f)
@@ -299,7 +318,10 @@ local function UpdateIcon(f)
     end
 
     local r, g, b = 1, 1, 1
-    if C_Spell.IsSpellUsable then
+    WatchRange(spell)
+    if db.range and (outOfRange[spell] or outOfRange[e.base]) then
+        r, g, b = 0.9, 0.2, 0.2 -- target out of range for this spell
+    elseif C_Spell.IsSpellUsable then
         local ok, usable, noPower = pcall(C_Spell.IsSpellUsable, spell)
         if ok and not Secret(usable) and not Secret(noPower) then
             if noPower then r, g, b = 0.45, 0.45, 1
@@ -560,11 +582,19 @@ local function StartOwn()
     local oe = CreateFrame("Frame")
     for _, event in ipairs({ "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES", "SPELL_UPDATE_USABLE", "PLAYER_REGEN_ENABLED",
         "PLAYER_REGEN_DISABLED", "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
-        "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED", "COOLDOWN_VIEWER_DATA_LOADED" }) do
+        "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED", "COOLDOWN_VIEWER_DATA_LOADED", "SPELL_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED" }) do
         pcall(oe.RegisterEvent, oe, event)
     end
-    oe:SetScript("OnEvent", function(_, event)
-        if event == "SPELL_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_CHARGES" or event == "SPELL_UPDATE_USABLE"
+    oe:SetScript("OnEvent", function(_, event, spellID, inRange, checksRange)
+        if event == "SPELL_RANGE_CHECK_UPDATE" then
+            if type(spellID) == "number" and not Secret(spellID) and not Secret(inRange) and not Secret(checksRange) then
+                outOfRange[spellID] = (checksRange == true and inRange == false) or nil
+                QueueUpdate()
+            end
+        elseif event == "PLAYER_TARGET_CHANGED" then
+            RecheckRange()
+            QueueUpdate()
+        elseif event == "SPELL_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_CHARGES" or event == "SPELL_UPDATE_USABLE"
             or event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
             QueueUpdate()
         elseif event == "UPDATE_SHAPESHIFT_FORM" or event == "UPDATE_SHAPESHIFT_FORMS" then
@@ -1221,6 +1251,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         y = y - 26
     end
     OwnCheck("Grey out an icon while it is on cooldown", "grey")
+    OwnCheck("Red icon when your target is out of range for it", "range")
     OwnCheck("Show the global cooldown sweep", "gcd")
     OwnCheck("Tooltips on hover", "tips")
     y = y - 6
