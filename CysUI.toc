@@ -68,6 +68,7 @@ Modules\Tank\CysTaunt.lua
 Modules\Buffs\CysMissingBuffs.lua
 Modules\CombatLog\CysCombatLog.lua
 Modules\CombatText\CysCombatText.lua
+Modules\CombatText\CysFrameText.lua
 Modules\Threat\CysThreat.lua
 Modules\Consumables\CysConsumables.lua
 Modules\Cooldowns\CysCooldowns.lua

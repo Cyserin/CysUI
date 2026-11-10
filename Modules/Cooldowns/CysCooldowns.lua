@@ -24,7 +24,8 @@ local T = W.T
 CysUIDB.cooldowns = CysUIDB.cooldowns or {}
 local db = CysUIDB.cooldowns
 local DEFAULTS = { look = true, bars = true, timerBig = 18, timerSmall = 12, stacks = 12, gap = 2, shade = true,
-    own = false, grey = true, gcd = false, tips = false, carry = false, pack = true, range = true }
+    own = false, grey = true, gcd = false, tips = false, carry = false, pack = true, range = true,
+    stance = false, stanceAll = false, stanceSize = 32 }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
@@ -722,6 +723,71 @@ local function StartCarry()
 end
 
 --------------------------------------------------------------------------------
+-- Stance / form icon: your current stance as its own piece
+--
+-- For classes with stances or forms (Warrior, Druid, Rogue stealth, Priest Shadowform...). Our own frame, placed
+-- in Layout mode, so the stance no longer has to be tracked as a buff in the game's buff row. Either just the
+-- stance you are in, or all of them with the current one lit. Which stance is up is a plain value the game lets
+-- addons read, in or out of combat.
+--------------------------------------------------------------------------------
+local stanceBar
+local function LayoutStance()
+    if not stanceBar then return end
+    local size, gap = db.stanceSize, db.gap or 0
+    local count = GetNumShapeshiftForms and GetNumShapeshiftForms() or 0
+    local current = GetShapeshiftForm and GetShapeshiftForm() or 0
+    if type(current) ~= "number" or Secret(current) then current = 0 end
+    local shown = 0
+    for i = 1, count do
+        if db.stanceAll or i == current then
+            shown = shown + 1
+            local f = stanceBar.icons[shown]
+            if not f then
+                f = CreateFrame("Frame", nil, stanceBar.holder)
+                f.back = f:CreateTexture(nil, "BACKGROUND")
+                f.back:SetAllPoints()
+                f.back:SetColorTexture(T.bg[1], T.bg[2], T.bg[3], 1)
+                f.tex = f:CreateTexture(nil, "ARTWORK")
+                f.tex:SetAllPoints()
+                f.tex:SetTexCoord(TRIM, 1 - TRIM, TRIM, 1 - TRIM)
+                f.edges = W.Border(f, 1, T.border, "OVERLAY")
+                stanceBar.icons[shown] = f
+            end
+            f.tex:SetTexture((GetShapeshiftFormInfo(i)))
+            local lit = i == current
+            f.tex:SetDesaturated(not lit)
+            f.tex:SetAlpha(lit and 1 or 0.45)
+            W.SetBorder(f.edges, lit and T.border or T.line)
+            f:SetSize(size, size)
+            f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", stanceBar.holder, "TOPLEFT", (shown - 1) * (size + gap), 0)
+            f:Show()
+        end
+    end
+    for i = shown + 1, #stanceBar.icons do stanceBar.icons[i]:Hide() end
+    -- with only the current stance shown the box keeps one icon's size, even in no stance at all
+    local cols = max(shown, 1)
+    stanceBar.holder:SetSize(cols * size + (cols - 1) * gap, size)
+    CUI:ApplyLayout("cooldowns_stance")
+end
+local function StartStance()
+    if stanceBar or not db.stance or OtherManager() then return end
+    if not (GetNumShapeshiftForms and GetNumShapeshiftForms() > 0) then return end -- this class has none (checked again later)
+    local holder = CreateFrame("Frame", "CysCooldownBar_stance", UIParent)
+    holder:SetSize(db.stanceSize, db.stanceSize)
+    holder:SetPoint("CENTER", UIParent, "CENTER", -260, -60)
+    holder:SetFrameStrata("MEDIUM")
+    stanceBar = { holder = holder, icons = {} }
+    CUI:RegisterMovable(holder, "cooldowns_stance", "Stance", { point = "CENTER", x = -260, y = -60 })
+    local se = CreateFrame("Frame")
+    for _, event in ipairs({ "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_ENTERING_WORLD", "SPELLS_CHANGED" }) do
+        pcall(se.RegisterEvent, se, event)
+    end
+    se:SetScript("OnEvent", LayoutStance)
+    LayoutStance()
+end
+
+--------------------------------------------------------------------------------
 -- The viewers: skin what is there, then every icon the game hands out later
 --------------------------------------------------------------------------------
 local hooked = {}
@@ -745,6 +811,7 @@ local function Setup()
     end
     StartOwn()
     StartCarry()
+    StartStance()
 end
 
 local ev = CreateFrame("Frame")
@@ -1250,13 +1317,21 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         W.Checkbox(body, label, function() return db[key] end, function(on) db[key] = on; LayoutOwn() end):SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
+    Check("Show your stance or form as its own icon (reload)", "stance")
+    W.Checkbox(body, "Show every stance, with the current one lit", function() return db.stanceAll end,
+        function(on) db.stanceAll = on; LayoutStance() end):SetPoint("TOPLEFT", 24, y)
+    y = y - 26
+    W.Stepper(body, "Stance icon size", function() return db.stanceSize end, function(v) db.stanceSize = v; LayoutStance() end, 16, 64, 1, " px")
+        :SetPoint("TOPLEFT", 24, y)
+    y = y - 30
     OwnCheck("Grey out an icon while it is on cooldown", "grey")
     OwnCheck("Red icon when your target is out of range for it", "range")
     OwnCheck("Show the global cooldown sweep", "gcd")
     OwnCheck("Tooltips on hover", "tips")
     y = y - 6
     local ownNote = W.Notes(body, 4, y, width, "", {
-        { "Moving them", "open Layout mode (top of this window) and drag Cooldowns: main, utility, buffs and buff bars." },
+        { "Moving them", "open Layout mode (top of this window) and drag Cooldowns: main, utility, buffs and buff bars, and Stance." },
+        { "Stance icon", "for classes with stances or forms. With it on you can take the stance out of the game's Tracked Buffs (Choose spells) so it is not shown twice." },
         { "The game's rows", "the cooldown and utility rows are faded out while Cys's bars are on. The tracked buffs and buff bars stay the game's own icons (addons can't read buffs in combat); the second switch only lets you place them in Layout mode. Their icon size is still in Edit Mode." },
         { "Tracked buffs", "to place them, tick the second switch above and drag Cooldowns: buffs in Layout mode. Which buffs are tracked, and their order, is set in the game's own window (Choose spells, Tracked Buffs) - they are the game's icons, so they can't be edited here." },
         { "Gap", "uses Gap between icons above." },
@@ -1270,7 +1345,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
     Check("Flat buff bars in your Border color (reload)", "bars")
     Check("Yellow shade while its buff or debuff is running", "shade")
     y = y - 4
-    W.Stepper(body, "Gap between icons", function() return db.gap end, function(v) db.gap = v; ApplyGaps(); LayoutOwn() end, 0, 12, 1, " px")
+    W.Stepper(body, "Gap between icons", function() return db.gap end, function(v) db.gap = v; ApplyGaps(); LayoutOwn(); LayoutStance() end, 0, 12, 1, " px")
         :SetPoint("TOPLEFT", 4, y)
     y = y - 28
 
