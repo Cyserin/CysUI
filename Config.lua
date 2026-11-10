@@ -897,6 +897,7 @@ local function CreateWindow()
             if e.head and not e.head.empty then fold[e.key] = true end
         end
         Layout()
+        sideScroll:SetVerticalScroll(0) -- the list is short now: back to the top, or it stays scrolled past its end
     end)
     local expandAll = W.Button(foldBar, bw, 18, "Expand all")
     expandAll:SetPoint("LEFT", collapseAll, "RIGHT", 6, 0)

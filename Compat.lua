@@ -345,6 +345,42 @@ function Compat.SecureReload(btn, owner, before)
     return Sync
 end
 
+-- WoW Forever: some of the game's own windows must be opened by the player, not by addon code (an addon opening
+-- them leaves them tainted, and they then fail on protected actions). A slash command run from a secure button IS
+-- the player's own action. SecureClick lets a plain button do that: while the mouse is on the button (out of
+-- combat) a secure macro button sits over it and takes the click. It only exists during the hover, so it can't
+-- drift when a page scrolls or changes. Returns true when the click will be handled this way.
+function Compat.SecureClick(btn, macro)
+    if not (Compat.isForever and btn and macro) then return false end
+    local sec
+    btn:HookScript("OnEnter", function()
+        if InCombatLockdown() then return end
+        if not sec then
+            sec = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
+            sec:SetAttribute("type", "macro")
+            sec:SetAttribute("macrotext", macro)
+            sec:SetAttribute("useOnKeyDown", false)
+            sec:RegisterForClicks("AnyUp")
+            sec:SetFrameStrata("FULLSCREEN_DIALOG")
+            sec:SetScript("OnLeave", function(self)
+                if not InCombatLockdown() then self:Hide() end
+                local f = btn:GetScript("OnLeave"); if f then f(btn) end
+            end)
+        end
+        local l, b, w, h = btn:GetRect()
+        if not (l and w) then return end
+        local ratio = (btn:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
+        sec:ClearAllPoints()
+        sec:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * ratio, b * ratio)
+        sec:SetSize(w * ratio, h * ratio)
+        sec:Show()
+    end)
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_REGEN_DISABLED") -- still allowed to hide it here, right before combat locks it
+    ev:SetScript("OnEvent", function() if sec then sec:Hide() end end)
+    return true
+end
+
 --------------------------------------------------------------------------------
 -- Locked casts (WoW Forever): other units' cast name, icon and times are locked for addons, so no math on them.
 -- What still works: the name and icon go straight onto a FontString / Texture, and the bar runs off the game's own

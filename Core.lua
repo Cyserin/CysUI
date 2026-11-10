@@ -279,6 +279,7 @@ end
 -- Every place that hides other classes' modules uses this, so those modules are hidden and never load there.
 function CUI:ClassAllowed(def)
     if def and def.forever == false and CUI.isForever then return false end
+    if def and def.foreverOnly and not CUI.isForever then return false end -- built on something only WoW Forever has
     local want = def and def.class
     if not want then return true end
     local _, mine = UnitClass("player")
@@ -430,6 +431,8 @@ SlashCmdList["CYSUI"] = function(msg)
         CUI:Debug()
     elseif msg == "reload" then
         CysUICompat.Reload()
+    elseif msg == "shout" then
+        if CUI.ShoutProbe then CUI.ShoutProbe() else CUI:Print("The Battle Shout alert is not loaded (Warrior module off, or not a Warrior).") end
     elseif msg == "hit" then
         -- which frame is under the mouse? Hover the button that won't react, then wait 4 seconds
         CUI:Print("Put the mouse over the thing that won't react. Reading in 4 seconds...")
@@ -468,6 +471,9 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.6", date = "2026-11-10",
+              added = {
+                  "Cys's Cooldowns (Forever): the game's Cooldown Manager gets the Cys look - square icons with a thin edge in your Border color, a square cooldown sweep, flat buff bars, timer and stack numbers at sizes you choose, a gap between icons, and a switch for the yellow shade the game puts on an icon while its effect is running. A Choose spells button opens the game's own Cooldown Manager; where the rows sit stays in Edit Mode. New Cooldown Manager page; switch under Modules.",
+              },
               fixed = {
                   "Battle Shout alert (Forever): no longer comes up in combat while the shout is still running. The game hides buffs from addons in a fight, and a hidden shout was read as a missing one.",
                   "Conflicts window (Forever): Apply and reload now saves your choices and reloads on the click, instead of only telling you to type /reload.",

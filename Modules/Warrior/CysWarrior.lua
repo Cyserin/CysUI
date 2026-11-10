@@ -42,9 +42,13 @@ CUI:RegisterMovable(alert, "warriorshout", "Battle Shout Alert", { point = "CENT
 -- every rank of Battle Shout: the first rank's ID stops counting once a higher rank replaces it
 local SHOUT_RANKS = { 6673, 5242, 6192, 11549, 11550, 11551, 25289 }
 local function ShoutKnown()
+    local book = C_SpellBook
     for _, id in ipairs(SHOUT_RANKS) do
         if IsPlayerSpell and IsPlayerSpell(id) then return true end
         if IsSpellKnown and IsSpellKnown(id) then return true end
+        -- WoW Forever: the old "do I know this spell" calls are gone; the spell book answers instead
+        if book and book.IsSpellKnown and book.IsSpellKnown(id) then return true end
+        if book and book.IsSpellKnownOrInSpellBook and book.IsSpellKnownOrInSpellBook(id) then return true end
     end
     -- last resort: the spell book knows the name
     if GetSpellInfo and GetSpellInfo(BATTLE_SHOUT) and GetSpellCooldown and GetSpellCooldown(BATTLE_SHOUT) then return true end
@@ -128,6 +132,19 @@ end)
 UpdateAlert()
 
 CUI.WarriorRefresh = UpdateAlert -- the settings page (below, built for every class) calls this
+
+-- /cui shout: why the alert is or isn't showing right now, one line per reason
+CUI.ShoutProbe = function()
+    local function YN(v) if v == nil then return "can't tell" end return v and "yes" or "no" end
+    local has = CysUICompat.PlayerBuff(BATTLE_SHOUT, SHOUT_RANKS)
+    UpdateAlert()
+    CUI:Print("Battle Shout check - switch on: " .. YN(db.shout) .. ", spell known: " .. YN(ShoutKnown())
+        .. ", buff on you: " .. YN(has) .. ", last real answer: " .. YN(known)
+        .. ", buffs locked: " .. YN(CysUICompat.AurasLocked()) .. ", in combat: " .. YN(InCombatLockdown()))
+    CUI:Print("resting: " .. YN(IsResting and IsResting()) .. " (hidden while resting: " .. YN(db.shoutHideResting)
+        .. "), only in group: " .. YN(db.shoutGroupOnly) .. ", only in combat: " .. YN(db.shoutCombatOnly)
+        .. ", mounted: " .. YN(IsMounted and IsMounted()) .. ", alert showing: " .. YN(alert:IsShown()))
+end
 
     end,
 })
