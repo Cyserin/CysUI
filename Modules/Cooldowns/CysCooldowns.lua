@@ -215,7 +215,7 @@ local Secret = CysUICompat.Secret
 local ownBars = {}
 local ownActive = false
 local SaveOrder, Unplaced
-local AddSpell
+local AddSpell, Waiting, DropWaiting
 
 -- which stance / form is up: the stance's own spell ID when the game gives one, else its position on the bar
 local function StanceKey(i)
@@ -457,6 +457,23 @@ function Unplaced()
         return (C_Spell.GetSpellName(a.spell) or "") < (C_Spell.GetSpellName(b.spell) or "")
     end)
     return free
+end
+
+-- spells saved for a bar that you have not learned yet (they wait at the end of the bar)
+function Waiting(bar)
+    local out, on = {}, {}
+    for _, e in ipairs(bar.list) do on[e.base] = true end
+    for _, id in ipairs(mine[bar.def.key] or {}) do
+        local e = universe[id]
+        if e and not on[id] and not avail[id] then on[id] = true; out[#out + 1] = e end
+    end
+    return out
+end
+function DropWaiting(bar, e)
+    local ids = mine[bar.def.key] or {}
+    for i = #ids, 1, -1 do
+        if ids[i] == e.base then table.remove(ids, i) end
+    end
 end
 
 -- put a spell on a bar. One you have not learned yet is saved for the bar and shows up by itself once you know it.
@@ -877,8 +894,8 @@ CUI:RegisterPage("Cooldown Manager", function(page)
     end
 
     -- a spell's options: which stances it shows in, and taking it off the bar
-    local function SpellMenu(bar, index, anchor)
-        local e = bar.list[index]
+    local function SpellMenu(bar, index, anchor, waiting)
+        local e = waiting or bar.list[index]
         if not e then return end
         ClearMenu()
         menu.title:SetText(C_Spell.GetSpellName(e.spell) or "Spell")
@@ -920,8 +937,12 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         r.icon:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
         r.text:SetText("Take off this bar")
         r:SetScript("OnClick", function()
-            table.remove(bar.list, index)
-            SaveOrder(bar)
+            if waiting then
+                DropWaiting(bar, waiting)
+            else
+                table.remove(bar.list, index)
+                SaveOrder(bar)
+            end
             CloseMenu()
             LayoutOwn()
             Refresh()
@@ -1031,11 +1052,15 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         b.mark:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 1)
         b:SetScript("OnEnter", function(self)
             W.SetBorder(self.edges, T.border)
-            local e = self.bar and self.bar.list[self.index]
+            local e = self.waiting or (self.bar and self.bar.list[self.index])
             if not e or held then return end
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(C_Spell.GetSpellName(e.spell) or "Spell", 1, 1, 1)
-            GameTooltip:AddLine("Drag to move. Click for options.", T.accent[1], T.accent[2], T.accent[3])
+            if self.waiting then
+                GameTooltip:AddLine("Not learned yet: it shows on the bar once you learn it. Click for options.", T.accent[1], T.accent[2], T.accent[3], true)
+            else
+                GameTooltip:AddLine("Drag to move. Click for options.", T.accent[1], T.accent[2], T.accent[3])
+            end
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function(self)
@@ -1045,6 +1070,13 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         b:SetScript("OnMouseUp", Release)
         b:SetScript("OnMouseDown", function(self, button)
             if button ~= "LeftButton" or not self.bar then return end
+            if self.waiting then -- not on the bar yet, so nothing to drag: just its options
+                local open = menu and menu:IsShown()
+                CloseMenu()
+                GameTooltip:Hide()
+                if not open then SpellMenu(self.bar, nil, self, self.waiting) end
+                return
+            end
             CloseMenu()
             GameTooltip:Hide()
             local cx, cy = Cursor()
@@ -1104,7 +1136,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             Place(-(yy - editorTop) + 34)
             return
         end
-        edHint:SetText("Drag an icon to move it. Click an icon for its options. Click + to add any spell the game can track.")
+        edHint:SetText("Drag an icon to move it. Click an icon for its options. Click + to add any spell the game can track. Greyed = not learned yet.")
         yy = yy - 24
         for _, bar in ipairs(ownBars) do
             local s = Strip(bar)
@@ -1114,7 +1146,9 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             s.label:Show()
             yy = yy - 18
             local n = #bar.list
-            local rowsN = math.floor(n / PER) + 1 -- the + box always has a place
+            local wait = Waiting(bar)
+            local all = n + #wait
+            local rowsN = math.floor(all / PER) + 1 -- the + box always has a place
             s.frame:ClearAllPoints()
             s.frame:SetPoint("TOPLEFT", 4, yy)
             s.frame:SetSize(PER * (BOX + BGAP), rowsN * (BOX + BGAP))
@@ -1122,7 +1156,8 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             for i = 1, n do
                 local e = bar.list[i]
                 local b = Box(s, i)
-                b.bar, b.index = bar, i
+                b.bar, b.index, b.waiting = bar, i, nil
+                b.tex:SetDesaturated(false)
                 b:ClearAllPoints()
                 b:SetPoint("TOPLEFT", ((i - 1) % PER) * (BOX + BGAP), -math.floor((i - 1) / PER) * (BOX + BGAP))
                 b.tex:SetTexture(C_Spell.GetSpellTexture(e.spell))
@@ -1132,9 +1167,23 @@ CUI:RegisterPage("Cooldown Manager", function(page)
                 b.tex:SetAlpha((held and held.moved and not isHeld) and 0.6 or 1)
                 b:Show()
             end
-            for i = n + 1, #s.boxes do s.boxes[i]:Hide(); s.boxes[i].bar = nil end
+            -- spells you added but have not learned yet: greyed, after the others, so they can be taken off again
+            for k, e in ipairs(wait) do
+                local i = n + k
+                local b = Box(s, i)
+                b.bar, b.index, b.waiting = bar, nil, e
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", ((i - 1) % PER) * (BOX + BGAP), -math.floor((i - 1) / PER) * (BOX + BGAP))
+                b.tex:SetTexture(C_Spell.GetSpellTexture(e.spell))
+                b.tex:SetDesaturated(true)
+                b.tex:SetAlpha(0.5)
+                b.mark:SetShown(HasRule(e) and true or false)
+                W.SetBorder(b.edges, T.line)
+                b:Show()
+            end
+            for i = all + 1, #s.boxes do s.boxes[i]:Hide(); s.boxes[i].bar = nil; s.boxes[i].waiting = nil end
             s.plus:ClearAllPoints()
-            s.plus:SetPoint("TOPLEFT", (n % PER) * (BOX + BGAP), -math.floor(n / PER) * (BOX + BGAP))
+            s.plus:SetPoint("TOPLEFT", (all % PER) * (BOX + BGAP), -math.floor(all / PER) * (BOX + BGAP))
             yy = yy - rowsN * (BOX + BGAP) - 8
         end
         Place(-(yy - editorTop))

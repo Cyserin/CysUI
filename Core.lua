@@ -467,9 +467,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.7",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.8",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.8", date = "2026-11-10",
+              improved = {
+                  "Cooldown Manager, Your bars: a spell you added before learning it now shows as a greyed box at the end of its bar, so you can see it is waiting and take it off again.",
+              },
+            },
             { version = "0.58.7", date = "2026-11-10",
               added = {
                   "Cys's own cooldown bars (Forever, off until you tick it on the Cooldown Manager page): the cooldown and utility rows become Cys's UI bars you drag in Layout mode, with icon size and icons per row on the page, icons that grey out on cooldown, and a Your bars editor at the top of the page: drag an icon to move it, click it to take it off or (for classes with stances or forms) pick the stances it shows in, and click + to add any spell the game is tracking. Which spells the game tracks is still chosen in its own Cooldown Manager.",
