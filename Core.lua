@@ -464,9 +464,15 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.5",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.6",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.6", date = "2026-11-10",
+              fixed = {
+                  "Battle Shout alert (Forever): no longer comes up in combat while the shout is still running. The game hides buffs from addons in a fight, and a hidden shout was read as a missing one.",
+                  "Conflicts window (Forever): Apply and reload now saves your choices and reloads on the click, instead of only telling you to type /reload.",
+              },
+            },
             { version = "0.58.5", date = "2026-11-06",
               improved = {
                   "Minimap Button: the Cys's UI crest is a bit smaller, in line with the other minimap icons.",

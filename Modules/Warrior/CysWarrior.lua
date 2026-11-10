@@ -51,23 +51,62 @@ local function ShoutKnown()
     return false
 end
 
-local function HasBuff(name)
-    for i = 1, 40 do
-        local n = UnitBuff("player", i)
-        if not n then return false end
-        if n == name then return true end
+local SHOUT_ID = {}
+for _, id in ipairs(SHOUT_RANKS) do SHOUT_ID[id] = true end
+
+local function OtherWarrior()
+    if not (IsInGroup and IsInGroup()) then return false end
+    local raid = IsInRaid and IsInRaid()
+    for i = 1, raid and 40 or 4 do
+        local u = (raid and "raid" or "party") .. i
+        if UnitExists(u) and not UnitIsUnit(u, "player") and select(2, UnitClass(u)) == "WARRIOR" then return true end
     end
     return false
 end
 
-local function UpdateAlert()
+-- Is Battle Shout missing? On WoW Forever the game hides most buffs from addons in combat, and a hidden buff
+-- looks exactly like a missing one, so the alert used to come up in fights with the shout still running.
+-- Now a real answer is used whenever the game gives one. When it won't say, the alert goes by what is known:
+--   * the shout was missing at the last real look and you have not cast it since -> still missing
+--   * you had it or cast it -> it counts as up until its own duration runs out (measured from the buff out of
+--     combat, so talents that lengthen it are included). With another Warrior in the group the countdown is not
+--     trusted (their shout replaces yours), so nothing shows rather than a wrong alert.
+local known, lastDur, expires
+local UpdateAlert
+local function ShoutMissing()
+    local has, a = CysUICompat.PlayerBuff(BATTLE_SHOUT, SHOUT_RANKS)
+    if has ~= nil then
+        known = has
+        expires = nil
+        if has and a then
+            local d, e = CysUICompat.Plain(a.duration), CysUICompat.Plain(a.expirationTime)
+            if d and d > 0 then lastDur = d end
+            if e and e > 0 then expires = e end
+        end
+        return not has
+    end
+    if known == false then return true end
+    if known and expires and GetTime() > expires and not OtherWarrior() then return true end
+    return false
+end
+
+local function ShoutCast(spellID)
+    if not (spellID and SHOUT_ID[CysUICompat.Plain(spellID) or 0]) then return end
+    known = true
+    local d = lastDur or 120
+    expires = GetTime() + d
+    C_Timer.After(d + 0.3, function() UpdateAlert() end) -- look again the moment it should have run out
+end
+
+function UpdateAlert()
+    local missing = ShoutMissing() -- read every time, so the last real answer stays fresh
     local show = db.shout and ShoutKnown() and not UnitIsDeadOrGhost("player")
         and not (IsMounted and IsMounted()) and not (UnitOnTaxi and UnitOnTaxi("player"))
         and not (UnitInVehicle and UnitInVehicle("player"))
         and (not db.shoutGroupOnly or (IsInGroup and IsInGroup()))
         and not (db.shoutHideResting and IsResting and IsResting())
         and (not db.shoutCombatOnly or (InCombatLockdown and InCombatLockdown()))
-        and not HasBuff(BATTLE_SHOUT)
+        and missing
     alert:SetShown(show and true or false)
 end
 
@@ -81,7 +120,11 @@ for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_DEAD", "PLAYER_ALIVE", "PL
     pcall(ev.RegisterEvent, ev, e)
 end
 pcall(ev.RegisterUnitEvent, ev, "UNIT_AURA", "player")
-ev:SetScript("OnEvent", function() UpdateAlert() end)
+pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player")
+ev:SetScript("OnEvent", function(_, event, _, _, spellID)
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then ShoutCast(spellID) end
+    UpdateAlert()
+end)
 UpdateAlert()
 
 CUI.WarriorRefresh = UpdateAlert -- the settings page (below, built for every class) calls this
@@ -123,13 +166,14 @@ local function WarriorInGroup()
     return false
 end
 
-local function HasShout()
-    for i = 1, 40 do
-        local n = UnitBuff("player", i)
-        if not n then return false end
-        if n == "Battle Shout" then return true end
-    end
-    return false
+-- true only when the game really says the buff is missing; in combat on WoW Forever it often won't say, and then
+-- the last real answer stands (a hidden buff must never read as a missing one)
+local REMIND_RANKS = { 6673, 5242, 6192, 11549, 11550, 11551, 25289 }
+local remindKnown
+local function ShoutMissingForMe()
+    local has = CysUICompat.PlayerBuff((GetSpellInfo and GetSpellInfo(6673)) or "Battle Shout", REMIND_RANKS)
+    if has ~= nil then remindKnown = has end
+    return remindKnown == false
 end
 
 local function UpdateReminder()
@@ -139,7 +183,7 @@ local function UpdateReminder()
         and not (IsMounted and IsMounted()) and not (UnitOnTaxi and UnitOnTaxi("player"))
         and not (db.shoutHideResting and IsResting and IsResting())
         and (not db.shoutCombatOnly or (InCombatLockdown and InCombatLockdown()))
-        and IsInGroup and IsInGroup() and WarriorInGroup() and not HasShout()
+        and IsInGroup and IsInGroup() and WarriorInGroup() and ShoutMissingForMe()
     remindFrame:SetShown(show and true or false)
 end
 

@@ -93,7 +93,7 @@ end
 --------------------------------------------------------------------------------
 -- Applying the answers
 --------------------------------------------------------------------------------
-local function Apply(found, choice)
+local function Apply(found, choice, noReload)
     local covered, off = {}, {}
     for _, c in ipairs(found) do
         local pick = choice[c.addon] or "cys"
@@ -108,7 +108,7 @@ local function Apply(found, choice)
         end
     end
     for key in pairs(covered) do CUI:SetModuleEnabled(key, not off[key]) end
-    CysUICompat.Reload()
+    if not noReload then CysUICompat.Reload() end
 end
 
 --------------------------------------------------------------------------------
@@ -225,7 +225,17 @@ local function Show(found)
     f.never:ClearAllPoints()
     f.never:SetPoint("RIGHT", f.later, "LEFT", -8, 0)
     f.apply:SetScript("OnClick", function() Apply(found, choice) end)
+    f.pending = { found = found, choice = choice }
     f:Show()
+    -- WoW Forever: addons may not reload the interface, so the click lands on a secure /reload button laid over
+    -- Apply; it saves the answers first (f.pending) and the game then reloads on that same click.
+    if not f.reloadSync and CysUICompat.SecureReload then
+        f.reloadSync = CysUICompat.SecureReload(f.apply, f, function()
+            local p = f.pending
+            if p then Apply(p.found, p.choice, true) end
+        end)
+    end
+    if f.reloadSync then f.reloadSync() end
 end
 
 CUI.Conflicts = { Show = Show, Found = Found }

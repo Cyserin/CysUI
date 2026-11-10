@@ -158,6 +158,35 @@ function Compat.AuraData(unit, index, filter)
     }
 end
 
+-- Does the player have this buff? true / false, or nil when the game won't say. On WoW Forever most auras are
+-- locked for addons in combat, and a locked aura simply reads as "not there", so in combat the answer only
+-- counts when the game says none of the buff's ranks is locked right now. Callers must treat nil as "can't
+-- tell", never as "missing". name = the buff's name, ids = every rank's spell ID.
+-- Second return: the aura table when one was read (its fields can still be locked: use Plain on them).
+function Compat.PlayerBuff(name, ids)
+    if not name then return nil end
+    if not Compat.isForever then
+        for i = 1, 40 do
+            local n = UnitBuff("player", i)
+            if not n then return false end
+            if n == name then return true end
+        end
+        return false
+    end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName) then return nil end
+    if Compat.AurasLocked() or (InCombatLockdown and InCombatLockdown()) then
+        if not (ids and C_Secrets and C_Secrets.ShouldSpellAuraBeSecret) then return nil end
+        for i = 1, #ids do
+            local ok, locked = pcall(C_Secrets.ShouldSpellAuraBeSecret, ids[i])
+            if not ok or Secret(locked) or locked ~= false then return nil end
+        end
+    end
+    local ok, a = pcall(C_UnitAuras.GetAuraDataBySpellName, "player", name, "HELPFUL")
+    if not ok or Secret(a) then return nil end
+    if not a then return false end
+    return true, a
+end
+
 --------------------------------------------------------------------------------
 -- Forever safety net
 --
@@ -247,8 +276,12 @@ end
 -- message, not an error a script can catch), so buttons and commands that reload call this instead.
 function Compat.Reload()
     if Compat.isForever then
-        if Compat.reloadSync and Compat.reloadOwner and Compat.reloadOwner:IsShown() and not InCombatLockdown() then
-            Compat.reloadSync()
+        local spot
+        for _, r in ipairs(Compat.reloadSpots or {}) do
+            if r.owner:IsShown() then spot = r break end
+        end
+        if spot and not InCombatLockdown() then
+            spot.sync()
             print("|cFFFFD100Cys's UI|r: click Reload UI once more (Forever needs the click itself), or type |cFFFFFFFF/reload|r.")
             return
         end
@@ -262,7 +295,9 @@ end
 -- is the player's own action, so that works. This lays such a button over a plain "Reload UI" button.
 -- It sits on UIParent (a secure child would stop the window from closing in combat) and follows the
 -- owner window out of combat; in combat it steps aside and the plain button explains /reload.
-function Compat.SecureReload(btn, owner)
+-- before (optional): runs on that same click, right before the reload (the Conflicts window saves its answers there).
+-- Returns the function that puts the secure button back over the plain one (call it after moving the button).
+function Compat.SecureReload(btn, owner, before)
     if not (Compat.isForever and btn and owner) then return end
     local sec
     local function Sync()
@@ -273,6 +308,7 @@ function Compat.SecureReload(btn, owner)
             sec:SetAttribute("macrotext", "/reload")
             sec:SetAttribute("useOnKeyDown", false)
             sec:RegisterForClicks("AnyUp")
+            if before then sec:SetScript("PreClick", function() pcall(before) end) end
             sec:HookScript("OnEnter", function() local f = btn:GetScript("OnEnter"); if f then f(btn) end end)
             sec:HookScript("OnLeave", function() local f = btn:GetScript("OnLeave"); if f then f(btn) end end)
         end
@@ -288,7 +324,8 @@ function Compat.SecureReload(btn, owner)
         sec:SetFrameStrata("FULLSCREEN_DIALOG") -- always above the settings window, whatever raises it
         sec:SetShown(owner:IsShown() and btn:IsVisible())
     end
-    Compat.reloadSync, Compat.reloadOwner = Sync, owner
+    Compat.reloadSpots = Compat.reloadSpots or {}
+    table.insert(Compat.reloadSpots, { sync = Sync, owner = owner })
     owner:HookScript("OnShow", Sync)
     owner:HookScript("OnHide", Sync)
     if owner.HookScript then pcall(owner.HookScript, owner, "OnDragStop", Sync) end -- the window was moved
@@ -305,6 +342,7 @@ function Compat.SecureReload(btn, owner)
         end
     end)
     Sync()
+    return Sync
 end
 
 --------------------------------------------------------------------------------
