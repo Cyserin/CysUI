@@ -473,6 +473,7 @@ if CysChangelog then
             { version = "0.58.9", date = "2026-11-10",
               added = {
                   "Cys's own cooldown bars: an icon turns red while your target is out of range for that ability (Charge too far away, for example). Switch on the Cooldown Manager page.",
+                  "Cys's Resource Bar: your rage, energy or mana as its own bar, for every class. Move it in Layout mode; width, height, text and when it shows are on the new Resource Bar page. It can match the width of Cys's main cooldown bar so the two line up.",
               },
             },
             { version = "0.58.8", date = "2026-11-10",

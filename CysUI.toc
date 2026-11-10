@@ -70,3 +70,4 @@ Modules\CombatText\CysCombatText.lua
 Modules\Threat\CysThreat.lua
 Modules\Consumables\CysConsumables.lua
 Modules\Cooldowns\CysCooldowns.lua
+Modules\Resource\CysResource.lua
