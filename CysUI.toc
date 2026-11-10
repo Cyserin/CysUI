@@ -35,6 +35,7 @@ MinimapButtons.lua
 UnitFrames.lua
 RaidTemplates.xml
 RaidFrames.lua
+Kick.lua
 CastBar.lua
 Nameplates.lua
 CysKillTracker.lua

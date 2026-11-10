@@ -263,8 +263,15 @@ local function CastOnUpdate(bar)
     bar:SetValue(max(0, min(total, progress)))
 end
 
+-- cast colored by your interrupt (Kick.lua): grey on cooldown, a tick where it comes ready, green when it is up
+local function KickApply(bar, unit, info)
+    local K = CUI.Kick
+    if K and DB().kickCast ~= false then K.Apply(bar, unit, info) end
+end
+
 local function UpdateCast(p)
     local bar = p.cast
+    if CUI.Kick then CUI.Kick.Clear(bar) end
     if not DB().castBar then bar:Hide(); bar:SetScript("OnUpdate", nil); return end
     local unit = p.unit
     local name, _, texture, startMS, endMS = UnitCastingInfo(unit)
@@ -280,6 +287,7 @@ local function UpdateCast(p)
         if kind == "channel" then bar:SetStatusBarColor(0.3, 0.6, 1) else bar:SetStatusBarColor(T.accent[1], T.accent[2], T.accent[3]) end
         CysUICompat.RunLockedCastBar(bar, kind, dur)
         bar:Show()
+        KickApply(bar, unit, { dur = dur, channel = kind == "channel" })
         return
     end
     if not name then
@@ -295,6 +303,7 @@ local function UpdateCast(p)
         bar:Show()
         bar:SetScript("OnUpdate", CastOnUpdate)
         CastOnUpdate(bar)
+        KickApply(bar, unit, { startT = bar.startT, endT = bar.endT, channel = channel })
     else
         bar:Hide()
         bar:SetScript("OnUpdate", nil)
@@ -676,6 +685,8 @@ CUI:RegisterPage("Nameplates", function(page)
     Check("Gold frame and extra size for your target", "targetHighlight")
     Check("Show my debuffs on the mob", "myDebuffs")
     Check("Show a small cast bar", "castBar")
+    if db.kickCast == nil then db.kickCast = true end
+    Check("Color enemy casts by your interrupt (grey: on cooldown, green: ready)", "kickCast")
 
     -- threat coloring: one row of choices and a line saying what it means right now
     local head = W.Text(page, 12, T.accent)

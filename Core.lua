@@ -474,6 +474,7 @@ if CysChangelog then
               added = {
                   "Cys's own cooldown bars: an icon turns red while your target is out of range for that ability (Charge too far away, for example). Switch on the Cooldown Manager page.",
                   "Cys's Resource Bar: your rage, energy or mana as its own bar, for every class. Move it in Layout mode; width, height, text and when it shows are on the new Resource Bar page. It can match the width of Cys's main cooldown bar so the two line up.",
+                  "Interrupt-ready cast bars: an enemy cast on the target cast bar and on nameplates is grey while your interrupt is on cooldown, shows a white tick where it comes ready, and turns green once you can use it. For every class with an interrupt (a Warrior's follows the stance). Switches on the Cast Bar and Nameplates pages.",
               },
             },
             { version = "0.58.8", date = "2026-11-10",

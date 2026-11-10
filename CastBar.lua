@@ -82,7 +82,20 @@ local function Layout(f)
     f.time:SetShown(db.time and true or false)
 end
 
+-- the target's bar is colored by your interrupt (Kick.lua): grey on cooldown, a tick where it comes ready, green
+-- when it is up. Never on your own cast bar.
+local function KickApply(f, info)
+    local K = CUI.Kick
+    if not K then return end
+    if f.unit == "player" or DB().kick == false then K.Clear(f.bar) return end
+    K.Apply(f.bar, f.unit, info)
+end
+local function KickClear(f)
+    if CUI.Kick then CUI.Kick.Clear(f.bar) end
+end
+
 local function Stop(f)
+    KickClear(f)
     f.casting, f.failedUntil = false, nil
     f:SetScript("OnUpdate", nil)
     f:Hide()
@@ -123,6 +136,7 @@ local function Refresh(f)
             f.text:SetText(lname)
             f.time:SetText("")
             CysUICompat.RunLockedCastBar(f.bar, kind, dur)
+            KickApply(f, { dur = dur, channel = f.channel })
             f:Show()
             f:SetScript("OnUpdate", LockedOnUpdate)
             LockedOnUpdate(f)
@@ -140,9 +154,11 @@ local function Refresh(f)
     f:Show()
     f:SetScript("OnUpdate", OnUpdate)
     OnUpdate(f)
+    KickApply(f, { startT = startT, endT = endT, channel = channel })
 end
 
 local function Fail(f, label)
+    KickClear(f)
     f.casting, f.lockedDur = false, nil
     f.failedUntil = GetTime() + 0.6
     f.bar:SetMinMaxValues(0, 1)
@@ -255,13 +271,16 @@ CUI:RegisterPage("Cast Bar", function(page)
     end
     Check("Show the spell icon", "icon", -34, true)
     Check("Show the time left", "time", -60, true)
+    if db.kick == nil then db.kick = true end
+    Check("Color the target's cast by your interrupt", "kick", -86, true)
 
-    W.Header(page, "Which bars (needs a /reload)", width):SetPoint("TOPLEFT", 0, -102)
-    Check("Your cast bar", "player", -132)
-    Check("Target cast bar", "target", -158)
+    W.Header(page, "Which bars (needs a /reload)", width):SetPoint("TOPLEFT", 0, -128)
+    Check("Your cast bar", "player", -158)
+    Check("Target cast bar", "target", -184)
 
 
-    local note = W.Notes(page, 4, -238, width, "", {
+    local note = W.Notes(page, 4, -264, width, "", {
+            { "Your interrupt", "the target's cast is grey while your interrupt is on cooldown, with a white tick where it comes ready, and green once you can use it. Works for every class with an interrupt; nameplates have the same switch on their page." },
             "Blizzard's cast bar is hidden for any bar you turn on.",
             "The target bar only shows casts the game reports to addons, which varies by Classic version.",
             "Untick Cast Bar under Modules and reload to go back to Blizzard's.",

@@ -45,6 +45,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Damage Meters**: a Cys skin for Details! (flat bars with gold edges).
 - **Cooldowns** (WoW Forever): the Cys look for the game's Cooldown Manager - square icons with a thin edge in your Border color, flat buff bars, and timer and stack numbers at your size. Optional own bars for the cooldown and utility rows: move them in Layout mode, set size and row length, and hide spells by stance.
 - **Resource Bar**: your rage, energy or mana as its own movable, resizable bar for every class; can match the main cooldown bar's width.
+- **Interrupt-ready cast bars**: enemy casts (target cast bar and nameplates) are grey while your interrupt is on cooldown, tick where it comes ready, green when it is up.
 - **Class modules** (shown only for that class): **Totems** for Shaman (a totem bar with timers, Drop All, loadouts, expiry alerts, action-bar macros and a weapon-imbue button) and **Warrior** (Battle Shout missing alert).
 
 ## Skins
