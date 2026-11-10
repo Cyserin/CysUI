@@ -43,7 +43,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Waypoints**: a TomTom-style arrow with distance and time left. Ctrl + left-click the world map, `/way 45 62 Name`, or mark a Questie quest. *(layout)*
 - **Vendor**: Sell Junk button, optional auto-sell of grey items, auto-repair.
 - **Damage Meters**: a Cys skin for Details! (flat bars with gold edges).
-- **Cooldowns** (WoW Forever): the Cys look for the game's Cooldown Manager - square icons with a thin edge in your Border color, flat buff bars, and timer and stack numbers at your size.
+- **Cooldowns** (WoW Forever): the Cys look for the game's Cooldown Manager - square icons with a thin edge in your Border color, flat buff bars, and timer and stack numbers at your size. Optional own bars for the cooldown and utility rows: move them in Layout mode, set size and row length, and hide spells by stance.
 - **Class modules** (shown only for that class): **Totems** for Shaman (a totem bar with timers, Drop All, loadouts, expiry alerts, action-bar macros and a weapon-imbue button) and **Warrior** (Battle Shout missing alert).
 
 ## Skins

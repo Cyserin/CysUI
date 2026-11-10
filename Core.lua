@@ -467,9 +467,15 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.6",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.7",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.7", date = "2026-11-10",
+              added = {
+                  "Cys's own cooldown bars (Forever, off until you tick it on the Cooldown Manager page): the cooldown and utility rows become Cys's UI bars you drag in Layout mode, with icon size and icons per row on the page, icons that grey out on cooldown, and a Your bars editor at the top of the page: drag an icon to move it, click it to take it off or (for classes with stances or forms) pick the stances it shows in, and click + to add any spell the game is tracking. Which spells the game tracks is still chosen in its own Cooldown Manager.",
+                  "Cooldown Manager (Forever): a second switch lets you place the game's tracked buffs row and buff bars in Layout mode too.",
+              },
+            },
             { version = "0.58.6", date = "2026-11-10",
               added = {
                   "Cys's Cooldowns (Forever): the game's Cooldown Manager gets the Cys look - square icons with a thin edge in your Border color, a square cooldown sweep, flat buff bars, timer and stack numbers at sizes you choose, a gap between icons, and a switch for the yellow shade the game puts on an icon while its effect is running. A Choose spells button opens the game's own Cooldown Manager; where the rows sit stays in Edit Mode. New Cooldown Manager page; switch under Modules.",
