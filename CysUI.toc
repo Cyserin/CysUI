@@ -59,6 +59,7 @@ Modules\Totems\CysTremor.lua
 Modules\Totems\CysTotemsPage.lua
 Modules\LevelUp\GuideShaman.lua
 Modules\LevelUp\CysLevelUp.lua
+Modules\LevelUp\CysRanks.lua
 Modules\HealAdvisor\CysHealAdvisor.lua
 Modules\Warrior\CysWarrior.lua
 Modules\RaidDebuffs\CysRaidDebuffs.lua

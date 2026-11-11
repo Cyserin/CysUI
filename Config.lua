@@ -27,7 +27,7 @@ local GROUPS = {
 
 -- Class pages live under CLASS: a General page (works for every class), then a heading for your own class
 -- (in its class color) with that class's pages under it. Only your own class is listed.
-local CLASS_GENERAL = { "Level-Up Spells", "Heal Advisor" }
+local CLASS_GENERAL = { "Level-Up Spells", "Spell Ranks", "Heal Advisor" }
 local LABELS = {} -- sidebar text when it differs from the page title
 -- Classic still uses the old pink for Shamans; the game's newer clients use blue, so we do too.
 local CLASSES = {
@@ -284,7 +284,7 @@ local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale", "durability", "automation" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade" } },
-    { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "healadvisor", "warrior", "shoutremind" } },
+    { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "healadvisor", "warrior", "shoutremind" } },
 }
 
 CUI:RegisterPage("Modules", function(page)

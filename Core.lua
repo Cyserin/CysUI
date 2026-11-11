@@ -478,6 +478,7 @@ if CysChangelog then
                   "Consumables: keep so many stacks of the best food and water a vendor sells for your level, bought when you open the vendor. Set the stacks on the Consumables page (0 = off).",
                   "Tooltip: item tooltips show how many you have in your bags and in your bank.",
                   "Trainers: a Train all button that learns everything you can learn and afford in one click. Point at it for the count and the total cost.",
+                  "Spell Ranks (Forever): a window beside the spellbook. To Train lists what you can learn now with the total cost, then what comes at later levels. Max Ranks shows which spells are behind their best rank. Weapons lists your weapon skills. Open your class trainer once to fill in levels and prices; point at a spell for every rank.",
                   "Consumables: a gold floor - vendor buying (the restock list too) never takes you below it. 1 gold by default.",
                   "Cys's Bags (Forever): items in the reagent bag are shown with the rest, and the reagent bag has its own section, its own block under All Slots, a row in the sidebar and a slot button beside the four bags.",
                   "Cys's Bags: a split box of its own. Shift-click a stack, type how many, then Split - or To free slot to drop them straight into an empty slot.",
