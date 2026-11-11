@@ -46,6 +46,8 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Cooldowns** (WoW Forever): the Cys look for the game's Cooldown Manager - square icons with a thin edge in your Border color, flat buff bars, and timer and stack numbers at your size. Optional own bars for the cooldown and utility rows: move them in Layout mode, set size and row length, and hide spells by stance.
 - **Resource Bar**: your rage, energy or mana as its own movable, resizable bar for every class; can match the main cooldown bar's width.
 - **Interrupt-ready cast bars**: enemy casts (target cast bar and nameplates) are grey while your interrupt is on cooldown, tick where it comes ready, green when it is up.
+- **Swing Timer** (WoW Forever): your auto attack as a thin movable bar that fills from swing to swing, with lines for an off hand and a ranged weapon; can match the main cooldown bar's width.
+- **Damage Meter** (WoW Forever): our own meter window in the Cys look, fed by the game's built-in damage meter (damage, healing, damage taken, absorbs, interrupts, dispels; current, overall or an earlier fight; spell list on hover out of combat). No combat log reading.
 - **Frame Combat Text** (WoW Forever): the last hit as one still number in the middle of the player and target frames (damage, heals, Miss / Dodge / Parry / Block).
 - **Class modules** (shown only for that class): **Totems** for Shaman (a totem bar with timers, Drop All, loadouts, expiry alerts, action-bar macros and a weapon-imbue button) and **Warrior** (Battle Shout missing alert).
 

@@ -25,7 +25,7 @@ CysUIDB.cooldowns = CysUIDB.cooldowns or {}
 local db = CysUIDB.cooldowns
 local DEFAULTS = { look = true, bars = true, timerBig = 18, timerSmall = 12, stacks = 12, gap = 2, shade = true,
     own = false, grey = true, gcd = false, tips = false, carry = false, pack = true, range = true,
-    stance = false, stanceAll = false, stanceSize = 32 }
+    stance = false, stanceAll = false, stanceSize = 32, auraTime = true, auraSize = 12 }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
@@ -53,6 +53,7 @@ end
 local fontBig = CreateFont("CysCooldownTimerBig")
 local fontSmall = CreateFont("CysCooldownTimerSmall")
 local fontStack = CreateFont("CysCooldownStacks")
+local fontAura = CreateFont("CysCooldownAuraTime") -- buff / debuff time on Cys's own icons
 local function ApplyFonts()
     fontBig:SetFont(STANDARD_TEXT_FONT, db.timerBig, "OUTLINE")
     fontSmall:SetFont(STANDARD_TEXT_FONT, db.timerSmall, "OUTLINE")
@@ -62,6 +63,10 @@ local function ApplyFonts()
         f:SetShadowColor(0, 0, 0, 1)
         f:SetShadowOffset(1, -1)
     end
+    fontAura:SetFont(STANDARD_TEXT_FONT, db.auraSize, "OUTLINE")
+    fontAura:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+    fontAura:SetShadowColor(0, 0, 0, 1)
+    fontAura:SetShadowOffset(1, -1)
 end
 ApplyFonts()
 
@@ -194,12 +199,21 @@ end
 -- can show in combat without us ever reading a locked number.
 --------------------------------------------------------------------------------
 local OWN = {
-    { key = "main",    label = "Cooldowns: main",    viewer = "EssentialCooldownViewer", font = "CysCooldownTimerBig",   y = -150 },
-    { key = "utility", label = "Cooldowns: utility", viewer = "UtilityCooldownViewer",   font = "CysCooldownTimerSmall", y = -196 },
+    { key = "main",    name = "Main bar",    label = "Cooldowns: main",    viewer = "EssentialCooldownViewer", font = "CysCooldownTimerBig",   y = -150 },
+    { key = "utility", name = "Utility bar", label = "Cooldowns: utility", viewer = "UtilityCooldownViewer",   font = "CysCooldownTimerSmall", y = -196 },
 }
 db.bar = db.bar or {}
 db.bar.main = db.bar.main or { size = 40, perRow = 12 }
 db.bar.utility = db.bar.utility or { size = 30, perRow = 12 }
+-- Bars you make yourself (Your bars, New bar): db.custom = { { key = "c1", name = "Bar 3" }, ... }. A bar of your own
+-- has no row in the game behind it; it only holds the spells you put on it, per class like the two above.
+db.custom = db.custom or {}
+local function CustomDef(c, i)
+    db.bar[c.key] = db.bar[c.key] or { size = 30, perRow = 12 }
+    return { key = c.key, name = c.name or ("Bar " .. (i + 2)), label = "Cooldowns: " .. (c.name or ("Bar " .. (i + 2))),
+        font = "CysCooldownTimerSmall", y = -196 - 40 * i, custom = c }
+end
+for i, c in ipairs(db.custom) do OWN[#OWN + 1] = CustomDef(c, i) end
 db.stanceHide = db.stanceHide or {} -- [spellID] = { [stance key] = true } : hidden in that stance
 db.order = db.order or {} -- (0.58.7 test builds) old drag order; only used once to seed db.layout
 -- Your bars, per class: db.layout[CLASS][bar key] = { spellID, ... } in your order, plus .seen = spells already
@@ -217,6 +231,8 @@ local ownBars = {}
 local ownActive = false
 local SaveOrder, Unplaced
 local AddSpell, Waiting, DropWaiting
+local NewBar, DeleteBar, LayoutOwn
+local AttachAuras, RefreshTargetAuras
 
 -- which stance / form is up: the stance's own spell ID when the game gives one, else its position on the bar
 local function StanceKey(i)
@@ -301,9 +317,13 @@ local function UpdateIcon(f)
     end
 
     -- grey while it is really on cooldown (the global cooldown is left out of the timer above unless switched on)
+    -- The global cooldown never counts as "on cooldown" here, also when its sweep is switched on: that is asked
+    -- for separately, so a bar full of ready abilities does not go grey on every global cooldown.
+    local real = dur
+    if db.gcd and dur and not e.charges then real = C_Spell.GetSpellCooldownDuration(spell, true) end
     local greyed = false
-    if db.grey and dur and not e.charges and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
-        local ok, zero = pcall(dur.IsZero, dur)
+    if db.grey and real and not e.charges and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+        local ok, zero = pcall(real.IsZero, real)
         if ok then
             local ok2, v = pcall(C_CurveUtil.EvaluateColorValueFromBoolean, zero, 0, 1)
             if ok2 and pcall(f.tex.SetDesaturation, f.tex, v) then greyed = true end
@@ -367,15 +387,141 @@ local function LayoutBar(bar)
         f:Show()
         UpdateIcon(f)
     end
+    AttachAuras(bar, shown, size)
     CUI:ApplyLayout("cooldowns_" .. bar.def.key) -- the Layout mode box follows the bar's size
 end
 
-local function LayoutOwn()
+function LayoutOwn()
     for _, bar in ipairs(ownBars) do LayoutBar(bar) end
+end
+
+--------------------------------------------------------------------------------
+-- Buff / debuff time on Cys's own icons
+--
+-- While an ability's own effect is running (your Rend on the target, Battle Shout on you) the icon shows how long
+-- is left: a small gold number at the top and a thin gold line draining along the bottom. The cooldown keeps the
+-- middle of the icon, so the two never fight for the same spot.
+--
+-- Addons can't read buffs or debuffs in combat, so the game draws these itself: each icon that has an effect gets
+-- a tiny one-slot aura container (the game's own widget) limited to that ability's spells. It only shows your own
+-- effects: helpful ones on you, harmful ones on your target. We never read a value from it.
+--------------------------------------------------------------------------------
+local auraHosts = {} -- [base spell] = { frame, size, bar, containers }
+local function AuraIDs(info, base, spell)
+    local ids, n = {}, 0
+    if type(info.linkedSpellIDs) == "table" then
+        for _, id in ipairs(info.linkedSpellIDs) do
+            if type(id) == "number" and not Secret(id) then ids[id] = true; n = n + 1 end
+        end
+    end
+    if n == 0 and info.hasAura == false and info.selfAura == false then return nil end -- the game says: no effect to time
+    ids[base] = true
+    ids[spell] = true
+    local units
+    if info.selfAura == true then units = { "player" } elseif info.selfAura == false then units = { "target" } else units = { "player", "target" } end
+    return { ids = ids, units = units }
+end
+local function AuraButton(size)
+    return function(button)
+        pcall(button.SetSize, button, size, size) -- the group layout only spaces the slot, it never sizes it
+        pcall(button.EnableMouse, button, false)
+        local line = CreateFrame("StatusBar", nil, button)
+        line:SetPoint("BOTTOMLEFT", 1, 1)
+        line:SetPoint("BOTTOMRIGHT", -1, 1)
+        line:SetHeight(max(2, math.floor(size / 12)))
+        line:SetStatusBarTexture(FLAT)
+        line:SetStatusBarColor(T.accent[1], T.accent[2], T.accent[3], 1)
+        local under = line:CreateTexture(nil, "BACKGROUND")
+        under:SetAllPoints()
+        under:SetColorTexture(0, 0, 0, 0.85)
+        local left = button:CreateFontString(nil, "OVERLAY")
+        left:SetFontObject(fontAura)
+        left:SetPoint("TOP", 0, -2)
+        local stacks = button:CreateFontString(nil, "OVERLAY")
+        stacks:SetFontObject(fontStack)
+        stacks:SetPoint("BOTTOMLEFT", 2, 5)
+        local dir = Enum and Enum.StatusBarTimerDirection and Enum.StatusBarTimerDirection.RemainingTime
+        if not (button.SetDurationBar and pcall(button.SetDurationBar, button, line, { direction = dir })) then line:Hide() end
+        if not (button.SetDurationText and pcall(button.SetDurationText, button, left, {})) then left:Hide() end
+        if not (button.SetApplicationCount and pcall(button.SetApplicationCount, button, stacks, {})) then stacks:Hide() end
+    end
+end
+local function AuraContainer(host, unit, ids, size)
+    local ok, c = pcall(CreateFrame, "AuraContainer", nil, host, "CustomAuraContainerTemplate")
+    if not ok or not c then return nil end
+    c:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0) -- placed and sized before any group, so it can draw at once
+    c:SetSize(1, 1)
+    local dirs = AnchorUtil and AnchorUtil.FlowDirection
+    pcall(c.SetFlowLayoutAnchorPoint, c, "TOPLEFT")
+    if dirs then pcall(c.SetFlowLayoutGrowthDirection, c, dirs.Right, dirs.Down) end
+    local okG, err = pcall(c.AddAuraGroup, c, "cys", unit == "player" and "HELPFUL|PLAYER" or "HARMFUL|PLAYER", {
+        maxFrameCount = 1,
+        initializeFrame = AuraButton(size),
+        candidateFilters = { includeSpellIDs = ids },
+        layout = { elementWidth = size, elementHeight = size, elementSpacing = 0, lineSpacing = 0 },
+    })
+    if not okG then
+        CysUICompat.errors[#CysUICompat.errors + 1] = "Cooldown aura time: " .. tostring(err)
+        c:Hide()
+        return nil
+    end
+    pcall(c.SetEnabled, c, true) -- a new container reads nothing until it is switched on
+    pcall(c.SetUnit, c, unit)
+    pcall(c.UpdateAllAuras, c)
+    c.cysUnit = unit
+    return c
+end
+local function AuraHost(e, size)
+    local h = auraHosts[e.base]
+    if h and h.size == size then return h end
+    if h then -- icon size changed: the slot is rebuilt at the new size
+        for _, c in ipairs(h.containers) do pcall(c.SetEnabled, c, false); c:Hide() end
+        h.frame:Hide()
+    end
+    h = { size = size, containers = {}, frame = CreateFrame("Frame", nil, UIParent) }
+    auraHosts[e.base] = h
+    for _, unit in ipairs(e.aura.units) do
+        local c = AuraContainer(h.frame, unit, e.aura.ids, size)
+        if c then h.containers[#h.containers + 1] = c end
+    end
+    return h
+end
+function AttachAuras(bar, shown, size)
+    local able = db.auraTime and CysUICompat.HasAuraContainers and CysUICompat.HasAuraContainers()
+    local used = {}
+    if able then
+        for i = 1, shown do
+            local f = bar.icons[i]
+            local e = f.entry
+            if e and e.aura then
+                local ok, h = pcall(AuraHost, e, size)
+                if ok and h then
+                    used[h] = true
+                    h.bar = bar
+                    h.frame:SetParent(f)
+                    h.frame:ClearAllPoints()
+                    h.frame:SetAllPoints(f)
+                    h.frame:SetFrameLevel(f:GetFrameLevel() + 8)
+                    h.frame:Show()
+                end
+            end
+        end
+    end
+    for _, h in pairs(auraHosts) do
+        if h.bar == bar and not used[h] then h.frame:Hide() end
+    end
+end
+function RefreshTargetAuras()
+    for _, h in pairs(auraHosts) do
+        for _, c in ipairs(h.containers) do
+            if c.cysUnit == "target" then pcall(c.UpdateAllAuras, c) end
+        end
+    end
 end
 
 -- read which cooldown the game put in which slot of its row
 local function ReadRow(bar)
+    if not bar.def.viewer then return end -- a bar of your own: no game row behind it
     local viewer = _G[bar.def.viewer]
     local pool = viewer and viewer.itemFramePool
     if not (pool and pool.EnumerateActive) then return end
@@ -394,7 +540,8 @@ local function ReadRow(bar)
         if ok and type(info) == "table" and type(info.spellID) == "number" and not Secret(info.spellID) then
             local spell = info.overrideSpellID
             if type(spell) ~= "number" or Secret(spell) or spell == 0 then spell = info.spellID end
-            list[#list + 1] = { id = s.id, base = info.spellID, spell = spell, charges = info.charges == true }
+            list[#list + 1] = { id = s.id, base = info.spellID, spell = spell, charges = info.charges == true,
+                aura = AuraIDs(info, info.spellID, spell) }
         end
     end
     bar.game = list
@@ -415,7 +562,8 @@ local function Compose()
                     if ok2 and type(info) == "table" and type(info.spellID) == "number" and not Secret(info.spellID) then
                         local spell = info.overrideSpellID
                         if type(spell) ~= "number" or Secret(spell) or spell == 0 then spell = info.spellID end
-                        local e = { id = id, base = info.spellID, spell = spell, charges = info.charges == true, known = info.isKnown == true }
+                        local e = { id = id, base = info.spellID, spell = spell, charges = info.charges == true, known = info.isKnown == true,
+                            aura = AuraIDs(info, info.spellID, spell) }
                         universe[e.base] = e
                         if e.known then avail[e.base] = e end
                     end
@@ -429,6 +577,7 @@ local function Compose()
     for _, bar in ipairs(ownBars) do
         local key = bar.def.key
         local ids = mine[key]
+        if not ids and bar.def.custom then ids = {}; mine[key] = ids end -- a bar of your own starts empty
         if not ids then
             if #bar.game > 0 then -- first time on this class: start from the game's row as it is
                 ids = {}
@@ -563,22 +712,63 @@ local function QuietRow(viewer)
     if type(viewer.SetTooltipsShown) == "function" then hooksecurefunc(viewer, "SetTooltipsShown", Mouse) end
 end
 
+local function MakeBar(def)
+    local holder = CreateFrame("Frame", "CysCooldownBar_" .. def.key, UIParent)
+    holder:SetSize(200, db.bar[def.key].size)
+    holder:SetPoint("CENTER", UIParent, "CENTER", 0, def.y)
+    holder:SetFrameStrata("MEDIUM")
+    local bar = { def = def, holder = holder, icons = {}, list = {}, game = {} }
+    ownBars[#ownBars + 1] = bar
+    CUI:RegisterMovable(holder, "cooldowns_" .. def.key, def.label, { point = "CENTER", x = 0, y = def.y })
+    return bar
+end
+
+-- a new bar of your own: empty, placed under the others, ready for spells from the + box
+function NewBar()
+    if not ownActive then return end
+    db.customSeq = (db.customSeq or 0) + 1
+    local c = { key = "c" .. db.customSeq, name = "Bar " .. (#db.custom + 3) }
+    db.custom[#db.custom + 1] = c
+    local def = CustomDef(c, #db.custom)
+    OWN[#OWN + 1] = def
+    local bar = MakeBar(def)
+    Compose()
+    LayoutOwn()
+    return bar
+end
+-- remove a bar of your own for good: its spells go back to the unplaced list
+function DeleteBar(bar)
+    local def = bar and bar.def
+    if not (def and def.custom) then return end
+    for i = #db.custom, 1, -1 do if db.custom[i] == def.custom then table.remove(db.custom, i) end end
+    for i = #OWN, 1, -1 do if OWN[i] == def then table.remove(OWN, i) end end
+    for i = #ownBars, 1, -1 do if ownBars[i] == bar then table.remove(ownBars, i) end end
+    for _, perClass in pairs(db.layout) do perClass[def.key] = nil end
+    db.bar[def.key] = nil
+    for _, h in pairs(auraHosts) do if h.bar == bar then h.frame:Hide() end end
+    bar.holder:Hide()
+    -- its Layout mode box goes too
+    local mkey = "cooldowns_" .. def.key
+    local m = CUI.movers and CUI.movers[mkey]
+    if m then
+        if m.mover then m.mover:Hide() end
+        CUI.movers[mkey] = nil
+        for i = #(CUI.moverOrder or {}), 1, -1 do if CUI.moverOrder[i] == mkey then table.remove(CUI.moverOrder, i) end end
+        if CysUIDB.layout then CysUIDB.layout[mkey] = nil end
+    end
+    LayoutOwn()
+end
+
 local function StartOwn()
     if ownActive or not db.own or OtherManager() then return end
     if not (C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCooldownInfo and C_Spell and C_Spell.GetSpellCooldownDuration) then return end
     for _, def in ipairs(OWN) do
-        if not _G[def.viewer] then return end -- the game's Cooldown Manager isn't loaded yet
+        if def.viewer and not _G[def.viewer] then return end -- the game's Cooldown Manager isn't loaded yet
     end
     ownActive = true
     for _, def in ipairs(OWN) do
-        local holder = CreateFrame("Frame", "CysCooldownBar_" .. def.key, UIParent)
-        holder:SetSize(200, db.bar[def.key].size)
-        holder:SetPoint("CENTER", UIParent, "CENTER", 0, def.y)
-        holder:SetFrameStrata("MEDIUM")
-        local bar = { def = def, holder = holder, icons = {}, list = {}, game = {} }
-        ownBars[#ownBars + 1] = bar
-        CUI:RegisterMovable(holder, "cooldowns_" .. def.key, def.label, { point = "CENTER", x = 0, y = def.y })
-        pcall(QuietRow, _G[def.viewer])
+        MakeBar(def)
+        if def.viewer then pcall(QuietRow, _G[def.viewer]) end
     end
     local oe = CreateFrame("Frame")
     for _, event in ipairs({ "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES", "SPELL_UPDATE_USABLE", "PLAYER_REGEN_ENABLED",
@@ -594,6 +784,7 @@ local function StartOwn()
             end
         elseif event == "PLAYER_TARGET_CHANGED" then
             RecheckRange()
+            RefreshTargetAuras()
             QueueUpdate()
         elseif event == "SPELL_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_CHARGES" or event == "SPELL_UPDATE_USABLE"
             or event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
@@ -1079,7 +1270,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
     end
     local function AddMenu(bar, anchor)
         ClearMenu()
-        menu.title:SetText("Add to the " .. (bar.def.key == "main" and "main" or "utility") .. " bar")
+        menu.title:SetText("Add to: " .. (bar.def.name or "bar"))
         local free = Unplaced()
         local my = -30
         menu.note:ClearAllPoints()
@@ -1216,9 +1407,70 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             if menu and menu:IsShown() then CloseMenu() return end
             AddMenu(bar, self)
         end)
+        if bar.def.custom then -- a bar of your own: name, size, row length and Delete sit with it
+            local c = bar.def.custom
+            s.name = CreateFrame("EditBox", nil, page)
+            s.name:SetSize(150, 20)
+            s.name:SetAutoFocus(false)
+            s.name:SetMaxLetters(24)
+            s.name:SetFont(STANDARD_TEXT_FONT, 12, "")
+            s.name:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+            s.name:SetTextInsets(5, 5, 0, 0)
+            W.Texture(s.name, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
+            W.Border(s.name, 1, T.line, "BORDER")
+            local function SaveName(self)
+                local text = strtrim(self:GetText() or "")
+                if text == "" then text = c.name or "Bar" end
+                c.name = text
+                bar.def.name = text
+                self:SetText(text)
+                self:ClearFocus()
+            end
+            s.name:SetScript("OnEnterPressed", SaveName)
+            s.name:SetScript("OnEscapePressed", function(self) self:SetText(c.name or ""); self:ClearFocus() end)
+            s.name:SetScript("OnEditFocusLost", SaveName)
+            s.name:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:SetText("Click to rename this bar", 1, 1, 1)
+                GameTooltip:AddLine("Its Layout mode box shows the new name after a reload.", T.accent[1], T.accent[2], T.accent[3], true)
+                GameTooltip:Show()
+            end)
+            s.name:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            s.del = W.Button(page, 64, 20, "Delete")
+            s.del:SetScript("OnClick", function(self)
+                if not self.armed then -- second click within a few seconds deletes
+                    self.armed = true
+                    self.label:SetText("Sure?")
+                    C_Timer.After(3, function() self.armed = nil; self.label:SetText("Delete") end)
+                    return
+                end
+                CloseMenu()
+                s.label:Hide(); s.frame:Hide(); s.name:Hide(); s.del:Hide(); s.size:Hide(); s.per:Hide()
+                strips[key] = nil
+                DeleteBar(bar)
+                Refresh()
+            end)
+            local set = db.bar[key]
+            s.size = W.Stepper(page, "Icon size", function() return set.size end, function(v) set.size = v; LayoutOwn() end, 16, 64, 1, " px")
+            s.per = W.Stepper(page, "Icons per row", function() return set.perRow end, function(v) set.perRow = v; LayoutOwn() end, 1, 24, 1)
+        end
         strips[key] = s
         return s
     end
+    local newBar = W.Button(page, 110, 22, "+ New bar")
+    newBar:SetScript("OnClick", function()
+        CloseMenu()
+        if #db.custom >= 8 then CUI:Print("Cooldown Manager: 8 bars of your own is the limit.") return end
+        NewBar()
+        Refresh()
+    end)
+    newBar:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("A new bar of your own", 1, 1, 1)
+        GameTooltip:AddLine("It starts empty: click its + to put spells on it, then place it in Layout mode.", T.accent[1], T.accent[2], T.accent[3], true)
+        GameTooltip:Show()
+    end)
+    newBar:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     local function Place(h)
         body:ClearAllPoints()
@@ -1230,18 +1482,35 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         if not ownActive then
             edHint:SetText("Turn on Cys's own bars below (and reload) to arrange your cooldown icons here: drag to reorder, click to set stances, + to add.")
             for _, s in pairs(strips) do s.label:Hide(); s.frame:Hide() end
+            newBar:Hide()
             Place(-(yy - editorTop) + 34)
             return
         end
-        edHint:SetText("Drag an icon to move it. Click an icon for its options. Click + to add any spell the game can track. Greyed = not learned yet.")
-        yy = yy - 24
+        edHint:SetText("Drag an icon to move it. Click an icon for its options. Click + to add any spell the game can track. Greyed = not learned yet. New bar makes another bar of your own.")
+        yy = yy - 38
         for _, bar in ipairs(ownBars) do
             local s = Strip(bar)
             s.label:ClearAllPoints()
             s.label:SetPoint("TOPLEFT", 4, yy)
-            s.label:SetText(bar.def.key == "main" and "Main bar" or "Utility bar")
-            s.label:Show()
-            yy = yy - 18
+            if s.name then -- a bar of your own: its name can be typed over, with Delete at the far right
+                s.label:Hide()
+                s.name:ClearAllPoints()
+                s.name:SetPoint("TOPLEFT", 4, yy + 3)
+                if not s.name:HasFocus() then s.name:SetText(bar.def.name or "") end
+                s.name:Show()
+                s.del:ClearAllPoints()
+                s.del:SetPoint("TOPRIGHT", page, "TOPLEFT", width - 4, yy + 3)
+                s.del:Show()
+                yy = yy - 24
+                s.size:ClearAllPoints(); s.size:SetPoint("TOPLEFT", 4, yy); s.size:Refresh(); s.size:Show()
+                yy = yy - 26
+                s.per:ClearAllPoints(); s.per:SetPoint("TOPLEFT", 4, yy); s.per:Refresh(); s.per:Show()
+                yy = yy - 28
+            else
+                s.label:SetText(bar.def.name or "Bar")
+                s.label:Show()
+                yy = yy - 18
+            end
             local n = #bar.list
             local wait = Waiting(bar)
             local all = n + #wait
@@ -1283,6 +1552,10 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             s.plus:SetPoint("TOPLEFT", (all % PER) * (BOX + BGAP), -math.floor(all / PER) * (BOX + BGAP))
             yy = yy - rowsN * (BOX + BGAP) - 8
         end
+        newBar:ClearAllPoints()
+        newBar:SetPoint("TOPLEFT", 4, yy)
+        newBar:Show()
+        yy = yy - 30
         Place(-(yy - editorTop))
     end
     page.RefreshStances = Refresh
@@ -1328,13 +1601,19 @@ CUI:RegisterPage("Cooldown Manager", function(page)
     OwnCheck("Red icon when your target is out of range for it", "range")
     OwnCheck("Show the global cooldown sweep", "gcd")
     OwnCheck("Tooltips on hover", "tips")
+    OwnCheck("Buff and debuff time on the icon (gold number and line)", "auraTime")
+    W.Stepper(body, "Buff and debuff time: number size", function() return db.auraSize end, function(v) db.auraSize = v; ApplyFonts() end, 8, 24, 1)
+        :SetPoint("TOPLEFT", 24, y)
+    y = y - 30
     y = y - 6
     local ownNote = W.Notes(body, 4, y, width, "", {
         { "Moving them", "open Layout mode (top of this window) and drag Cooldowns: main, utility, buffs and buff bars, and Stance." },
         { "Stance icon", "for classes with stances or forms. With it on you can take the stance out of the game's Tracked Buffs (Choose spells) so it is not shown twice." },
         { "The game's rows", "the cooldown and utility rows are faded out while Cys's bars are on. The tracked buffs and buff bars stay the game's own icons (addons can't read buffs in combat); the second switch only lets you place them in Layout mode. Their icon size is still in Edit Mode." },
         { "Tracked buffs", "to place them, tick the second switch above and drag Cooldowns: buffs in Layout mode. Which buffs are tracked, and their order, is set in the game's own window (Choose spells, Tracked Buffs) - they are the game's icons, so they can't be edited here." },
-        { "Gap", "uses Gap between icons above." },
+        { "Bars of your own", "New bar (under Your bars) adds an empty bar: fill it from its + box, set its size beside it, and drag it in Layout mode like the others. Rename it by typing over its name. A spell sits on one bar at a time." },
+        { "Buff and debuff time", "while an ability's own effect is running (your Rend on the target, Battle Shout on you) its icon shows the time left as a small gold number at the top and a gold line along the bottom. The cooldown keeps the middle of the icon." },
+        { "Gap", "uses Gap between icons below." },
     })
     y = y - ((ownNote and ownNote.GetHeight and ownNote:GetHeight() or 96) + 14)
 

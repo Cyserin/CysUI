@@ -934,6 +934,29 @@ function UF.Enable()
     end
     UF.StartRangeCheck()
     UF.SetupCombatIcon()
+    UF.ApplyNameStyle()
+end
+
+-- Names on the player and target frames: small in the top-left corner of the health bar (the default), which
+-- leaves the middle of the bar free for Frame Combat Text, or the classic larger name on the left.
+-- Only font strings of our own are touched, so this is safe to change in combat.
+function UF.ApplyNameStyle()
+    local corner = DB().nameCorner ~= false
+    for _, key in ipairs({ "player", "target" }) do
+        local f = UF.frames[key]
+        if f and f.name and f.health then
+            f.name:ClearAllPoints()
+            if corner then
+                f.name:SetFont(STANDARD_TEXT_FONT, DB().nameSize or 9, "OUTLINE")
+                f.name:SetPoint("TOPLEFT", f.health, "TOPLEFT", 4, -3)
+                f.name:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", -4, -3)
+            else
+                f.name:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+                f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
+                f.name:SetPoint("RIGHT", f.healthText, "LEFT", -4, 0)
+            end
+        end
+    end
 end
 
 -- Combat: crossed swords on the player frame while you are in combat (switch on the Unit Frames page)
@@ -1077,6 +1100,14 @@ CUI:RegisterPage("Unit Frames", function(page)
     local combat = W.Checkbox(page, "Show a combat icon on the player frame", function() return db.combatIcon ~= false end,
         function(on) db.combatIcon = on and true or false; if UF.ApplyCombatIcon then UF.ApplyCombatIcon() end end)
     combat:SetPoint("TOPLEFT", 4, y - 4)
+    y = y - 30
+    local corner = W.Checkbox(page, "Small names in the top-left corner (player and target)", function() return db.nameCorner ~= false end,
+        function(on) db.nameCorner = on and true or false; UF.ApplyNameStyle() end)
+    corner:SetPoint("TOPLEFT", 4, y - 4)
+    y = y - 28
+    local nameSize = W.Stepper(page, "Corner name size", function() return db.nameSize or 9 end,
+        function(v) db.nameSize = v; UF.ApplyNameStyle() end, 7, 14, 1)
+    nameSize:SetPoint("TOPLEFT", 24, y - 4)
     y = y - 30
     local auraSize = W.Stepper(page, "Target buff and debuff icon size", function() return db.auraSize or 24 end,
         function(v) db.auraSize = v; UF.RebuildAuras() end, 16, 40, 2, " px")

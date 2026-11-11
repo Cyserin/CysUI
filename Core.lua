@@ -467,9 +467,23 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.9",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.10",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.10", date = "2026-11-10",
+              added = {
+                  "Cys's Damage Meter (Forever): our own meter window in the Cys look, fed by the game's built-in damage meter. Damage, healing, damage taken, absorbs, interrupts and dispels; the current fight, overall or an earlier fight. Click its title strip for the menu, point at a row out of combat for that player's spells. It reads no combat log, so it stays light. Its own page and switch under Modules.",
+                  "Cys's Swing Timer (Forever): your auto attack as a thin bar that fills from swing to swing, with extra lines for an off hand and a ranged weapon. Move it in Layout mode; it can match the main cooldown bar's width so it sits flush on the Resource Bar. Its own page and switch under Modules.",
+                  "Cooldown Manager (Forever): bars of your own. New bar under Your bars adds an empty bar - fill it from its + box, name it, set its icon size and row length, and place it in Layout mode.",
+                  "Cooldown Manager (Forever): buff and debuff time on Cys's own icons. While an ability's own effect is running (your Rend on the target, a shout on you) the icon shows the time left as a small gold number at the top and a gold line along the bottom; the cooldown keeps the middle. Switch on the Cooldown Manager page.",
+              },
+              improved = {
+                  "Unit Frames: player and target names are now small in the top-left corner of the health bar, so Frame Combat Text no longer sits on top of the name. Switch and size on the Unit Frames page.",
+              },
+              fixed = {
+                  "Cooldown Manager (Forever): with the global cooldown sweep switched on, every icon on Cys's own bars went grey during each global cooldown (and stayed grey while you kept pressing keys). Only a real cooldown greys an icon now.",
+              },
+            },
             { version = "0.58.9", date = "2026-11-10",
               added = {
                   "Cys's own cooldown bars: an icon turns red while your target is out of range for that ability (Charge too far away, for example). Switch on the Cooldown Manager page.",

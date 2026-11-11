@@ -20,7 +20,7 @@ local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a
 local GROUPS = {
     { nil,               { "General", "Modules", "Conflicts" } },
     { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Durability", "Automation" } },
-    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters", "Combat Numbers", "Threat Bar" } },
+    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meters", "Damage Meter", "Swing Timer", "Combat Numbers", "Threat Bar" } },
     { "Loot & Items",    { "Vendor", "Consumables", "Loot", "Roll Tracker", "Upgrade" } },
     { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
 }
@@ -281,7 +281,7 @@ end
 
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
-    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "combattext", "threat" } },
+    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale", "durability", "automation" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "healadvisor", "warrior", "shoutremind" } },
