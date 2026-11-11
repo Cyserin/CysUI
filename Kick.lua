@@ -215,7 +215,11 @@ local function Place(bar, o, info)
         o.tick:SetPoint("TOP", o.markFill, "TOPRIGHT")
         o.tick:SetPoint("BOTTOM", o.markFill, "BOTTOMRIGHT")
     end
-    o.mark:SetWidth(w > 1 and w or 1)
+    if Secret(w) then -- WoW Forever can lock a bar's size: hand it over as it is, or fall back to a width wide enough
+        if not pcall(o.mark.SetWidth, o.mark, w) then o.mark:SetWidth(400) end
+    else
+        o.mark:SetWidth((type(w) == "number" and w > 1) and w or 1)
+    end
     local ok = pcall(o.pos.SetMinMaxValues, o.pos, 0, total)
         and pcall(o.pos.SetValue, o.pos, info.channel and left or done)
         and pcall(o.mark.SetMinMaxValues, o.mark, 0, total)

@@ -946,8 +946,10 @@ function UF.ApplyNameStyle()
         local f = UF.frames[key]
         if f and f.name and f.health then
             f.name:ClearAllPoints()
+            f.name:SetShadowColor(0, 0, 0, 1) -- a dark drop shadow keeps the name readable on bright class colors
+            f.name:SetShadowOffset(1, -1)
             if corner then
-                f.name:SetFont(STANDARD_TEXT_FONT, DB().nameSize or 9, "OUTLINE")
+                f.name:SetFont(STANDARD_TEXT_FONT, DB().nameSize or 11, "OUTLINE")
                 f.name:SetPoint("TOPLEFT", f.health, "TOPLEFT", 4, -3)
                 f.name:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", -4, -3)
             else
@@ -1105,7 +1107,7 @@ CUI:RegisterPage("Unit Frames", function(page)
         function(on) db.nameCorner = on and true or false; UF.ApplyNameStyle() end)
     corner:SetPoint("TOPLEFT", 4, y - 4)
     y = y - 28
-    local nameSize = W.Stepper(page, "Corner name size", function() return db.nameSize or 9 end,
+    local nameSize = W.Stepper(page, "Corner name size", function() return db.nameSize or 11 end,
         function(v) db.nameSize = v; UF.ApplyNameStyle() end, 7, 14, 1)
     nameSize:SetPoint("TOPLEFT", 24, y - 4)
     y = y - 30

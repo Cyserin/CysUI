@@ -467,9 +467,29 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.10",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.11",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.11", date = "2026-11-11",
+              added = {
+                  "Damage Meter (Forever): more windows, each showing its own thing - damage in one, HPS in another, the overall total in a third (up to 5).",
+                  "Damage Meter (Forever): everything is on the window. Buttons on the title strip for what to show, which fight, the window's own options, reset and a new window. DPS, HPS and Avoidable damage taken join the list.",
+                  "Damage Meter (Forever): drag a window by its title strip, drag its bottom-right corner to resize it, and lock it in place with the padlock beside the corner.",
+                  "Damage Meter (Forever): class icons, your own row kept in sight, and a spell breakdown panel beside the window - point at a row, or click it to keep the panel open while you fight.",
+                  "Cooldown Manager (Forever): on small icons the buff or debuff time takes the middle and the cooldown's own number steps aside while the effect runs (its sweep stays). Placement can be chosen on the Cooldown Manager page.",
+              },
+              improved = {
+                  "Experience bar: quest log XP only counts quests whose objectives you have finished. Plain delivery quests no longer count from the moment you accept them.",
+                  "Unit Frames: the corner names are a little larger with a dark shadow, so they read on bright class colors.",
+                  "The old Damage Meters page is now called Details Skin (it only ever skinned Details!).",
+              },
+              fixed = {
+                  "Damage Meter (Forever): small numbers showed a long string of decimals.",
+                  "Damage Meter (Forever): the windows said the game's meter was switched off while it was counting fine.",
+                  "Cast bars (Forever): an error on enemy casts with interrupt-ready coloring switched on.",
+                  "WoW Forever: the game's hidden bag bar could still take the mouse and show bag tooltips over things placed in the bottom-right corner.",
+              },
+            },
             { version = "0.58.10", date = "2026-11-10",
               added = {
                   "Cys's Damage Meter (Forever): our own meter window in the Cys look, fed by the game's built-in damage meter. Damage, healing, damage taken, absorbs, interrupts and dispels; the current fight, overall or an earlier fight. Click its title strip for the menu, point at a row out of combat for that player's spells. It reads no combat log, so it stays light. Its own page and switch under Modules.",

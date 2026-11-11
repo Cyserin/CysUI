@@ -110,7 +110,14 @@ local function QuestLogXP()
         local total = 0
         for i = 1, (C_QuestLog.GetNumQuestLogEntries() or 0) do
             local info = C_QuestLog.GetInfo(i)
-            if info and not info.isHeader and info.questID and C_QuestLog.IsComplete
+            -- only quests whose objectives you have finished. A plain delivery ("take this letter to...") has no
+            -- objectives and the game calls it complete from the moment you accept it; that XP is not earned yet.
+            local goals = 1
+            if info and info.questID and C_QuestLog.GetNumQuestObjectives then
+                local okG, n = pcall(C_QuestLog.GetNumQuestObjectives, info.questID)
+                if okG and type(n) == "number" then goals = n end
+            end
+            if info and not info.isHeader and info.questID and goals > 0 and C_QuestLog.IsComplete
                 and C_QuestLog.IsComplete(info.questID) then
                 local ok, xp = pcall(GetQuestLogRewardXP, info.questID)
                 if ok and xp then total = total + xp end

@@ -480,7 +480,7 @@ function AB:HideStatusBars()
     for _, name in ipairs(STATUS_BARS) do Kill(_G[name]) end
 end
 local BAG_BUTTONS = { "MainMenuBarBackpackButton", "CharacterBag0Slot", "CharacterBag1Slot", "CharacterBag2Slot",
-                      "CharacterBag3Slot", "KeyRingButton" }
+                      "CharacterBag3Slot", "KeyRingButton", "CharacterReagentBag0Slot", "BagBarExpandToggle" }
 
 function AB:HideBagButtons()
     -- WoW Forever: the bag buttons live in BagsBar, an Edit Mode piece with its own frame art. Fade it all out
@@ -488,15 +488,35 @@ function AB:HideBagButtons()
     local bagsBar = _G.BagsBar
     if CysUICompat and CysUICompat.isForever and bagsBar then
         pcall(bagsBar.SetAlpha, bagsBar, 0)
-        if not InCombatLockdown() then
-            if bagsBar.EnableMouse then pcall(bagsBar.EnableMouse, bagsBar, false) end
-            for _, c in ipairs({ bagsBar:GetChildren() }) do
-                if c.EnableMouse then pcall(c.EnableMouse, c, false) end
-            end
+        -- Every piece of it, however deep, and again whenever the game lays the bar out anew: a faded slot that
+        -- still takes the mouse shows bag tooltips over whatever of ours is parked in that corner (seen on
+        -- CharacterReagentBag0Slot under a damage meter window).
+        local function Deafen(frame, depth)
+            if frame.EnableMouse then pcall(frame.EnableMouse, frame, false) end
+            if depth >= 4 or not frame.GetChildren then return end
+            for _, c in ipairs({ frame:GetChildren() }) do Deafen(c, depth + 1) end
+        end
+        local function Quiet()
+            if InCombatLockdown() then AB.bagsPending = true return end
+            AB.bagsPending = nil
+            Deafen(bagsBar, 0)
             for _, name in ipairs(BAG_BUTTONS) do
                 local b = _G[name]
-                if b and b.EnableMouse then pcall(b.EnableMouse, b, false) end
+                if b then Deafen(b, 3) end
             end
+        end
+        Quiet()
+        if not AB.bagsWatch then
+            AB.bagsWatch = CreateFrame("Frame")
+            AB.bagsWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+            AB.bagsWatch:RegisterEvent("PLAYER_ENTERING_WORLD")
+            AB.bagsWatch:SetScript("OnEvent", function(_, event)
+                if event == "PLAYER_ENTERING_WORLD" then C_Timer.After(3, Quiet) elseif AB.bagsPending then Quiet() end
+            end)
+            if type(bagsBar.Layout) == "function" then
+                hooksecurefunc(bagsBar, "Layout", function() C_Timer.After(0, Quiet) end)
+            end
+            C_Timer.After(3, Quiet)
         end
         return
     end

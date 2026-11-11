@@ -25,7 +25,7 @@ CysUIDB.cooldowns = CysUIDB.cooldowns or {}
 local db = CysUIDB.cooldowns
 local DEFAULTS = { look = true, bars = true, timerBig = 18, timerSmall = 12, stacks = 12, gap = 2, shade = true,
     own = false, grey = true, gcd = false, tips = false, carry = false, pack = true, range = true,
-    stance = false, stanceAll = false, stanceSize = 32, auraTime = true, auraSize = 12 }
+    stance = false, stanceAll = false, stanceSize = 32, auraTime = true, auraSize = 12, auraStyle = "auto" }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
@@ -53,7 +53,9 @@ end
 local fontBig = CreateFont("CysCooldownTimerBig")
 local fontSmall = CreateFont("CysCooldownTimerSmall")
 local fontStack = CreateFont("CysCooldownStacks")
-local fontAura = CreateFont("CysCooldownAuraTime") -- buff / debuff time on Cys's own icons
+local fontAura = CreateFont("CysCooldownAuraTime") -- buff / debuff time on Cys's own icons (small, at the top)
+local fontAuraBig = CreateFont("CysCooldownAuraTimeBig") -- the same in the middle of the icon, at the bar's timer size
+local fontAuraSmall = CreateFont("CysCooldownAuraTimeSmall")
 local function ApplyFonts()
     fontBig:SetFont(STANDARD_TEXT_FONT, db.timerBig, "OUTLINE")
     fontSmall:SetFont(STANDARD_TEXT_FONT, db.timerSmall, "OUTLINE")
@@ -64,9 +66,13 @@ local function ApplyFonts()
         f:SetShadowOffset(1, -1)
     end
     fontAura:SetFont(STANDARD_TEXT_FONT, db.auraSize, "OUTLINE")
-    fontAura:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
-    fontAura:SetShadowColor(0, 0, 0, 1)
-    fontAura:SetShadowOffset(1, -1)
+    fontAuraBig:SetFont(STANDARD_TEXT_FONT, db.timerBig, "OUTLINE")
+    fontAuraSmall:SetFont(STANDARD_TEXT_FONT, db.timerSmall, "OUTLINE")
+    for _, f in ipairs({ fontAura, fontAuraBig, fontAuraSmall }) do
+        f:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+        f:SetShadowColor(0, 0, 0, 1)
+        f:SetShadowOffset(1, -1)
+    end
 end
 ApplyFonts()
 
@@ -262,10 +268,20 @@ local function MakeIcon(bar)
     f.cd:SetSwipeColor(0, 0, 0, 0.7)
     f.cd:SetHideCountdownNumbers(false)
     if f.cd.SetCountdownFont then f.cd:SetCountdownFont(bar.def.font) end
+    -- the same cooldown as numbers only, used when a buff / debuff time takes the middle of the icon (AttachAuras)
+    f.num = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
+    f.num:SetAllPoints()
+    f.num:SetDrawEdge(false)
+    f.num:SetDrawSwipe(false)
+    if f.num.SetDrawBling then f.num:SetDrawBling(false) end
+    f.num:SetHideCountdownNumbers(false)
+    if f.num.SetCountdownFont then f.num:SetCountdownFont(bar.def.font) end
+    f.num:Hide()
     local top = CreateFrame("Frame", nil, f)
     top:SetAllPoints()
     top:SetFrameLevel(f.cd:GetFrameLevel() + 1)
     W.Border(top, 1, T.border, "OVERLAY")
+    f.top = top
     f.count = top:CreateFontString(nil, "OVERLAY")
     f.count:SetFontObject(fontStack)
     f.count:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -321,12 +337,12 @@ local function UpdateIcon(f)
     -- for separately, so a bar full of ready abilities does not go grey on every global cooldown.
     local real = dur
     if db.gcd and dur and not e.charges then real = C_Spell.GetSpellCooldownDuration(spell, true) end
-    local greyed = false
+    local greyed, desat = false, 0
     if db.grey and real and not e.charges and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
         local ok, zero = pcall(real.IsZero, real)
         if ok then
             local ok2, v = pcall(C_CurveUtil.EvaluateColorValueFromBoolean, zero, 0, 1)
-            if ok2 and pcall(f.tex.SetDesaturation, f.tex, v) then greyed = true end
+            if ok2 and pcall(f.tex.SetDesaturation, f.tex, v) then greyed = true; desat = v end
         end
     end
     if not greyed then f.tex:SetDesaturation(0) end
@@ -350,6 +366,14 @@ local function UpdateIcon(f)
         end
     end
     f.tex:SetVertexColor(r, g, b)
+
+    -- buff / debuff time in the middle: the cooldown's number lives in its own layer under the effect's slot (see
+    -- AttachAuras), so it is fed here alongside the sweep
+    if f.midAura then
+        if not (dur and f.num.SetCooldownFromDurationObject and pcall(f.num.SetCooldownFromDurationObject, f.num, dur, true)) then
+            pcall(f.num.Clear, f.num)
+        end
+    end
 end
 
 local function LayoutBar(bar)
@@ -421,11 +445,27 @@ local function AuraIDs(info, base, spell)
     if info.selfAura == true then units = { "player" } elseif info.selfAura == false then units = { "target" } else units = { "player", "target" } end
     return { ids = ids, units = units }
 end
-local function AuraButton(size)
+-- One slot. Everything in it is built here, once: after the game adopts the slot an addon may no longer touch it
+-- or anything inside it, so nothing below is ever updated from our side - the game drives it all.
+-- mid = the time takes the middle of the icon: the slot then carries an opaque copy of the ability's picture,
+-- which hides the cooldown's number underneath while the effect runs (see AttachAuras for the layers).
+local function AuraButton(size, mid, host, font)
     return function(button)
         pcall(button.SetSize, button, size, size) -- the group layout only spaces the slot, it never sizes it
         pcall(button.EnableMouse, button, false)
-        local line = CreateFrame("StatusBar", nil, button)
+        local level = button:GetFrameLevel()
+        host.delta = host.delta or (level - host.frame:GetFrameLevel()) -- how far below the host the slot sits
+        if mid then
+            local tex = button:CreateTexture(nil, "ARTWORK")
+            tex:SetPoint("TOPLEFT", 1, -1) -- one pixel in, so the icon's own edge stays visible around it
+            tex:SetPoint("BOTTOMRIGHT", -1, 1)
+            tex:SetTexCoord(TRIM, 1 - TRIM, TRIM, 1 - TRIM)
+            if not (button.SetIcon and pcall(button.SetIcon, button, tex)) then tex:Hide() end
+        end
+        local top = CreateFrame("Frame", nil, button) -- two levels up: the icon's cooldown sweep is slipped in between
+        top:SetAllPoints()
+        top:SetFrameLevel(level + 2)
+        local line = CreateFrame("StatusBar", nil, top)
         line:SetPoint("BOTTOMLEFT", 1, 1)
         line:SetPoint("BOTTOMRIGHT", -1, 1)
         line:SetHeight(max(2, math.floor(size / 12)))
@@ -434,19 +474,19 @@ local function AuraButton(size)
         local under = line:CreateTexture(nil, "BACKGROUND")
         under:SetAllPoints()
         under:SetColorTexture(0, 0, 0, 0.85)
-        local left = button:CreateFontString(nil, "OVERLAY")
-        left:SetFontObject(fontAura)
-        left:SetPoint("TOP", 0, -2)
-        local stacks = button:CreateFontString(nil, "OVERLAY")
+        local left = top:CreateFontString(nil, "OVERLAY")
+        left:SetFontObject(mid and font or fontAura)
+        if mid then left:SetPoint("CENTER", 0, 0) else left:SetPoint("TOP", 0, -2) end
+        local stacks = top:CreateFontString(nil, "OVERLAY")
         stacks:SetFontObject(fontStack)
-        stacks:SetPoint("BOTTOMLEFT", 2, 5)
+        if mid then stacks:SetPoint("BOTTOMRIGHT", -2, 5) else stacks:SetPoint("BOTTOMLEFT", 2, 5) end
         local dir = Enum and Enum.StatusBarTimerDirection and Enum.StatusBarTimerDirection.RemainingTime
         if not (button.SetDurationBar and pcall(button.SetDurationBar, button, line, { direction = dir })) then line:Hide() end
         if not (button.SetDurationText and pcall(button.SetDurationText, button, left, {})) then left:Hide() end
         if not (button.SetApplicationCount and pcall(button.SetApplicationCount, button, stacks, {})) then stacks:Hide() end
     end
 end
-local function AuraContainer(host, unit, ids, size)
+local function AuraContainer(host, unit, ids, size, init)
     local ok, c = pcall(CreateFrame, "AuraContainer", nil, host, "CustomAuraContainerTemplate")
     if not ok or not c then return nil end
     c:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0) -- placed and sized before any group, so it can draw at once
@@ -456,7 +496,7 @@ local function AuraContainer(host, unit, ids, size)
     if dirs then pcall(c.SetFlowLayoutGrowthDirection, c, dirs.Right, dirs.Down) end
     local okG, err = pcall(c.AddAuraGroup, c, "cys", unit == "player" and "HELPFUL|PLAYER" or "HARMFUL|PLAYER", {
         maxFrameCount = 1,
-        initializeFrame = AuraButton(size),
+        initializeFrame = init,
         candidateFilters = { includeSpellIDs = ids },
         layout = { elementWidth = size, elementHeight = size, elementSpacing = 0, lineSpacing = 0 },
     })
@@ -471,39 +511,67 @@ local function AuraContainer(host, unit, ids, size)
     c.cysUnit = unit
     return c
 end
-local function AuraHost(e, size)
+local function AuraHost(e, size, mid, font)
     local h = auraHosts[e.base]
-    if h and h.size == size then return h end
-    if h then -- icon size changed: the slot is rebuilt at the new size
+    if h and h.size == size and h.mid == mid then return h end
+    if h then -- icon size or style changed: the slot is rebuilt
         for _, c in ipairs(h.containers) do pcall(c.SetEnabled, c, false); c:Hide() end
         h.frame:Hide()
     end
-    h = { size = size, containers = {}, frame = CreateFrame("Frame", nil, UIParent) }
+    h = { size = size, mid = mid, containers = {}, frame = CreateFrame("Frame", nil, UIParent) }
     auraHosts[e.base] = h
+    local init = AuraButton(size, mid, h, font)
     for _, unit in ipairs(e.aura.units) do
-        local c = AuraContainer(h.frame, unit, e.aura.ids, size)
+        local c = AuraContainer(h.frame, unit, e.aura.ids, size, init)
         if c then h.containers[#h.containers + 1] = c end
     end
     return h
 end
 function AttachAuras(bar, shown, size)
     local able = db.auraTime and CysUICompat.HasAuraContainers and CysUICompat.HasAuraContainers()
+    -- where the time goes: in the middle on small icons (no room for two numbers), at the top on big ones
+    local mid = db.auraStyle == "middle" or (db.auraStyle ~= "top" and size < 36)
+    local font = bar.def.font == "CysCooldownTimerBig" and fontAuraBig or fontAuraSmall
     local used = {}
-    if able then
-        for i = 1, shown do
-            local f = bar.icons[i]
-            local e = f.entry
-            if e and e.aura then
-                local ok, h = pcall(AuraHost, e, size)
-                if ok and h then
-                    used[h] = true
-                    h.bar = bar
-                    h.frame:SetParent(f)
-                    h.frame:ClearAllPoints()
-                    h.frame:SetAllPoints(f)
-                    h.frame:SetFrameLevel(f:GetFrameLevel() + 8)
-                    h.frame:Show()
-                end
+    for i = 1, shown do
+        local f = bar.icons[i]
+        local e = f.entry
+        local base = f:GetFrameLevel()
+        local h
+        if able and e and e.aura then
+            local ok, host = pcall(AuraHost, e, size, mid, font)
+            if ok and host then h = host end
+        end
+        if h then
+            used[h] = true
+            h.bar = bar
+            h.frame:SetParent(f)
+            h.frame:ClearAllPoints()
+            h.frame:SetAllPoints(f)
+        end
+        if h and mid and h.delta then
+            -- Layers, bottom to top: picture, the cooldown's number, the effect's slot (an opaque copy of the
+            -- picture, so the number is hidden while the effect runs), the cooldown's sweep, the effect's time
+            -- and gold line, the icon's edge. The slot itself is the game's; only our own frames are ordered here.
+            local slot = base + 2 + h.delta
+            f.num:SetFrameLevel(base + 1)
+            f.num:Show()
+            h.frame:SetFrameLevel(base + 2)
+            f.cd:SetFrameLevel(slot + 1)
+            f.cd:SetHideCountdownNumbers(true)
+            f.top:SetFrameLevel(slot + 3)
+            f.midAura = true
+            h.frame:Show()
+            UpdateIcon(f)
+        else
+            f.midAura = nil
+            f.num:Hide()
+            f.cd:SetFrameLevel(base + 1)
+            f.cd:SetHideCountdownNumbers(false)
+            f.top:SetFrameLevel(base + 2)
+            if h then
+                h.frame:SetFrameLevel(base + 8)
+                h.frame:Show()
             end
         end
     end
@@ -1602,7 +1670,13 @@ CUI:RegisterPage("Cooldown Manager", function(page)
     OwnCheck("Show the global cooldown sweep", "gcd")
     OwnCheck("Tooltips on hover", "tips")
     OwnCheck("Buff and debuff time on the icon (gold number and line)", "auraTime")
-    W.Stepper(body, "Buff and debuff time: number size", function() return db.auraSize end, function(v) db.auraSize = v; ApplyFonts() end, 8, 24, 1)
+    local styleLab = W.Text(body, 12, T.text)
+    styleLab:SetPoint("TOPLEFT", 24, y - 4)
+    styleLab:SetText("Where the time goes")
+    W.Dropdown(body, 250, { { "auto", "middle on small icons, top on big" }, { "middle", "middle (replaces the cooldown number)" }, { "top", "top (small, with the cooldown)" } },
+        function() return db.auraStyle end, function(v) db.auraStyle = v; LayoutOwn() end):SetPoint("TOPLEFT", 190, y)
+    y = y - 28
+    W.Stepper(body, "Number size when at the top", function() return db.auraSize end, function(v) db.auraSize = v; ApplyFonts() end, 8, 24, 1)
         :SetPoint("TOPLEFT", 24, y)
     y = y - 30
     y = y - 6
@@ -1612,7 +1686,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         { "The game's rows", "the cooldown and utility rows are faded out while Cys's bars are on. The tracked buffs and buff bars stay the game's own icons (addons can't read buffs in combat); the second switch only lets you place them in Layout mode. Their icon size is still in Edit Mode." },
         { "Tracked buffs", "to place them, tick the second switch above and drag Cooldowns: buffs in Layout mode. Which buffs are tracked, and their order, is set in the game's own window (Choose spells, Tracked Buffs) - they are the game's icons, so they can't be edited here." },
         { "Bars of your own", "New bar (under Your bars) adds an empty bar: fill it from its + box, set its size beside it, and drag it in Layout mode like the others. Rename it by typing over its name. A spell sits on one bar at a time." },
-        { "Buff and debuff time", "while an ability's own effect is running (your Rend on the target, Battle Shout on you) its icon shows the time left as a small gold number at the top and a gold line along the bottom. The cooldown keeps the middle of the icon." },
+        { "Buff and debuff time", "while an ability's own effect is running (your Rend on the target, Battle Shout on you) its icon shows the time left in gold with a gold line along the bottom. In the middle: the cooldown's own number steps aside while the effect runs (its sweep stays), so there is one number to read - the default on icons under 36 px. At the top: a small number above the cooldown's. The middle number uses the bar's timer size." },
         { "Gap", "uses Gap between icons below." },
     })
     y = y - ((ownNote and ownNote.GetHeight and ownNote:GetHeight() or 96) + 14)

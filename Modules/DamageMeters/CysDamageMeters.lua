@@ -6,9 +6,9 @@
 --   * The reskin of Blizzard's own damage meter will be added once Forever is out and it can be tested.
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
-    key = "damagemeters", name = "Cys's Damage Meters",
-    desc = "A Cys's UI skin for the Details! damage meter (flat dark bars with gold edges). Blizzard's own meter comes after Forever.",
-    open = function() CysUI:OpenConfig("Damage Meters") end,
+    key = "damagemeters", name = "Details! Skin",
+    desc = "A Cys's UI skin for the Details! damage meter (flat dark bars with gold edges). On WoW Forever see Cys's Damage Meter instead.",
+    open = function() CysUI:OpenConfig("Details Skin") end,
     body = function()
 local CUI = CysUI
 local W = CUI.W
@@ -191,9 +191,9 @@ end
 --------------------------------------------------------------------------------
 -- Settings page
 --------------------------------------------------------------------------------
-CUI:RegisterPage("Damage Meters", function(page)
+CUI:RegisterPage("Details Skin", function(page)
     local width = 480
-    W.Header(page, "Damage Meters", width):SetPoint("TOPLEFT", 0, -4)
+    W.Header(page, "Details Skin", width):SetPoint("TOPLEFT", 0, -4)
 
     local status = W.Text(page, 12, T.text)
     status:SetPoint("TOPLEFT", 4, -34)
@@ -219,7 +219,7 @@ CUI:RegisterPage("Damage Meters", function(page)
     W.Notes(page, 4, -134, width, "", {
         { "Details!", "the skin is also in Details' own skin list (its Options, then Skin Selection), where you can pick it per window." },
         "Nothing in Details is changed until you choose the skin.",
-        { "Blizzard's own damage meter", "gets the same treatment once Forever is out and it can be tested." },
+        { "On WoW Forever", "Cys's own Damage Meter (its own module and page) replaces Details: it shows the game's built-in counts in the Cys look." },
     })
     Status()
     page.contentHeight = 320
