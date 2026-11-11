@@ -483,6 +483,49 @@ local function UpdateName(f)
     f.name:SetText(format("|cFFFFD100%s|r %s", levelText, UnitName(unit) or ""))
 end
 
+-- Elite / rare tag between the level and the name: Elite in bright gold, Rare in silver, a skull for a boss.
+-- Small frames (target of target, pet, party) get the short form. The classification is plain text from the game;
+-- should it ever be locked it simply counts as none.
+local TAG_GOLD, TAG_SILVER = "|cFFFFE680", "|cFFC9CED6"
+local TAG_SKULL = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:0|t"
+local function ClassTag(unit, small)
+    local class = UnitClassification and CysUICompat.Plain(UnitClassification(unit))
+    if class == "worldboss" then
+        return small and TAG_SKULL or (TAG_SKULL .. " " .. TAG_GOLD .. "Boss|r"), true
+    elseif class == "rareelite" then
+        return TAG_SILVER .. "Rare|r " .. TAG_GOLD .. (small and "+" or "Elite") .. "|r"
+    elseif class == "elite" then
+        return TAG_GOLD .. (small and "+" or "Elite") .. "|r"
+    elseif class == "rare" then
+        return TAG_SILVER .. "Rare|r"
+    end
+end
+
+local UpdateNamePlain = UpdateName -- the older look: a + after the level
+UpdateName = function(f)
+    if DB().eliteTag == false then return UpdateNamePlain(f) end
+    local unit = f.unit
+    if not UnitExists(unit) then return end
+    local level = UnitLevel(unit)
+    local unitName = UnitName(unit)
+    local tag, boss = ClassTag(unit, f.small)
+    local lockedLevel = Secret(level)
+    local prefix = ""
+    -- a boss has no level to show (the game gives -1); its skull says enough
+    if not lockedLevel and not (boss and not (level and level > 0)) then
+        prefix = "|cFFFFD100" .. ((level and level > 0) and tostring(level) or "??") .. "|r "
+    end
+    if tag then prefix = prefix .. tag .. " " end
+    if lockedLevel or Secret(unitName) then
+        -- WoW Forever: a locked name goes on the font string as it is; only our own plain text is put in front
+        if not pcall(f.name.SetFormattedText, f.name, prefix .. "%s", unitName) then
+            pcall(f.name.SetText, f.name, unitName)
+        end
+        return
+    end
+    f.name:SetText(prefix .. (unitName or ""))
+end
+
 -- WoW Forever: run each part on its own so one locked value can't blank the whole frame (on Classic Era the
 -- parts are called directly, exactly as before)
 local IS_FOREVER = CysUICompat.isForever
@@ -677,6 +720,7 @@ local function CreateUnitFrame(def)
     f:RegisterForClicks("AnyUp", "AnyDown")
     f.noHealthText = def.noHealthText
     f.isParty = def.party
+    f.small = def.fontSize ~= nil -- target of target, pet, party
 
     -- body
     W.Texture(f, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.9 }):SetAllPoints()
@@ -729,6 +773,7 @@ local function CreateUnitFrame(def)
     local overlay = CreateFrame("Frame", nil, f)
     overlay:SetAllPoints(f)
     overlay:SetFrameLevel(f:GetFrameLevel() + 5)
+    f.overlay = overlay
     f.healthText = overlay:CreateFontString(nil, "OVERLAY")
     f.healthText:SetFont(STANDARD_TEXT_FONT, def.fontSize or 11, "OUTLINE")
     f.healthText:SetPoint("RIGHT", f.health, "RIGHT", -5, 0)
@@ -935,30 +980,55 @@ function UF.Enable()
     UF.StartRangeCheck()
     UF.SetupCombatIcon()
     UF.ApplyNameStyle()
+    UF.ApplyTargetAccent()
+end
+
+-- Target accent: a soft gold line along the top edge of the target frame, so the frame you are fighting reads at
+-- a glance. A flat line of our own, no glow.
+function UF.ApplyTargetAccent()
+    local f = UF.frames.target
+    if not f or not f.overlay then return end
+    if not f.accentLine then
+        local t = f.overlay:CreateTexture(nil, "ARTWORK")
+        t:SetTexture(FLAT)
+        t:SetVertexColor(T.accent[1], T.accent[2], T.accent[3], 0.75)
+        t:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        t:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+        t:SetHeight(2)
+        f.accentLine = t
+    end
+    f.accentLine:SetShown(DB().targetAccent ~= false)
 end
 
 -- Names on the player and target frames: small in the top-left corner of the health bar (the default), which
 -- leaves the middle of the bar free for Frame Combat Text, or the classic larger name on the left.
 -- Only font strings of our own are touched, so this is safe to change in combat.
 function UF.ApplyNameStyle()
-    local corner = DB().nameCorner ~= false
-    for _, key in ipairs({ "player", "target" }) do
-        local f = UF.frames[key]
-        if f and f.name and f.health then
-            f.name:ClearAllPoints()
-            f.name:SetShadowColor(0, 0, 0, 1) -- a dark drop shadow keeps the name readable on bright class colors
-            f.name:SetShadowOffset(1, -1)
-            if corner then
-                f.name:SetFont(STANDARD_TEXT_FONT, DB().nameSize or 11, "OUTLINE")
-                f.name:SetPoint("TOPLEFT", f.health, "TOPLEFT", 4, -3)
-                f.name:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", -4, -3)
-            else
-                f.name:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
-                f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
-                f.name:SetPoint("RIGHT", f.healthText, "LEFT", -4, 0)
-            end
+    local db = DB()
+    local size = db.nameSize or 11
+    local function Style(f, corner, cornerSize, plainSize, right)
+        if not (f and f.name and f.health) then return end
+        f.name:ClearAllPoints()
+        f.name:SetShadowColor(0, 0, 0, 1) -- a dark drop shadow keeps the name readable on bright class colors
+        f.name:SetShadowOffset(1, -1)
+        if corner then
+            f.name:SetFont(STANDARD_TEXT_FONT, cornerSize, "OUTLINE")
+            f.name:SetPoint("TOPLEFT", f.health, "TOPLEFT", 4, -3)
+            f.name:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", right or -4, -3)
+        else
+            f.name:SetFont(STANDARD_TEXT_FONT, plainSize, "OUTLINE")
+            f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
+            f.name:SetPoint("RIGHT", f.healthText, "LEFT", -4, 0)
         end
     end
+    local corner = db.nameCorner ~= false
+    Style(UF.frames.player, corner, size, 11)
+    Style(UF.frames.target, corner, size, 11)
+    -- the small frames follow with a smaller font; party names stop short of the healer icon
+    local small = db.nameCornerSmall ~= false
+    Style(UF.frames.targettarget, small, math.min(size, 9), 10)
+    Style(UF.frames.pet, small, math.min(size, 9), 10)
+    for i = 1, 4 do Style(UF.frames["party" .. i], small, math.min(size, 10), 10, -18) end
 end
 
 -- Combat: crossed swords on the player frame while you are in combat (switch on the Unit Frames page)
@@ -1111,6 +1181,18 @@ CUI:RegisterPage("Unit Frames", function(page)
         function(v) db.nameSize = v; UF.ApplyNameStyle() end, 7, 14, 1)
     nameSize:SetPoint("TOPLEFT", 24, y - 4)
     y = y - 30
+    local function RefreshAll() for _, f in pairs(UF.frames) do if UnitExists(f.unit) then UF:Update(f) end end end
+    for _, row in ipairs({
+        { "nameCornerSmall", "Corner names on target of target, pet and party too", UF.ApplyNameStyle },
+        { "eliteTag", "Elite / Rare / Boss tag beside the name (off = a + after the level)", RefreshAll },
+        { "targetAccent", "Soft gold line along the top of the target frame", function() UF.ApplyTargetAccent() end },
+    }) do
+        local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
+            function(on) db[row[1]] = on and true or false; row[3]() end)
+        cb:SetPoint("TOPLEFT", 4, y - 4)
+        y = y - 26
+    end
+    y = y - 4
     local auraSize = W.Stepper(page, "Target buff and debuff icon size", function() return db.auraSize or 24 end,
         function(v) db.auraSize = v; UF.RebuildAuras() end, 16, 40, 2, " px")
     auraSize:SetPoint("TOPLEFT", 4, y - 10)

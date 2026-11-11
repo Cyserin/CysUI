@@ -1,8 +1,8 @@
 --------------------------------------------------------------------------------
 -- Cys's Frame Combat Text (WoW Forever) - one still number on the player and target frames
 --
--- The last hit on you sits in the middle of your player frame, the last hit on your target in the middle of the
--- target frame: a damage number, a heal, or Miss / Dodge / Parry / Block... Nothing floats, scrolls or pops; each
+-- The last hit on you sits in the middle of your player frame's health bar, the last hit on your target in the
+-- middle of the target frame's: a damage number, a heal, or Miss / Dodge / Parry / Block... Nothing floats, scrolls or pops; each
 -- new one simply replaces the one before and it clears after a moment.
 --
 -- WoW Forever hides the combat log from addons, so this uses the per-unit hit event the game still sends
@@ -22,7 +22,7 @@ local Secret = CysUICompat.Secret
 
 CysUIDB.frameText = CysUIDB.frameText or {}
 local db = CysUIDB.frameText
-local DEFAULTS = { player = true, target = true, heals = true, misses = true, size = 22, hold = 10 } -- hold: tenths of a second
+local DEFAULTS = { player = true, target = true, heals = true, misses = true, size = 22, hold = 10, offset = 0 } -- hold: tenths of a second
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 -- what the game calls each result -> the word shown (the game's own translated word when it has one)
@@ -38,6 +38,13 @@ end
 local FADE = 0.2
 local texts = {} -- unit -> our text holder on that unit frame
 
+-- the number sits in the middle of the health bar (not the whole frame, which would pull it down by half the
+-- power bar), nudged up or down by the offset setting
+local function Place(h)
+    h.text:ClearAllPoints()
+    h.text:SetPoint("CENTER", h.bar or h, "CENTER", 0, db.offset or 0)
+end
+
 local function Holder(unit)
     local h = texts[unit]
     if h then return h end
@@ -48,7 +55,8 @@ local function Holder(unit)
     h:SetAllPoints(frame)
     h:SetFrameLevel(frame:GetFrameLevel() + 20)
     h.text = h:CreateFontString(nil, "OVERLAY")
-    h.text:SetPoint("CENTER", h, "CENTER", 0, 0)
+    h.bar = frame.health
+    Place(h)
     h:Hide()
     h:SetScript("OnUpdate", function(self, elapsed)
         self.left = self.left - elapsed
@@ -142,6 +150,9 @@ CUI:RegisterPage("Frame Combat Text", function(page)
     y = y - 4
     W.Stepper(page, "Text size", function() return db.size end, function(v) db.size = v end, 10, 48, 1):SetPoint("TOPLEFT", 4, y)
     y = y - 28
+    W.Stepper(page, "Move up (+) or down (-)", function() return db.offset or 0 end,
+        function(v) db.offset = v; for _, h in pairs(texts) do Place(h) end end, -20, 20, 1):SetPoint("TOPLEFT", 4, y)
+    y = y - 28
     W.Stepper(page, "How long it stays (tenths of a second)", function() return db.hold end, function(v) db.hold = v end, 3, 40, 1)
         :SetPoint("TOPLEFT", 4, y)
     y = y - 36
@@ -153,7 +164,7 @@ CUI:RegisterPage("Frame Combat Text", function(page)
     end)
     y = y - 40
     W.Notes(page, 4, y, width, "", {
-        { "How it looks", "one number in the middle of the frame. A new hit replaces it; nothing floats, scrolls or pops. Crits are a little bigger." },
+        { "How it looks", "one number in the middle of the health bar. A new hit replaces it; nothing floats, scrolls or pops. Crits are a little bigger." },
         { "Colors", "red = damage you take, white = physical damage on your target, yellow = spell damage, green = heals." },
         { "On the target frame", "WoW Forever does not tell addons who dealt a hit, so you see every hit your target takes - yours, your pet's and other players'." },
         { "Needs", "Cys's unit frames (the Unit Frames module) for the frame it is shown on." },

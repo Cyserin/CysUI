@@ -467,9 +467,21 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.11",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.12",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.12", date = "2026-11-11",
+              added = {
+                  "Unit Frames: an Elite, Rare or Boss tag between the level and the name - Elite in bright gold, Rare in silver, a skull for a boss. Small frames show the short form.",
+                  "Unit Frames: a soft gold line along the top edge of the target frame.",
+                  "Unit Frames: target of target, pet and party get the same small corner names with a dark shadow as the player and target frames.",
+                  "Cast Bar: the target's cast bar can be joined to the bottom of the target frame - same width, one shared edge, and it follows the frame when you move it. Off until you turn it on.",
+                  "Frame Combat Text (Forever): a setting to move the number up or down.",
+              },
+              improved = {
+                  "Frame Combat Text (Forever): the number sits in the middle of the health bar instead of the whole frame, so it no longer hangs low over the power bar.",
+              },
+            },
             { version = "0.58.11", date = "2026-11-11",
               added = {
                   "Damage Meter (Forever): more windows, each showing its own thing - damage in one, HPS in another, the overall total in a third (up to 5).",

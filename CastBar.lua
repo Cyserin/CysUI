@@ -231,6 +231,41 @@ local function Create(key, unit, label, w, h, point, x, y)
     return f
 end
 
+-- Joined to the target frame (off by default): the target's cast bar sits flush under Cys's target frame, the
+-- same width, sharing one edge. While on, the bar's own spot and width from layout mode are not used (its height
+-- still is). Only done out of combat; a change made mid-fight waits for the fight to end.
+function CB.ApplyJoin()
+    local f = CB.bars.target
+    if not f then return end
+    local want = DB().joinTarget and true or false
+    if not want and not f.joined then return end
+    if InCombatLockdown() then CB.joinPending = true return end
+    CB.joinPending = nil
+    local UF = CUI.UnitFrames
+    local uf = UF and UF.frames and UF.frames.target
+    local m = CUI.movers and CUI.movers.castbar_target
+    if want and uf then
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", uf, "BOTTOMLEFT", 0, 1)
+        f:SetPoint("TOPRIGHT", uf, "BOTTOMRIGHT", 0, 1)
+        f.joined = true
+    elseif m and m.mover then
+        f:ClearAllPoints()
+        f:SetPoint("CENTER", m.mover, "CENTER", 0, 0)
+        f.joined = nil
+        CUI:ApplyLayout("castbar_target")
+    end
+    pcall(Layout, f)
+end
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+    ev:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_ENTERING_WORLD" or CB.joinPending then CB.ApplyJoin() end
+    end)
+end
+
 function CB:ApplyOptions()
     for _, f in pairs(self.bars) do Layout(f) end
 end
@@ -273,13 +308,16 @@ CUI:RegisterPage("Cast Bar", function(page)
     Check("Show the time left", "time", -60, true)
     if db.kick == nil then db.kick = true end
     Check("Color the target's cast by your interrupt", "kick", -86, true)
+    W.Checkbox(page, "Join the target's cast bar to the bottom of the target frame", function() return db.joinTarget end,
+        function(on) db.joinTarget = on and true or false; CB.ApplyJoin() end):SetPoint("TOPLEFT", 4, -112)
 
-    W.Header(page, "Which bars (needs a /reload)", width):SetPoint("TOPLEFT", 0, -128)
-    Check("Your cast bar", "player", -158)
-    Check("Target cast bar", "target", -184)
+    W.Header(page, "Which bars (needs a /reload)", width):SetPoint("TOPLEFT", 0, -154)
+    Check("Your cast bar", "player", -184)
+    Check("Target cast bar", "target", -210)
 
 
-    local note = W.Notes(page, 4, -264, width, "", {
+    local note = W.Notes(page, 4, -290, width, "", {
+            { "Joined to the target frame", "the bar sits flush under Cys's target frame at the same width and follows it wherever you move it. Its own box in layout mode then only sets the height. Changed in combat, it applies when the fight ends." },
             { "Your interrupt", "the target's cast is grey while your interrupt is on cooldown, with a white tick where it comes ready, and green once you can use it. Works for every class with an interrupt; nameplates have the same switch on their page." },
             "Blizzard's cast bar is hidden for any bar you turn on.",
             "The target bar only shows casts the game reports to addons, which varies by Classic version.",
