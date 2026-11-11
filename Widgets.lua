@@ -387,6 +387,9 @@ function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
     f.label = W.Text(f, 12, T.text)
     f.label:SetPoint("LEFT", 0, 0)
     f.label:SetText(label)
+    -- a long label widens the row instead of sliding under the buttons
+    local needW = (f.label:GetStringWidth() or 0) + 124
+    if needW > 320 then f:SetWidth(needW) end
 
     local plus = W.Button(f, 22, 22, "+")
     plus:SetPoint("RIGHT", 0, 0)

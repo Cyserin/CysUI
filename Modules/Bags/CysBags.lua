@@ -134,9 +134,16 @@ local SECTIONS = {
     { key = "JUNK",       title = "Junk" },
 }
 
+-- WoW Forever: what sits in the reagent bag gets a section and a sidebar row of its own (just above Junk)
+if LAST_BAG > LAST_NORMAL_BAG then
+    SIDEBAR_ICONS.REAGENT = "Interface\\Icons\\INV_Ore_Copper_01"
+    tinsert(SIDEBAR, #SIDEBAR, { key = "REAGENT", label = "Reagent Bag" })
+    tinsert(SECTIONS, #SECTIONS, { key = "REAGENT", title = "Reagent Bag" })
+end
+
 local VALID_CATEGORY, CATEGORY_TITLE = {}, {}
 for _, sec in ipairs(SECTIONS) do
-    VALID_CATEGORY[sec.key] = true
+    VALID_CATEGORY[sec.key] = sec.key ~= "REAGENT" -- a bag, not a category: items can't be dragged into it
     CATEGORY_TITLE[sec.key] = sec.title
 end
 
@@ -596,7 +603,7 @@ function CysBags:Collect()
                     e.highlight = nil -- recomputed by ResolveCategory
                     e.isBoE = IsBoE(bag, slot)
                     
-                    local category = ResolveCategory(e)
+                    local category = bag > LAST_NORMAL_BAG and "REAGENT" or ResolveCategory(e)
                     if not lists[category] then lists[category] = {} end
                     lists[category][#lists[category] + 1] = e
                 end
@@ -707,15 +714,27 @@ function CysBags:Layout()
 
     -- All Slots: every real slot in bag order, empty ones included
     if filter == "SLOTS" then
-        local i = 0
+        local i, extra = 0, 0
         for bag = FIRST_BAG, LAST_BAG do
             if not self.bagFilter or self.bagFilter == bag then
                 local entries = slotEntries[bag]
-                for slot = 1, (GetNumSlots(bag) or 0) do
+                local slots = GetNumSlots(bag) or 0
+                -- the reagent bag's slots get a block of their own under the ordinary ones
+                if bag > LAST_NORMAL_BAG and slots > 0 and i > 0 then
+                    i = ceil(i / COLS) * COLS
+                    local top = (i / COLS) * STEP + extra - SLOT_GAP + SECTION_GAP
+                    local h = GetSectionHeader("REAGENT_SLOTS")
+                    h:ClearAllPoints()
+                    h:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -top)
+                    h.label:SetText(format("Reagent Bag |cff777777(%d)|r", slots))
+                    h:Show()
+                    extra = extra - SLOT_GAP + SECTION_GAP + SECTION_H + 6
+                end
+                for slot = 1, slots do
                     i = i + 1
                     local btn = GetItemButton(bag, slot)
                     btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", content, "TOPLEFT", ((i - 1) % COLS) * STEP, -(floor((i - 1) / COLS) * STEP))
+                    btn:SetPoint("TOPLEFT", content, "TOPLEFT", ((i - 1) % COLS) * STEP, -(floor((i - 1) / COLS) * STEP + extra))
                     local e = entries and entries[slot]
                     if e then UpdateButton(btn, e) else UpdateEmptyButton(btn) end
                     btn:Show()
@@ -724,7 +743,7 @@ function CysBags:Layout()
             end
         end
         any = i > 0
-        y = ceil(i / COLS) * STEP - SLOT_GAP + SECTION_GAP
+        y = ceil(i / COLS) * STEP + extra - SLOT_GAP + SECTION_GAP
     end
 
     -- 1. When viewing "ALL", show a single consolidated "Armory Sets" category
@@ -874,7 +893,9 @@ function CysBags:UpdateSidebar()
         if (counts[key] or 0) > 0 then sets[#sets + 1] = { key = key, title = (title:gsub("^Set: ", "")) } end
     end
     table.sort(sets, function(a, b) return a.title < b.title end)
-    for _, cb in pairs(setButtons) do cb:Hide() end
+    -- rows no longer needed are hidden at the end: hiding and re-showing the row under the mouse made it
+    -- flicker out of sight (each hide fires its mouse-leave, each show its mouse-enter, over and over)
+    local usedSets = {}
     local y = 8
     for _, sb in ipairs(sidebarButtons) do
         local cnt = counts[sb.key] or 0
@@ -891,6 +912,7 @@ function CysBags:UpdateSidebar()
             if sb.key == "SETS" then
                 for _, s in ipairs(sets) do
                     local cb = SetChildButton(s.key)
+                    usedSets[cb] = true
                     cb:ClearAllPoints()
                     cb:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 0, -y)
                     cb:SetPoint("TOPRIGHT", sidebar, "TOPRIGHT", -1, -y)
@@ -899,9 +921,10 @@ function CysBags:UpdateSidebar()
                     local sel = self.filter == s.key
                     cb.accent:SetShown(sel)
                     if sel then cb.bg:SetColorTexture(unpack(C.selected)); cb.bg:Show()
-                    elseif cb.hover then cb.bg:SetColorTexture(unpack(C.hover)); cb.bg:Show()
+                    elseif cb.hover then cb.bg:SetColorTexture(unpack(C.selected)); cb.bg:Show()
                     else cb.bg:Hide() end
                     if sel then cb.label:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+                    elseif cb.hover then cb.label:SetTextColor(1, 1, 1)
                     else cb.label:SetTextColor(0.75, 0.75, 0.75) end
                     cb:Show()
                     y = y + 23
@@ -909,6 +932,7 @@ function CysBags:UpdateSidebar()
             end
         end
     end
+    for _, cb in pairs(setButtons) do if not usedSets[cb] then cb:Hide() end end
     self.sidebarH = y + 34 -- the rows plus room for the collapse button (used by auto-size)
     for _, sb in ipairs(sidebarButtons) do
         -- Check if this sidebar button is selected OR if it's the Armory Sets tab and a dynamic set is filtered
@@ -942,7 +966,7 @@ function CysBags:UpdateHeader()
 end
 
 function CysBags:UpdateBagSlots()
-    for i = 1, 4 do
+    for i = 1, #footer.bagSlots do
         local btn = footer.bagSlots[i]
         local invID = btn:GetID()
         local tex = GetInventoryItemTexture("player", invID)
@@ -1416,8 +1440,10 @@ local function CreateBagSlotButton(i)
     btn.bagID = i
 
     -- Empty-slot art as Blizzard defines it for "Bag0Slot".."Bag3Slot"
-    local _, emptyTex = GetInventorySlotInfo("Bag" .. (i - 1) .. "Slot")
-    btn.emptyTexture = emptyTex or EMPTY_BAG_TEXTURE
+    -- (the fifth button, WoW Forever only, is the reagent bag slot)
+    local okSlot, _, emptyTex = pcall(GetInventorySlotInfo, i > 4 and "ReagentBag0Slot" or ("Bag" .. (i - 1) .. "Slot"))
+    btn.emptyTexture = (okSlot and emptyTex) or EMPTY_BAG_TEXTURE
+    btn.isReagentBag = i > 4
 
     -- The template's stock art is sized for a 37px button; at 22px it overflows
     -- and overlaps its neighbours, so strip it and draw our own flat slot.
@@ -1459,6 +1485,9 @@ local function CreateBagSlotButton(i)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         if not GameTooltip:SetInventoryItem("player", self:GetID()) then
             GameTooltip:SetText(EQUIP_CONTAINER or "Equip Container", 1, 1, 1)
+        end
+        if self.isReagentBag then
+            GameTooltip:AddLine("Reagent bag: ore, herbs, cloth and other gathered materials go here", 1, 1, 1, true)
         end
         GameTooltip:AddLine("Click: show only this bag", C.accent[1], C.accent[2], C.accent[3])
         GameTooltip:Show()
@@ -1707,12 +1736,13 @@ function CysBags:CreateFrames()
     footer.gold:SetPoint("RIGHT", -12, 0)
 
     footer.bagSlots = {}
-    for i = 1, 4 do
+    for i = 1, LAST_BAG do
         local btn = CreateBagSlotButton(i)
         if i == 1 then
             btn:SetPoint("LEFT", footer, "LEFT", 112, 0)
         else
-            btn:SetPoint("LEFT", footer.bagSlots[i - 1], "RIGHT", BAGSLOT_GAP, 0)
+            -- the reagent bag slot stands a little apart from the four ordinary bags
+            btn:SetPoint("LEFT", footer.bagSlots[i - 1], "RIGHT", i > 4 and (BAGSLOT_GAP + 8) or BAGSLOT_GAP, 0)
         end
         footer.bagSlots[i] = btn
     end
@@ -1918,6 +1948,126 @@ function CysBags:CreateFrames()
     end)
 end
 
+--------------------------------------------------------------------------------
+-- Split box: Shift-click a stack and type how many to take. Split puts that many on the cursor; To free slot
+-- splits them off and drops them straight into an empty bag slot. It takes the place of the game's small
+-- arrows-only box, for Cys's Bags buttons only (vendors and the bank keep the game's own).
+--------------------------------------------------------------------------------
+local splitBox
+local function SplitFreeSlot()
+    for bag = FIRST_BAG, LAST_NORMAL_BAG do
+        if GetBagFamily(bag) == 0 then
+            for slot = 1, (GetNumSlots(bag) or 0) do
+                local _, _, _, _, link = GetSlotItem(bag, slot)
+                if not link then return bag, slot end
+            end
+        end
+    end
+end
+local function SplitTake(toSlot)
+    local box = splitBox
+    local bag, slot, most = box.bag, box.slot, box.most
+    local n = tonumber(box.edit:GetText()) or 0
+    box:Hide()
+    if n < 1 or most < 2 then return end
+    if n > most - 1 then n = most - 1 end -- the whole stack is a plain pick-up, not a split
+    local Split = (C_Container and C_Container.SplitContainerItem) or SplitContainerItem
+    if not Split or CursorHasItem() then return end
+    local freeBag, freeSlot
+    if toSlot then
+        freeBag, freeSlot = SplitFreeSlot()
+        if not freeBag then print("|cFFFFD100Cys's Bags|r: no free slot to split into.") return end
+    end
+    Split(bag, slot, n)
+    if toSlot then
+        C_Timer.After(0.15, function() if CursorHasItem() then PickupItem(freeBag, freeSlot) end end)
+    end
+end
+local function BuildSplitBox()
+    local Wd = CysUI.W
+    local box = CreateFrame("Frame", "CysBagsSplitBox", UIParent)
+    box:SetSize(206, 86)
+    box:SetFrameStrata("DIALOG")
+    box:SetClampedToScreen(true)
+    box:EnableMouse(true)
+    SolidTexture(box, "BACKGROUND", C.bg):SetAllPoints()
+    CreateBorder(box, 1, C.border, "BORDER")
+    local title = CreateText(box, 12, C.accent)
+    title:SetPoint("TOPLEFT", 10, -8)
+    title:SetText("Split stack")
+    local close = Wd.Button(box, 18, 18, "x")
+    close:SetPoint("TOPRIGHT", -6, -5)
+    close:SetScript("OnClick", function() box:Hide() end)
+
+    local minus = Wd.Button(box, 22, 22, "-")
+    minus:SetPoint("TOPLEFT", 10, -28)
+    local edit = CreateFrame("EditBox", nil, box)
+    edit:SetSize(60, 22)
+    edit:SetPoint("LEFT", minus, "RIGHT", 4, 0)
+    edit:SetFont(STANDARD_TEXT_FONT, 12, "")
+    edit:SetTextColor(1, 1, 1)
+    edit:SetJustifyH("CENTER")
+    edit:SetAutoFocus(false)
+    edit:SetNumeric(true)
+    edit:SetMaxLetters(4)
+    SolidTexture(edit, "BACKGROUND", C.field):SetAllPoints()
+    CreateBorder(edit, 1, C.line, "BORDER")
+    local plus = Wd.Button(box, 22, 22, "+")
+    plus:SetPoint("LEFT", edit, "RIGHT", 4, 0)
+    box.of = CreateText(box, 12, C.text)
+    box.of:SetPoint("LEFT", plus, "RIGHT", 8, 0)
+    box.edit = edit
+
+    local function Set(n)
+        n = math.max(1, math.min(math.max(box.most - 1, 1), n))
+        edit:SetText(n)
+    end
+    minus:SetScript("OnClick", function() Set((tonumber(edit:GetText()) or 1) - 1) end)
+    plus:SetScript("OnClick", function() Set((tonumber(edit:GetText()) or 0) + 1) end)
+    box:EnableMouseWheel(true)
+    box:SetScript("OnMouseWheel", function(_, delta) Set((tonumber(edit:GetText()) or 1) + (delta > 0 and 1 or -1)) end)
+    edit:SetScript("OnEnterPressed", function() SplitTake(false) end)
+    edit:SetScript("OnEscapePressed", function() box:Hide() end)
+
+    local split = Wd.Button(box, 90, 22, "Split")
+    split:SetPoint("BOTTOMLEFT", 10, 8)
+    split:SetScript("OnClick", function() SplitTake(false) end)
+    local auto = Wd.Button(box, 90, 22, "To free slot")
+    auto:SetPoint("BOTTOMRIGHT", -10, 8)
+    auto:SetScript("OnClick", function() SplitTake(true) end)
+
+    -- gone when the bags close or the stack's button goes away
+    box:SetScript("OnUpdate", function(self)
+        if not (self.owner and self.owner:IsVisible()) then self:Hide() end
+    end)
+    box:Hide()
+    return box
+end
+function CysBags.InstallSplitBox()
+    local game = _G.StackSplitFrame
+    if not (game and game.OpenStackSplitFrame and hooksecurefunc) then return end
+    hooksecurefunc(game, "OpenStackSplitFrame", function(self, most, owner)
+        local auto = CysUIDB and CysUIDB.automation
+        if auto and auto.bagSplit == false then return end
+        -- only stacks in Cys's Bags (their buttons carry cysEntry); never while a vendor is open, where
+        -- Shift-click on the vendor's own items must keep the game's box
+        if not (owner and owner.cysEntry and owner.GetID and owner:GetParent()) then return end
+        if type(most) ~= "number" or most < 2 then return end
+        pcall(self.Hide, self)
+        splitBox = splitBox or BuildSplitBox()
+        local box = splitBox
+        box.owner, box.most = owner, most
+        box.bag, box.slot = owner:GetParent():GetID(), owner:GetID()
+        box.of:SetText("/ " .. most)
+        box.edit:SetText(math.max(1, math.floor(most / 2)))
+        box:ClearAllPoints()
+        box:SetPoint("BOTTOMLEFT", owner, "TOPLEFT", 0, 4)
+        box:Show()
+        box.edit:SetFocus()
+        box.edit:HighlightText()
+    end)
+end
+
 function CysBags:PreCreateButtons()
     if not frame or InCombatLockdown() then return end
     for bag = FIRST_BAG, LAST_BAG do
@@ -1934,6 +2084,7 @@ local hooksInstalled = false
 local function InstallBagHooks()
     if hooksInstalled then return end
     hooksInstalled = true
+    CysBags.InstallSplitBox()
 
     if IS_FOREVER and hooksecurefunc then
         -- WoW Forever: Blizzard's bag functions are never replaced. Replacing them left addon "taint" in the

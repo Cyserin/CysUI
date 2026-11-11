@@ -34,6 +34,8 @@ local DEFAULTS = {
     bagsAutoSize = true,     -- Cys's Bags grows to fit its items (no scrolling)
     acceptInvites = false,   -- accept group invites from friends and guildmates
     questAnnounce = false,   -- tell the party when one of your quests is ready to turn in
+    bagSplit = true,         -- Cys's Bags: own split box on Shift-click (type a number, split to a free slot)
+    trainAll = true,         -- a Train all button on trainer windows (nothing is bought until you click it)
     openContainers = true,   -- open clams, sacks and other openable bag items (Classic Era)
 }
 
@@ -439,6 +441,72 @@ local function QueueQuestScan()
 end
 
 --------------------------------------------------------------------------------
+-- Train all: a button on the trainer window that learns everything you can learn and afford right now, one
+-- after another. Point at it for the count and the total cost. Nothing is bought until you click.
+--------------------------------------------------------------------------------
+local trainBtn, training
+-- the list differs between clients (name, rank, category... or name, category...): look for the word itself
+local function TrainerAvailable(i)
+    local _, b, c = GetTrainerServiceInfo(i)
+    return b == "available" or c == "available"
+end
+-- how many can be learned now, what they cost together, and the first one you can pay for
+local function TrainerTally()
+    local n, total, first = 0, 0, nil
+    local money = GetMoney() or 0
+    for i = 1, (GetNumTrainerServices and GetNumTrainerServices() or 0) do
+        if TrainerAvailable(i) then
+            local cost = GetTrainerServiceCost(i) or 0
+            n, total = n + 1, total + cost
+            if not first and cost <= money then first = i end
+        end
+    end
+    return n, total, first
+end
+local function TrainStep()
+    if not training then return end
+    local _, _, first = TrainerTally()
+    if not first then training = false return end
+    BuyTrainerService(first)
+    -- the list refreshes after each purchase; carry on a moment later
+    C_Timer.After(0.25, function() pcall(TrainStep) end)
+end
+local function TrainerButton()
+    local host = _G.ClassTrainerFrame
+    if not host then return end
+    if not trainBtn then
+        trainBtn = W.Button(host, 84, 22, "Train all")
+        local anchor = _G.ClassTrainerTrainButton
+        if anchor then trainBtn:SetPoint("RIGHT", anchor, "LEFT", -6, 0)
+        else trainBtn:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 16, 8) end
+        trainBtn:SetFrameLevel((anchor and anchor:GetFrameLevel() or host:GetFrameLevel()) + 2)
+        trainBtn:SetScript("OnClick", function()
+            if training then training = false return end
+            training = true
+            pcall(TrainStep)
+        end)
+        trainBtn:HookScript("OnEnter", function(self)
+            local n, total = TrainerTally()
+            local money = GetMoney() or 0
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText("Train all", T.accent[1], T.accent[2], T.accent[3])
+            if n == 0 then
+                GameTooltip:AddLine("Nothing to learn here right now.", 1, 1, 1)
+            else
+                GameTooltip:AddDoubleLine(n == 1 and "1 to learn" or (n .. " to learn"), GetCoinTextureString(total), 1, 1, 1, 1, 1, 1)
+                GameTooltip:AddDoubleLine("You have", GetCoinTextureString(money), 1, 1, 1, 1, 1, 1)
+                if total > money then
+                    GameTooltip:AddLine("Not enough for all of them: it learns what you can pay for, top of the list first.", 1, 0.5, 0.3, true)
+                end
+            end
+            GameTooltip:Show()
+        end)
+        trainBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    trainBtn:SetShown(DB().trainAll ~= false)
+end
+
+--------------------------------------------------------------------------------
 local frame
 local function Enable()
     if frame then return end
@@ -450,7 +518,7 @@ local function Enable()
                          "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "LFG_LIST_ACTIVE_ENTRY_UPDATE",
                          "MERCHANT_SHOW", "MERCHANT_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "MAIL_SHOW",
                          "MAIL_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PARTY_INVITE_REQUEST",
-                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED", "QUEST_LOG_UPDATE" }) do
+                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED", "QUEST_LOG_UPDATE", "TRAINER_SHOW", "TRAINER_CLOSED" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
     if StaticPopup_Show then
@@ -465,6 +533,11 @@ local function Enable()
             pcall(OnInvite, arg1)
         elseif event == "QUEST_LOG_UPDATE" then
             QueueQuestScan()
+        elseif event == "TRAINER_SHOW" then
+            training = false
+            pcall(TrainerButton)
+        elseif event == "TRAINER_CLOSED" then
+            training = false
         elseif event == "BAG_UPDATE_DELAYED" or event == "LOOT_CLOSED" then
             C_Timer.After(0.3, function() pcall(OpenOne) end)
         elseif OPEN_EVENTS[event] or CLOSE_EVENTS[event] then
@@ -542,6 +615,8 @@ CUI:RegisterPage("Automation", function(page)
     if not (CysUICompat and CysUICompat.isForever) then
         Check("Open clams, sacks and other openable items (out of combat)", "openContainers")
     end
+    Check("Cys's Bags: own split box on Shift-click (type the amount)", "bagSplit")
+    Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
     local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
     fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)
 

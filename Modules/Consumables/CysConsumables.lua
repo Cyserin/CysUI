@@ -299,6 +299,35 @@ local function ReadMerchant(i)
     return food, drink, buff
 end
 
+-- How much plain food (or water) you already carry that restores at least this much - whatever it is called.
+-- Bread from one vendor and fish from the next are the same tier. Well Fed food counts too (it is still food
+-- you can eat); conjured food does not, since it is gone when you log out.
+local function CarriedAtLeast(field, amount)
+    local total, seen = 0, {}
+    for bag = 0, 4 do
+        for slot = 1, (CC.GetContainerNumSlots(bag) or 0) do
+            local id = CC.GetContainerItemID(bag, slot)
+            if id and not seen[id] then
+                seen[id] = true
+                local info = Read(bag, slot, id)
+                if info and info.usable and not info.conjured and (info[field] or 0) >= amount then
+                    total = total + (GetItemCount(id) or 0)
+                end
+            end
+        end
+    end
+    return total
+end
+
+-- Vendor food and water come in level steps. Only the step for your level is bought: a level 22 character is
+-- not sold level 1 apples just because this vendor has nothing better.
+local FOOD_STEPS = { 45, 35, 25, 15, 5, 1 }
+local function StepForLevel()
+    local level = UnitLevel("player") or 1
+    for _, step in ipairs(FOOD_STEPS) do if level >= step then return step end end
+    return 1
+end
+
 local function UsesMana()
     local mx = UnitPowerMax and UnitPowerMax("player", 0)
     return type(mx) == "number" and mx > 0
@@ -352,15 +381,18 @@ local function Restock()
             end
         end
         for _, kind in ipairs({ "food", "drink" }) do
-            local p, mine = pick[kind], best[kind]
+            local p = pick[kind]
             local link = p and GetMerchantItemLink(p.i)
             local id = link and tonumber(link:match("item:(%d+)"))
-            -- not when the restock list already covers it, or when you carry something better (conjured aside)
-            if id and not list[id] and not (mine and not mine.conjured and (mine.amount or 0) > p.amount) then
+            -- not when the restock list already covers it
+            if id and not list[id] then
                 local name, price, perBuy, available = MerchantInfo(p.i)
                 perBuy = max(perBuy or 1, 1)
-                local _, _, _, _, _, _, _, stackSize = GetItemInfo(id)
-                local need = want[kind] * (stackSize or 20) - GetItemCount(id)
+                local _, _, _, _, minLevel, _, _, stackSize = GetItemInfo(id)
+                -- anything you carry that is as good or better counts toward the stacks, whatever its name
+                local need = want[kind] * (stackSize or 20) - CarriedAtLeast(kind, p.amount)
+                -- below your level's step (or not known yet): leave it on the shelf
+                if not minLevel or minLevel < StepForLevel() then need = 0 end
                 if available and available >= 0 then need = min(need, available * perBuy) end
                 local unitPrice = price / perBuy
                 need = min(need, floor(max(0, GetMoney() - reserve - spent) / unitPrice))
@@ -486,12 +518,18 @@ CUI:RegisterPage("Consumables", function(page)
 
     ---------------------------------------------------------------- best food and water
     W.Header(page, "Food and water at vendors", width):SetPoint("TOPLEFT", 0, y); y = y - 28
-    W.Stepper(page, "Stacks of the best food to keep (0 = off)", function() return db.foodStacks or 0 end,
+    W.Stepper(page, "Best food: stacks to keep", function() return db.foodStacks or 0 end,
         function(v) db.foodStacks = v end, 0, 10, 1):SetPoint("TOPLEFT", 4, y); y = y - 28
-    W.Stepper(page, "Stacks of the best water to keep (0 = off)", function() return db.drinkStacks or 0 end,
+    W.Stepper(page, "Best water: stacks to keep", function() return db.drinkStacks or 0 end,
         function(v) db.drinkStacks = v end, 0, 10, 1):SetPoint("TOPLEFT", 4, y); y = y - 28
     W.Stepper(page, "Never buy below this much gold", function() return db.goldFloor or 0 end,
-        function(v) db.goldFloor = v end, 0, 100, 1, " g"):SetPoint("TOPLEFT", 4, y); y = y - 36
+        function(v) db.goldFloor = v end, 0, 100, 1, " g"):SetPoint("TOPLEFT", 4, y); y = y - 26
+    local foodNote = W.Text(page, 11, T.desc)
+    foodNote:SetPoint("TOPLEFT", 4, y)
+    foodNote:SetWidth(width - 8)
+    foodNote:SetJustifyH("LEFT")
+    foodNote:SetText("0 stacks = off. Bought when you open a vendor that sells food or water of your level's step (1, 5, 15, 25, 35, 45) - never anything lower. What you already carry that is as good or better counts, whatever it is called.")
+    y = y - 40
 
     ---------------------------------------------------------------- restock list
     W.Header(page, "Restock list (this character)", width):SetPoint("TOPLEFT", 0, y); y = y - 28

@@ -71,7 +71,10 @@ function MB:Layout()
     local cell, cols = db.cell, db.columns
     local list = {}
     for _, e in ipairs(MB.entries) do
-        if not e.hidden and not db.skip[e.name] then list[#list + 1] = e
+        -- a button its addon keeps hidden gets no cell (asked of the button itself: not every way of hiding
+        -- one passes through the Hide we watch), so the panel never shows an empty box
+        local shown = not e.hidden and e.btn.IsShown and e.btn:IsShown()
+        if shown and not db.skip[e.name] then list[#list + 1] = e
         else e.plate:Hide(); e.btn:SetAlpha(0); e.btn:EnableMouse(false) end
     end
     local n = #list
