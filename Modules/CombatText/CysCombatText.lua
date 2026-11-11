@@ -356,7 +356,7 @@ CUI:RegisterPage("Combat Numbers", function(page)
     W.Header(page, "Look", width):SetPoint("TOPLEFT", 0, y); y = y - 26
     local st = W.Stepper(page, "Text size", function() return db.size end, function(v) db.size = v end, 12, 36, 2, "")
     st:SetPoint("TOPLEFT", 4, y); y = y - 30
-    Check("Flash in place: no movement, just fade in and out (good when the boxes sit on the frames)", "inPlace")
+    Check("Flash in place: no movement, just fade in and out", "inPlace")
     Check("Turn off the game's own floating numbers", "hideBlizzard", ApplyBlizzard)
     y = y - 6
     local test = W.Button(page, 150, 22, "Show an example", true)

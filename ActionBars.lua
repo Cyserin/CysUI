@@ -942,7 +942,7 @@ CUI:RegisterPage("Action Bars", function(page)
     Check("Show empty slots", "showEmpty", function() for key in pairs(AB.bars) do AB:LayoutBar(key) end end)
     Check("Gold borders", "goldBorders", function() for key in pairs(AB.bars) do AB:LayoutBar(key) end end)
     Check("Thin slot borders (1 pixel instead of 2)", "thinBorders", function() for key in pairs(AB.bars) do AB:LayoutBar(key) end end)
-    Check("Hide the experience and reputation bars (turning off needs a /reload)", "hideStatusBars",
+    Check("Hide the XP and reputation bars (off needs a /reload)", "hideStatusBars",
         function() if DB().hideStatusBars then AB:HideStatusBars() end end)
     Check("Hide Blizzard's bag buttons (turning off needs a /reload)", "hideBagButtons",
         function() if DB().hideBagButtons then AB:HideBagButtons() end end)

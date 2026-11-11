@@ -71,6 +71,13 @@ local MIN_COLS, MAX_COLS = 6, 16
 local FRAME_W     = CONTENT_W + SIDEBAR_W + PAD * 2 + 2
 
 local FIRST_BAG, LAST_BAG = 0, NUM_BAG_SLOTS or 4
+-- WoW Forever has one more bag: the reagent bag (a gathering bag goes in that slot, and ore, herbs, cloth and
+-- the like land in it). Its items are shown with the rest; its slots are not counted as free space, since only
+-- reagents fit there.
+local LAST_NORMAL_BAG = LAST_BAG
+if CysUICompat and CysUICompat.isForever then
+    LAST_BAG = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or (LAST_BAG + 1)
+end
 
 -- Shown for an equipped bag whose real icon can't be read (see UpdateBagSlots)
 local FALLBACK_BAG_TEXTURE = "Interface\\Icons\\INV_Misc_Bag_08"
@@ -566,11 +573,12 @@ function CysBags:Collect()
     local n, used, total = 0, 0, 0
     for bag = FIRST_BAG, LAST_BAG do
         local slots = GetNumSlots(bag) or 0
-        total = total + slots
+        local counted = bag <= LAST_NORMAL_BAG
+        if counted then total = total + slots end
         for slot = 1, slots do
             local icon, count, locked, quality, link, itemID = GetSlotItem(bag, slot)
             if link then
-                used = used + 1
+                if counted then used = used + 1 end
                 itemID = itemID or tonumber(link:match("item:(%d+)"))
                 if itemID and (not bagFilter or bagFilter == bag) then
                     n = n + 1
@@ -1131,7 +1139,7 @@ end
 -- pos[i] = {bag, slot}; cur[i] = item snapshot or nil (empty); n = number of sortable slots
 local function SnapshotSortSlots()
     local pos, cur, n, anyLocked = {}, {}, 0, false
-    for bag = FIRST_BAG, LAST_BAG do
+    for bag = FIRST_BAG, LAST_NORMAL_BAG do
         if GetBagFamily(bag) == 0 then
             for slot = 1, (GetNumSlots(bag) or 0) do
                 n = n + 1

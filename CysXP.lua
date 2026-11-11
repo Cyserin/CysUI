@@ -289,7 +289,7 @@ CUI:RegisterPage("XP Bar", function(page)
         function(on) db.questBar = on; Refresh() end)
     qb:SetPoint("TOPLEFT", 4, -150)
     -- the same switch as on the Action Bars page: Blizzard's own XP and reputation bars
-    local blizz = W.Checkbox(page, "Hide Blizzard's experience and reputation bars (turning off needs a /reload)",
+    local blizz = W.Checkbox(page, "Hide Blizzard's XP and reputation bars (off needs a /reload)",
         function()
             local ab = CysUIDB.actionbars
             return not ab or ab.hideStatusBars ~= false

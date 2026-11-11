@@ -33,6 +33,7 @@ local DEFAULTS = {
     hideEmptyBagCats = true, -- Cys's Bags sidebar leaves out empty categories
     bagsAutoSize = true,     -- Cys's Bags grows to fit its items (no scrolling)
     acceptInvites = false,   -- accept group invites from friends and guildmates
+    questAnnounce = false,   -- tell the party when one of your quests is ready to turn in
     openContainers = true,   -- open clams, sacks and other openable bag items (Classic Era)
 }
 
@@ -397,6 +398,47 @@ end
 --------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
+-- Quest announce: when the last objective of a quest is done while you are in a party (not a raid), say so in
+-- party chat. Only a quest seen unfinished first is announced, so nothing fires at login or for a quest picked up
+-- already complete. A line that comes up mid-fight is held until the fight ends.
+--------------------------------------------------------------------------------
+local questDone, questSeeded, questQueued = {}, false, false
+local questLines = {}
+local function FlushQuestLines()
+    if InCombatLockdown() then return end
+    for i = 1, #questLines do
+        if IsInGroup and IsInGroup() and not (IsInRaid and IsInRaid()) then pcall(SendChatMessage, questLines[i], "PARTY") end
+        questLines[i] = nil
+    end
+end
+local function ScanQuests()
+    questQueued = false
+    local Q = C_QuestLog
+    if not (Q and Q.GetNumQuestLogEntries and Q.GetInfo and Q.IsComplete and Q.GetNumQuestObjectives) then return end
+    local now = {}
+    for i = 1, (Q.GetNumQuestLogEntries() or 0) do
+        local info = Q.GetInfo(i)
+        if info and not info.isHeader and info.questID then
+            local goals = Q.GetNumQuestObjectives(info.questID)
+            -- a plain delivery quest counts as complete from the start; only quests with objectives are watched
+            local done = type(goals) == "number" and goals > 0 and Q.IsComplete(info.questID) and true or false
+            now[info.questID] = done
+            if done and questSeeded and questDone[info.questID] == false and DB().questAnnounce
+                and type(info.title) == "string" then
+                questLines[#questLines + 1] = "Quest complete: " .. info.title
+            end
+        end
+    end
+    questDone, questSeeded = now, true
+    FlushQuestLines()
+end
+local function QueueQuestScan()
+    if questQueued then return end
+    questQueued = true
+    C_Timer.After(0.5, function() pcall(ScanQuests); questQueued = false end)
+end
+
+--------------------------------------------------------------------------------
 local frame
 local function Enable()
     if frame then return end
@@ -408,7 +450,7 @@ local function Enable()
                          "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "LFG_LIST_ACTIVE_ENTRY_UPDATE",
                          "MERCHANT_SHOW", "MERCHANT_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "MAIL_SHOW",
                          "MAIL_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PARTY_INVITE_REQUEST",
-                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED" }) do
+                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED", "QUEST_LOG_UPDATE" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
     if StaticPopup_Show then
@@ -421,6 +463,8 @@ local function Enable()
     frame:SetScript("OnEvent", function(_, event, arg1)
         if event == "PARTY_INVITE_REQUEST" then
             pcall(OnInvite, arg1)
+        elseif event == "QUEST_LOG_UPDATE" then
+            QueueQuestScan()
         elseif event == "BAG_UPDATE_DELAYED" or event == "LOOT_CLOSED" then
             C_Timer.After(0.3, function() pcall(OpenOne) end)
         elseif OPEN_EVENTS[event] or CLOSE_EVENTS[event] then
@@ -440,6 +484,7 @@ local function Enable()
             RingShow(true)
         elseif event == "PLAYER_REGEN_ENABLED" then
             RingShow(false)
+            pcall(FlushQuestLines)
         elseif event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" or event == "UNIT_LEVEL"
             or event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
             C_Timer.After(1, GroupCheck)
@@ -483,20 +528,21 @@ CUI:RegisterPage("Automation", function(page)
     Check("Fast loot (takes everything at once when auto-loot is on)", "fastLoot")
     Check("Accept quests and turn in finished ones (hold Shift to pause)", "autoQuest")
     Check("Release your spirit automatically when you die in a battleground", "autoRelease")
-    Check("Decline duels (friends and guildmates still get the normal popup)", "declineDuels")
+    Check("Decline duels (friends and guildmates still get the popup)", "declineDuels")
     Check("Close guild charter signing requests (hold Shift to read one)", "declineCharters")
     Check("Gold ring around the mouse cursor while in combat", "cursorRing")
-    Check("Show who in the group is below the dungeon's level range (while listed in LFG, and inside)", "groupCheck")
+    Check("Show who in the group is below the dungeon's level range", "groupCheck")
     Check("Say Ding when you level up", "ding")
     Check("Type DELETE for you when you destroy a good item", "autoDelete")
-    Check("Open Cys's Bags at a vendor, bank, mailbox or Auction House (and close them after)", "autoBags")
+    Check("Open Cys's Bags at a vendor, bank, mailbox or Auction House", "autoBags")
     local hideEmpty = Check("Cys's Bags: hide empty categories in the sidebar", "hideEmptyBagCats")
     hideEmpty:HookScript("OnClick", function() if _G.CysBags and CysBags.UpdateSidebar then pcall(CysBags.UpdateSidebar, CysBags) end end)
-    Check("Accept group invites from friends and guildmates (hold Shift to see the popup)", "acceptInvites")
+    Check("Accept group invites from friends and guildmates (Shift: ask)", "acceptInvites")
+    Check("Tell your party when you finish a quest's objectives", "questAnnounce")
     if not (CysUICompat and CysUICompat.isForever) then
-        Check("Open clams, sacks and other openable items in your bags (out of combat)", "openContainers")
+        Check("Open clams, sacks and other openable items (out of combat)", "openContainers")
     end
-    local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls (up to most of the screen)", "bagsAutoSize")
+    local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
     fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)
 
     local chLabel = W.Text(page, 12, T.accent)

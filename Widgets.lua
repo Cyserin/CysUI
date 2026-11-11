@@ -281,7 +281,16 @@ function W.Checkbox(parent, label, get, set)
     c.label = W.Text(c, 12, T.text)
     c.label:SetPoint("LEFT", box, "RIGHT", 8, 0)
     c.label:SetText(label)
-    c:SetWidth(24 + max(c.label:GetStringWidth(), 40))
+    -- a label too long for the settings page wraps onto a second line instead of running off the edge
+    local labelW = c.label:GetStringWidth()
+    if labelW > 440 then
+        labelW = 440
+        c.label:SetWidth(440)
+        c.label:SetJustifyH("LEFT")
+        c.label:SetWordWrap(true)
+        if c.label.SetMaxLines then c.label:SetMaxLines(2) end
+    end
+    c:SetWidth(24 + max(labelW, 40))
 
     function c:Refresh()
         local on = get() and true or false

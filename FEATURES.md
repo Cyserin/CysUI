@@ -4,7 +4,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 
 ## Frames and combat
 - **Action bars** *(layout)*: bars 1-8, pet bar and stance bar, flat and resizable, using Blizzard's own buttons so keybinds and macros behave. Rarity and gold edges.
-- **Unit frames** *(layout)*: player (with a mana number on the mana bar), target, target-of-target, pet and party, with auras and combo points. Small corner names, an Elite / Rare / Boss tag beside the name, a soft gold line on the target frame.
+- **Unit frames** *(layout)*: player (with a mana number on the mana bar), target, target-of-target, pet and party, with auras and combo points. Small corner names, an Elite / Rare / Boss tag beside the name, a soft gold line on the target frame, a crown beside the group leader.
 - **Raid frames** *(layout)*: 10, 20 and 40-player layouts (auto-picked or forced), class colors, missing health, incoming heals, debuff icons with colored borders (only the ones you can dispel, optional), range fade, role icons, a preview mode.
 - **Nameplates**: class and reaction colors, "mob is on you" coloring, your debuffs, a small cast bar, a gold target frame, a sword on mobs you still need for a quest.
 - **Cast bars** *(layout)*: for you and your target, with icon, spell name, time left and an interrupt flag. The target's bar can be joined to the bottom of the target frame.
@@ -81,8 +81,8 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 - **Totem Bar**: macros option on its settings page; missing macros come back by themselves.
 
 ## Added in 0.57.0
-- **Consumables**: self-updating Food, Drink, HP Potion, MP Potion, Bandage and Healthstone macros (conjured first), plus a per-character restock list bought at vendors.
-- **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, group level check (LFG listing and inside dungeons).
+- **Consumables**: self-updating Food, Drink, HP Potion, MP Potion, Bandage and Healthstone macros (conjured first), plus a per-character restock list bought at vendors, the best food and water for your level kept at so many stacks, and a gold floor.
+- **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, party quest-complete announce, group level check (LFG listing and inside dungeons).
 - **Durability**: a small movable warning box in place of Blizzard's armor figure.
 - **Minimap tracking menu**: right-click the minimap.
 - **Quest reward coin**, **Kill Tracker** level-up alerts, **Combat Numbers** boxes with a Flash in place style.

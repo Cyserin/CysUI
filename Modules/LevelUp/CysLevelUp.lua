@@ -650,7 +650,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     end
     Check("Show the box when I level up", "onLevel")
     Check("Show the box when I open my trainer", "onTrainer")
-    local scan = W.Checkbox(page, "Record what my class trainer teaches (helps build guides for every class)",
+    local scan = W.Checkbox(page, "Record what my class trainer teaches (helps build class guides)",
         function() return db.autoScan ~= false end, function(on) db.autoScan = on end)
     scan:SetPoint("TOPLEFT", 4, y)
     y = y - 26

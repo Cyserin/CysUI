@@ -517,7 +517,7 @@ CUI:RegisterPage("Waypoints", function(page)
         function(v) db.clearAt = v end, "Clear it when I'm within: ")
     arrive:SetPoint("TOPLEFT", 4, y)
     y = y - 30
-    local q = Check("Answer other addons' TomTom requests, like Questie's (needs a /reload)", "questie")
+    local q = Check("Answer other addons' TomTom requests, like Questie's (reload)", "questie")
 
     local list = W.Text(page, 12, T.accent)
     list:SetPoint("TOPLEFT", 4, y - 8)

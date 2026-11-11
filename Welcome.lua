@@ -67,7 +67,7 @@ local function Build()
     end)
     local h2 = W.Header(p1, "Experience bar", 420)
     h2:SetPoint("TOPLEFT", 0, -166)
-    local hide = W.Checkbox(p1, "Hide Blizzard's experience and reputation bars (Cys's XP bar replaces them)",
+    local hide = W.Checkbox(p1, "Hide Blizzard's XP and reputation bars (Cys's XP bar takes over)",
         function()
             local ab = CysUIDB.actionbars
             return not ab or ab.hideStatusBars ~= false

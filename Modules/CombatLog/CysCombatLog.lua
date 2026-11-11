@@ -1674,7 +1674,7 @@ CUI:RegisterPage("Combat Log", function(page)
     local y = -104
     local c = W.Checkbox(page, "Record runs", function() return db.record end, function(on) db.record = on end)
     c:SetPoint("TOPLEFT", 4, y); y = y - 28
-    local c2 = W.Checkbox(page, "Also turn on the game's own combat log during a run (for Warcraft Logs uploads)", function() return db.autoLog end, function(on) db.autoLog = on end)
+    local c2 = W.Checkbox(page, "Also run the game's own combat log (for Warcraft Logs uploads)", function() return db.autoLog end, function(on) db.autoLog = on end)
     c2:SetPoint("TOPLEFT", 4, y); y = y - 32
     local st = W.Stepper(page, "Runs to keep", function() return db.keepRuns end, function(v)
         db.keepRuns = v

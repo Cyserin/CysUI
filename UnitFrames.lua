@@ -515,7 +515,7 @@ UpdateName = function(f)
     if not lockedLevel and not (boss and not (level and level > 0)) then
         prefix = "|cFFFFD100" .. ((level and level > 0) and tostring(level) or "??") .. "|r "
     end
-    if tag then prefix = prefix .. tag .. " " end
+    if tag then prefix = prefix .. tag .. "  " end -- two spaces: the tag should not read as part of the name
     if lockedLevel or Secret(unitName) then
         -- WoW Forever: a locked name goes on the font string as it is; only our own plain text is put in front
         if not pcall(f.name.SetFormattedText, f.name, prefix .. "%s", unitName) then
@@ -981,6 +981,37 @@ function UF.Enable()
     UF.SetupCombatIcon()
     UF.ApplyNameStyle()
     UF.ApplyTargetAccent()
+    UF.SetupLeaderIcons()
+end
+
+-- Group leader: a small crown just left of the top-left corner of the leader's frame - on the party frames, and
+-- on your own frame when you lead. Only shown while you are in a group.
+function UF.UpdateLeaders()
+    local on = DB().leaderIcon ~= false
+    local grouped = IsInGroup and IsInGroup()
+    for _, key in ipairs({ "player", "party1", "party2", "party3", "party4" }) do
+        local f = UF.frames[key]
+        if f and f.overlay then
+            if not f.leader then
+                f.leader = f.overlay:CreateTexture(nil, "OVERLAY")
+                f.leader:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+                f.leader:SetSize(14, 14)
+                f.leader:SetPoint("TOPRIGHT", f, "TOPLEFT", -2, 0)
+            end
+            local show = false
+            if on and grouped and UnitIsGroupLeader then
+                local ok, lead = pcall(UnitIsGroupLeader, f.unit)
+                show = ok and not Secret(lead) and lead and true or false
+            end
+            f.leader:SetShown(show)
+        end
+    end
+end
+function UF.SetupLeaderIcons()
+    local ev = CreateFrame("Frame")
+    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "PLAYER_ENTERING_WORLD" }) do pcall(ev.RegisterEvent, ev, e) end
+    ev:SetScript("OnEvent", function() pcall(UF.UpdateLeaders) end)
+    pcall(UF.UpdateLeaders)
 end
 
 -- Target accent: a soft gold line along the top edge of the target frame, so the frame you are fighting reads at
@@ -1147,7 +1178,7 @@ CUI:RegisterPage("Unit Frames", function(page)
         function(on) db.targetRange = on end)
     rtext:SetPoint("TOPLEFT", 4, -182)
 
-    local blue = W.Checkbox(page, "Blue Shamans instead of pink (everywhere; turning off needs a /reload)",
+    local blue = W.Checkbox(page, "Blue Shamans instead of pink (turning off needs a /reload)",
         function() return CysUIDB.blueShaman end,
         function(on)
             CysUIDB.blueShaman = on and true or false
@@ -1184,8 +1215,9 @@ CUI:RegisterPage("Unit Frames", function(page)
     local function RefreshAll() for _, f in pairs(UF.frames) do if UnitExists(f.unit) then UF:Update(f) end end end
     for _, row in ipairs({
         { "nameCornerSmall", "Corner names on target of target, pet and party too", UF.ApplyNameStyle },
-        { "eliteTag", "Elite / Rare / Boss tag beside the name (off = a + after the level)", RefreshAll },
+        { "eliteTag", "Elite / Rare / Boss tag beside the name", RefreshAll },
         { "targetAccent", "Soft gold line along the top of the target frame", function() UF.ApplyTargetAccent() end },
+        { "leaderIcon", "Crown beside the group leader (player and party frames)", function() UF.UpdateLeaders() end },
     }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
             function(on) db[row[1]] = on and true or false; row[3]() end)

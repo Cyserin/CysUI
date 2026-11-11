@@ -37,6 +37,9 @@ local NEVER = {
     MinimapZoomIn = true, MinimapZoomOut = true, GameTimeFrame = true, TimeManagerClockButton = true,
     MiniMapWorldMapButton = true, MinimapZoneTextButton = true, MinimapToggleButton = true,
     MiniMapInstanceDifficulty = true, MinimapBackdrop = true, MinimapCluster = true,
+    -- Blizzard's own landing-page buttons: empty on WoW Forever, and a click makes the game try to load a window
+    -- that is not there
+    ExpansionLandingPageMinimapButton = true, GarrisonLandingPageMinimapButton = true,
 }
 
 local button, panel
@@ -336,7 +339,7 @@ CUI:RegisterPage("Minimap Button", function(page)
 
     Add(W.Checkbox(page, "Show the Cys button (needs a /reload)", function() return db.enable end,
         function(on) db.enable = on end))
-    Add(W.Checkbox(page, "Gather addon minimap buttons into the panel (turning off needs a /reload)",
+    Add(W.Checkbox(page, "Gather addon minimap buttons into the panel (off needs a /reload)",
         function() return db.collect end, function(on) db.collect = on end))
     Add(W.Checkbox(page, "Close the panel after clicking one of its buttons",
         function() return db.closeOnClick end, function(on) db.closeOnClick = on end))

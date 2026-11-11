@@ -34,7 +34,7 @@ CUI:RegisterPage("Totem Bar", function(page)
     Check("Warn before a totem runs out", "alertExpiring")
     Check("Tell me when a totem is gone", "alertGone")
     -- the action-bar macros (also in Drop All's right-click menu)
-    local mac = W.Checkbox(page, "Keep action-bar macros in step (CT_Earth, CT_Fire, CT_Water, CT_Air, CT_DropAll)",
+    local mac = W.Checkbox(page, "Keep the action-bar macros in step (CT_Earth, CT_Fire and so on)",
         function() return db.macros end,
         function(on)
             db.macros = on and true or false

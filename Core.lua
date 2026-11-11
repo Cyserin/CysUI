@@ -166,7 +166,7 @@ local DEFAULTS = {
     windowStyle = "soft", -- soft / classic (panel colours; needs a /reload)
     modules = {}, -- [key] = false when switched off; missing = on
     vendor = { autoRepair = true, autoSell = false, showButton = true },
-    tooltip = { skin = true, qualityBorder = true, sellPrice = true, classColors = true, healthBar = true,
+    tooltip = { itemCount = true, skin = true, qualityBorder = true, sellPrice = true, classColors = true, healthBar = true,
                 targetLine = true, anchorCursor = false, cursorLift = 20, cursorShift = 160, scale = 100,
                 showIDs = false, hideUnitInCombat = false },
     minimap = { zoneText = true, coords = true, wheelZoom = true },
@@ -473,9 +473,17 @@ if CysChangelog then
             { version = "0.58.13", date = "2026-11-11",
               added = {
                   "Nameplates: a small sword beside mobs you still need for a quest - kill objectives and mobs that drop a quest item. It goes away once that objective is done. Switch and size on the Nameplates page.",
+                  "Unit Frames: a small crown beside the group leader - on the party frames, and on your own frame when you lead.",
+                  "Automation: tell your party when you finish a quest's objectives (off until you turn it on; party chat only, never in raids).",
+                  "Consumables: keep so many stacks of the best food and water a vendor sells for your level, bought when you open the vendor. Set the stacks on the Consumables page (0 = off).",
+                  "Tooltip: item tooltips show how many you have in your bags and in your bank.",
+                  "Consumables: a gold floor - vendor buying (the restock list too) never takes you below it. 1 gold by default.",
+                  "Cys's Bags (Forever): items in the reagent bag are shown with the rest, so gathered ore, herbs and cloth no longer go missing.",
               },
               improved = {
                   "Unit Frames: the corner names are one size smaller by default.",
+                  "Minimap Button (Forever): an empty Blizzard button is no longer gathered into the panel.",
+                  "Settings: long option labels were shortened so none run past the edge of the window; one that is still too long wraps onto a second line.",
               },
             },
             { version = "0.58.12", date = "2026-11-11",

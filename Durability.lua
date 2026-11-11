@@ -123,7 +123,7 @@ CUI:RegisterPage("Durability", function(page)
         function() return db.warnAt end, function(v) db.warnAt = v; Update() end)
     dd:SetPoint("TOPLEFT", 4, -104)
 
-    local cb = W.Checkbox(page, "Hide Blizzard's armor figure (turning it back on needs a /reload)",
+    local cb = W.Checkbox(page, "Hide Blizzard's armor figure (back on needs a /reload)",
         function() return db.hideBlizzard end, function(on) db.hideBlizzard = on; HideBlizzard() end)
     cb:SetPoint("TOPLEFT", 4, -144)
 

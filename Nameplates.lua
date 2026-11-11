@@ -754,9 +754,9 @@ CUI:RegisterPage("Nameplates", function(page)
     Check("Show my debuffs on the mob", "myDebuffs")
     Check("Show a small cast bar", "castBar")
     if db.kickCast == nil then db.kickCast = true end
-    Check("Color enemy casts by your interrupt (grey: on cooldown, green: ready)", "kickCast")
+    Check("Color enemy casts by your interrupt (grey, green when ready)", "kickCast")
     if db.questMark == nil then db.questMark = true end
-    W.Checkbox(page, "Sword beside mobs I still need for a quest (kills and quest drops)", function() return db.questMark end,
+    W.Checkbox(page, "Sword beside mobs I still need for a quest (kills and drops)", function() return db.questMark end,
         function(on) db.questMark = on and true or false; NP.UpdateQuestMarks() end):SetPoint("TOPLEFT", 4, y)
     y = y - 26
 

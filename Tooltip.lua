@@ -113,6 +113,23 @@ local function OnItem(tip)
         if id then tip:AddDoubleLine("Item ID", tostring(id), T.accent[1], T.accent[2], T.accent[3], 1, 1, 1) end
     end
 
+    -- how many of this item you carry and how many sit in your bank (the game remembers the bank between visits)
+    if db.itemCount then
+        local id = tonumber(link:match("item:(%d+)"))
+        local Count = (C_Item and C_Item.GetItemCount) or GetItemCount
+        if id and Count then
+            local ok1, bags = pcall(Count, id)
+            local ok2, all = pcall(Count, id, true, false, true)
+            if ok1 and type(bags) == "number" then
+                local bank = (ok2 and type(all) == "number") and (all - bags) or 0
+                if bags > 0 or bank > 0 then
+                    local text = bank > 0 and (bags .. " in bags, " .. bank .. " in bank") or (bags .. " in bags")
+                    tip:AddDoubleLine("You have", text, T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
+                end
+            end
+        end
+    end
+
     -- Classic only shows the sell price at a vendor, where Blizzard adds its own money line
     if db.sellPrice and (tip.shownMoneyFrames or 0) == 0 then
         local sell = select(11, GetItemInfo(link))
@@ -349,6 +366,7 @@ CUI:RegisterPage("Tooltip", function(page)
     end
     Check("Color the border by item rarity", "qualityBorder")
     Check("Show the vendor sell price on items", "sellPrice")
+    Check("Show how many of an item you have in your bags and bank", "itemCount")
     Check("Class-colored player names", "classColors")
     Check("Colored health bar on units", "healthBar")
     Check("Show who a unit is targeting", "targetLine")

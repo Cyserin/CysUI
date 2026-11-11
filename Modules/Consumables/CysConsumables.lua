@@ -45,6 +45,9 @@ local DEFAULTS = {
     buffFood = false,      -- allow Well Fed food in the Food macro
     buffFoodUnfed = false, -- use Well Fed food in the Food macro only while you don't have the Well Fed buff
     restock = true,        -- buy the restock list at vendors
+    foodStacks = 0,        -- keep this many stacks of the best food a vendor sells for your level (0 = off)
+    drinkStacks = 0,       -- the same for water
+    goldFloor = 1,         -- vendor buying never takes you below this much gold
     chars = {},            -- [name - realm] = { restock = { [itemID] = count } }
 }
 
@@ -260,25 +263,65 @@ local function Money(c)
     return tostring(c)
 end
 
+-- name, price, how many one purchase gives, how many are left (-1 = no limit), costs something other than gold
+local function MerchantInfo(i)
+    if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
+        local t = C_MerchantFrame.GetItemInfo(i)
+        if t then return t.name, t.price, t.stackCount, t.numAvailable, t.hasExtendedCost end
+    end
+    if GetMerchantItemInfo then
+        local name, _, price, perBuy, available, _, _, extended = GetMerchantItemInfo(i)
+        return name, price, perBuy, available, extended
+    end
+end
+
+-- What a vendor item restores, read from its tooltip like the bag items: food amount, drink amount, Well Fed.
+-- Nothing for an item you can't use yet (red text, such as a level you haven't reached).
+local function ReadMerchant(i)
+    if not scan.SetMerchantItem then return nil end
+    scan:ClearLines()
+    scan:SetMerchantItem(i)
+    local food, drink, buff
+    local name = scan:GetName()
+    for l = 1, scan:NumLines() do
+        local left = _G[name .. "TextLeft" .. l]
+        local right = _G[name .. "TextRight" .. l]
+        if IsRed(left) or IsRed(right) then return nil end
+        local t = left and left:GetText()
+        if t then
+            local hpOver = t:match("Restores (%d+) health")
+            local mpOver = t:match("(%d+) mana over")
+            if hpOver and (t:find("eating") or t:find("seated")) then food = tonumber(hpOver) end
+            if mpOver and (t:find("drinking") or t:find("seated")) then drink = tonumber(mpOver) end
+            if t:find("well fed") then buff = true end
+        end
+    end
+    return food, drink, buff
+end
+
+local function UsesMana()
+    local mx = UnitPowerMax and UnitPowerMax("player", 0)
+    return type(mx) == "number" and mx > 0
+end
+
 local function Restock()
     local db = DB()
-    if not db.restock then return end
-    local list = CharDB().restock
-    if not next(list) then return end
+    local list = db.restock and CharDB().restock or {}
+    local reserve = (db.goldFloor or 0) * 10000
     local bought, spent = {}, 0
     for i = 1, (GetMerchantNumItems() or 0) do
         local link = GetMerchantItemLink(i)
         local id = link and tonumber(link:match("item:(%d+)"))
         local want = id and list[id]
         if want and want > 0 then
-            local name, _, price, perBuy, available = GetMerchantItemInfo(i)
+            local name, price, perBuy, available = MerchantInfo(i)
             local extended = GetMerchantItemCostInfo and (GetMerchantItemCostInfo(i) or 0) > 0 -- tokens, not gold
             local need = want - GetItemCount(id)
             if need > 0 and not extended and price and price > 0 then
                 perBuy = max(perBuy or 1, 1)
                 if available and available >= 0 then need = min(need, available * perBuy) end
                 local unitPrice = price / perBuy
-                local affordable = floor(GetMoney() / unitPrice)
+                local affordable = floor(max(0, GetMoney() - reserve - spent) / unitPrice)
                 need = min(need, affordable)
                 local maxStack = GetMerchantItemMaxStack and GetMerchantItemMaxStack(i) or need
                 local left = need
@@ -288,6 +331,48 @@ local function Restock()
                     left = left - n
                 end
                 if need > 0 then
+                    bought[#bought + 1] = need .. "x " .. (name or link)
+                    spent = spent + floor(unitPrice * need + 0.5)
+                end
+            end
+        end
+    end
+    -- the best plain food and water this vendor sells that you can use at your level, kept at so many stacks
+    local want = { food = db.foodStacks or 0, drink = UsesMana() and (db.drinkStacks or 0) or 0 }
+    if want.food > 0 or want.drink > 0 then
+        local pick = {}
+        for i = 1, (GetMerchantNumItems() or 0) do
+            local ok, food, drink, buff = pcall(ReadMerchant, i)
+            if ok and not buff and (food or drink) then
+                local _, price, _, _, extended = MerchantInfo(i)
+                if price and price > 0 and not extended then
+                    if food and want.food > 0 and (not pick.food or food > pick.food.amount) then pick.food = { i = i, amount = food } end
+                    if drink and want.drink > 0 and (not pick.drink or drink > pick.drink.amount) then pick.drink = { i = i, amount = drink } end
+                end
+            end
+        end
+        for _, kind in ipairs({ "food", "drink" }) do
+            local p, mine = pick[kind], best[kind]
+            local link = p and GetMerchantItemLink(p.i)
+            local id = link and tonumber(link:match("item:(%d+)"))
+            -- not when the restock list already covers it, or when you carry something better (conjured aside)
+            if id and not list[id] and not (mine and not mine.conjured and (mine.amount or 0) > p.amount) then
+                local name, price, perBuy, available = MerchantInfo(p.i)
+                perBuy = max(perBuy or 1, 1)
+                local _, _, _, _, _, _, _, stackSize = GetItemInfo(id)
+                local need = want[kind] * (stackSize or 20) - GetItemCount(id)
+                if available and available >= 0 then need = min(need, available * perBuy) end
+                local unitPrice = price / perBuy
+                need = min(need, floor(max(0, GetMoney() - reserve - spent) / unitPrice))
+                need = need - need % perBuy
+                if need > 0 then
+                    local maxStack = GetMerchantItemMaxStack and GetMerchantItemMaxStack(p.i) or need
+                    local left = need
+                    while left > 0 do
+                        local n = min(left, max(maxStack, 1))
+                        BuyMerchantItem(p.i, n)
+                        left = left - n
+                    end
                     bought[#bought + 1] = need .. "x " .. (name or link)
                     spent = spent + floor(unitPrice * need + 0.5)
                 end
@@ -398,6 +483,15 @@ CUI:RegisterPage("Consumables", function(page)
     local c2b = W.Checkbox(page, "Use Well Fed food only while I don't have the Well Fed buff",
         function() return db.buffFoodUnfed end, function(on) db.buffFoodUnfed = on; Refresh() end)
     c2b:SetPoint("TOPLEFT", 4, y); y = y - 34
+
+    ---------------------------------------------------------------- best food and water
+    W.Header(page, "Food and water at vendors", width):SetPoint("TOPLEFT", 0, y); y = y - 28
+    W.Stepper(page, "Stacks of the best food to keep (0 = off)", function() return db.foodStacks or 0 end,
+        function(v) db.foodStacks = v end, 0, 10, 1):SetPoint("TOPLEFT", 4, y); y = y - 28
+    W.Stepper(page, "Stacks of the best water to keep (0 = off)", function() return db.drinkStacks or 0 end,
+        function(v) db.drinkStacks = v end, 0, 10, 1):SetPoint("TOPLEFT", 4, y); y = y - 28
+    W.Stepper(page, "Never buy below this much gold", function() return db.goldFloor or 0 end,
+        function(v) db.goldFloor = v end, 0, 100, 1, " g"):SetPoint("TOPLEFT", 4, y); y = y - 36
 
     ---------------------------------------------------------------- restock list
     W.Header(page, "Restock list (this character)", width):SetPoint("TOPLEFT", 0, y); y = y - 28

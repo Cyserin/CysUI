@@ -234,7 +234,7 @@ CUI:RegisterPage("General", function(page)
     note:SetSpacing(3)
     note:SetText("Found a bug? Press |cFFFFD100Copy debug info|r, then post it with a screenshot at the address above under Issues.")
 
-    local upd = W.Checkbox(page, "Tell me when a newer version is out (shared with guild and group)",
+    local upd = W.Checkbox(page, "Tell me when a newer version is out (via guild and group)",
         function() return CysUIDB.update and CysUIDB.update.enabled ~= false end,
         function(v) CysUIDB.update = CysUIDB.update or {}; CysUIDB.update.enabled = v and true or false end)
     upd:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -14)

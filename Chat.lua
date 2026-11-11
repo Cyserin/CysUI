@@ -518,7 +518,7 @@ CUI:RegisterPage("Chat", function(page)
     Check("Class-colored names", "classColors", -34, function(on) Chat:ApplyColors(on) end)
     Check("Show timestamps", "timestamps", -60, function() Chat:ApplyTimestamps() end)
     Check("24-hour timestamps", "use24h", -86, function() if db.timestamps then Chat:ApplyTimestamps() end end)
-    Check("Short channel names ([1. General] becomes [Gen], [2. Trade] becomes [T], [Guild] becomes [G])", "shortChannels", -112)
+    Check("Short channel names: [Gen], [T], [G] instead of the full names", "shortChannels", -112)
 
     local size = W.Stepper(page, "Font size", function() return db.fontSize end,
         function(v) db.fontSize = v; Chat:ApplyFontSize() end, 9, 22, 1)
@@ -527,7 +527,7 @@ CUI:RegisterPage("Chat", function(page)
     W.Header(page, "Look (needs a /reload)", width):SetPoint("TOPLEFT", 0, -184)
     Check("Restyle the chat windows", "skin", -214)
     Check("Hide the scroll and menu buttons", "hideButtons", -240)
-    Check("Chat tabs always visible, above the window border, gold line under the active one", "tabsSolid", -266)
+    Check("Chat tabs always visible, gold line under the active one", "tabsSolid", -266)
 
     local copy = W.Button(page, 110, 22, "Copy chat")
     copy:SetPoint("TOPLEFT", 4, -306)
