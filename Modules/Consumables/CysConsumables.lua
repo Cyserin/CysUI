@@ -300,8 +300,8 @@ local function ReadMerchant(i)
 end
 
 -- How much plain food (or water) you already carry that restores at least this much - whatever it is called.
--- Bread from one vendor and fish from the next are the same tier. Well Fed food counts too (it is still food
--- you can eat); conjured food does not, since it is gone when you log out.
+-- Bread from one vendor and fish from the next are the same tier. Well Fed food is NOT counted: it is kept for
+-- the buff, and plain food is what gets eaten between fights. Conjured food is not counted either.
 local function CarriedAtLeast(field, amount)
     local total, seen = 0, {}
     for bag = 0, 4 do
@@ -310,7 +310,7 @@ local function CarriedAtLeast(field, amount)
             if id and not seen[id] then
                 seen[id] = true
                 local info = Read(bag, slot, id)
-                if info and info.usable and not info.conjured and (info[field] or 0) >= amount then
+                if info and info.usable and not info.conjured and not info.buff and (info[field] or 0) >= amount then
                     total = total + (GetItemCount(id) or 0)
                 end
             end
@@ -528,7 +528,7 @@ CUI:RegisterPage("Consumables", function(page)
     foodNote:SetPoint("TOPLEFT", 4, y)
     foodNote:SetWidth(width - 8)
     foodNote:SetJustifyH("LEFT")
-    foodNote:SetText("0 stacks = off. Bought when you open a vendor that sells food or water of your level's step (1, 5, 15, 25, 35, 45) - never anything lower. What you already carry that is as good or better counts, whatever it is called.")
+    foodNote:SetText("0 stacks = off. Bought when you open a vendor that sells food or water of your level's step (1, 5, 15, 25, 35, 45) - never anything lower. Plain food you already carry that is as good or better counts, whatever it is called; Well Fed food does not.")
     y = y - 40
 
     ---------------------------------------------------------------- restock list

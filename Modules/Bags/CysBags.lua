@@ -786,7 +786,16 @@ function CysBags:Layout()
     self.emptyText:SetShown(not any)
     -- Auto-size (switch: /cui > Automation): the window grows or shrinks to fit the items, so nothing scrolls,
     -- up to 85% of the screen height. Otherwise it keeps its own height and the content scrolls.
-    self:FitHeight(contentH)
+    -- The window keeps the height the All Items view needs, whichever category is showing, so it does not
+    -- jump about as you click through the sidebar (it only grows past that when a view needs more room).
+    local allH = 0
+    for _, sec in ipairs(SECTIONS) do
+        local n = lists[sec.key] and #lists[sec.key] or 0
+        if n > 0 then allH = allH + SECTION_H + 6 + ceil(n / COLS) * STEP - SLOT_GAP + SECTION_GAP end
+    end
+    allH = max(allH - SECTION_GAP, 1)
+    if not self.bagFilter then self.allItemsH = allH end -- one bag picked in the footer: keep the full size too
+    self:FitHeight(max(self.allItemsH or allH, contentH))
 end
 
 local function AutoSize()
