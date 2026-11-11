@@ -467,9 +467,17 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.12",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.13",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.13", date = "2026-11-11",
+              added = {
+                  "Nameplates: a small sword beside mobs you still need for a quest - kill objectives and mobs that drop a quest item. It goes away once that objective is done. Switch and size on the Nameplates page.",
+              },
+              improved = {
+                  "Unit Frames: the corner names are one size smaller by default.",
+              },
+            },
             { version = "0.58.12", date = "2026-11-11",
               added = {
                   "Unit Frames: an Elite, Rare or Boss tag between the level and the name - Elite in bright gold, Rare in silver, a skull for a boss. Small frames show the short form.",

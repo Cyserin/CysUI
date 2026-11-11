@@ -1005,7 +1005,7 @@ end
 -- Only font strings of our own are touched, so this is safe to change in combat.
 function UF.ApplyNameStyle()
     local db = DB()
-    local size = db.nameSize or 11
+    local size = db.nameSize or 10
     local function Style(f, corner, cornerSize, plainSize, right)
         if not (f and f.name and f.health) then return end
         f.name:ClearAllPoints()
@@ -1177,7 +1177,7 @@ CUI:RegisterPage("Unit Frames", function(page)
         function(on) db.nameCorner = on and true or false; UF.ApplyNameStyle() end)
     corner:SetPoint("TOPLEFT", 4, y - 4)
     y = y - 28
-    local nameSize = W.Stepper(page, "Corner name size", function() return db.nameSize or 11 end,
+    local nameSize = W.Stepper(page, "Corner name size", function() return db.nameSize or 10 end,
         function(v) db.nameSize = v; UF.ApplyNameStyle() end, 7, 14, 1)
     nameSize:SetPoint("TOPLEFT", 24, y - 4)
     y = y - 30

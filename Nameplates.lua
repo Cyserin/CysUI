@@ -350,6 +350,13 @@ local function CreatePlate(base)
     p.raid:SetPoint("RIGHT", p, "LEFT", -4, 0)
     p.raid:Hide()
 
+    -- quest marker: a small sword to the right of the plate (see UpdateQuestMark)
+    p.quest = overlay:CreateTexture(nil, "OVERLAY")
+    p.quest:SetTexture("Interface\\CURSOR\\Attack")
+    p.quest:SetSize(14, 14)
+    p.quest:SetPoint("LEFT", p, "RIGHT", 3, 0)
+    p.quest:Hide()
+
     -- cast bar under the plate
     p.cast = CreateFrame("StatusBar", nil, p)
     p.cast:SetStatusBarTexture(FLAT)
@@ -579,6 +586,54 @@ function NP.RebuildAuras()
     end
 end
 
+--------------------------------------------------------------------------------
+-- Quest marker: a small sword beside the plate of a mob you still need for a quest - a kill objective or one
+-- whose drops you are collecting. The game itself knows which mobs those are (it lists the quest in the mob's
+-- tooltip), so this asks the game instead of matching names; a finished objective takes the sword away.
+-- Asked when a plate appears and when the quest log changes. If the game won't say (locked mid-fight on
+-- WoW Forever), the last answer stays.
+--------------------------------------------------------------------------------
+local LINE = Enum and Enum.TooltipDataLineType or {}
+local LINE_OBJECTIVE, LINE_TITLE, LINE_PLAYER = LINE.QuestObjective or 8, LINE.QuestTitle or 17, LINE.QuestPlayer or 18
+local function QuestNeededRaw(unit)
+    if C_TooltipInfo and C_TooltipInfo.GetUnit then
+        local data = C_TooltipInfo.GetUnit(unit)
+        if type(data) == "table" and type(data.lines) == "table" then
+            local me = UnitName("player")
+            local mine, saw, need = true, false, false
+            for _, line in ipairs(data.lines) do
+                local kind = line.type
+                if kind == LINE_TITLE then
+                    saw, mine = true, true
+                elseif kind == LINE_PLAYER then
+                    mine = line.leftText == me -- in a group the tooltip lists each member's progress
+                elseif kind == LINE_OBJECTIVE then
+                    saw = true
+                    if mine and line.completed ~= true then need = true end
+                end
+            end
+            if saw then return need end
+        end
+    end
+    if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
+        return C_QuestLog.UnitIsRelatedToActiveQuest(unit) and true or false
+    end
+    return nil
+end
+local function UpdateQuestMark(p)
+    local mark = p.quest
+    if not mark then return end
+    if DB().questMark == false or not p.unit then mark:Hide() return end
+    local ok, need = pcall(QuestNeededRaw, p.unit)
+    if ok and need ~= nil and not Secret(need) then p.questNeed = need end
+    local size = DB().questMarkSize or 14
+    mark:SetSize(size, size)
+    mark:SetShown(p.questNeed == true)
+end
+function NP.UpdateQuestMarks()
+    for _, p in pairs(NP.plates) do if p.unit then UpdateQuestMark(p) end end
+end
+
 function NP:Add(unit)
     local base = C_NamePlate.GetNamePlateForUnit(unit)
     if not base then return end
@@ -589,6 +644,7 @@ function NP:Add(unit)
         self.plates[base] = p
     end
     p.unit = unit
+    p.questNeed = nil
     -- WoW Forever: the game fills our debuff icons itself through an aura container (works in combat)
     if CysUICompat.isForever then
         if p.cysAuraBox == nil then
@@ -603,6 +659,7 @@ function NP:Add(unit)
     p:Show()
     self:Update(p)
     UpdateCast(p)
+    UpdateQuestMark(p)
 end
 
 function NP:Remove(unit)
@@ -646,6 +703,17 @@ function NP.Enable()
             for _, p in pairs(NP.plates) do if p.unit then NP:Update(p) end end
         end
     end)
+    -- quest log changes: ask again which mobs are still needed (many changes in one moment count as one)
+    local q = CreateFrame("Frame")
+    pcall(q.RegisterEvent, q, "QUEST_LOG_UPDATE")
+    pcall(q.RegisterEvent, q, "QUEST_ACCEPTED")
+    pcall(q.RegisterEvent, q, "QUEST_REMOVED")
+    local queued
+    q:SetScript("OnEvent", function()
+        if queued then return end
+        queued = true
+        C_Timer.After(0.3, function() queued = nil; NP.UpdateQuestMarks() end)
+    end)
     -- plates that already exist (after a /reload)
     if C_NamePlate.GetNamePlates then
         for _, base in ipairs(C_NamePlate.GetNamePlates()) do
@@ -687,6 +755,10 @@ CUI:RegisterPage("Nameplates", function(page)
     Check("Show a small cast bar", "castBar")
     if db.kickCast == nil then db.kickCast = true end
     Check("Color enemy casts by your interrupt (grey: on cooldown, green: ready)", "kickCast")
+    if db.questMark == nil then db.questMark = true end
+    W.Checkbox(page, "Sword beside mobs I still need for a quest (kills and quest drops)", function() return db.questMark end,
+        function(on) db.questMark = on and true or false; NP.UpdateQuestMarks() end):SetPoint("TOPLEFT", 4, y)
+    y = y - 26
 
     -- threat coloring: one row of choices and a line saying what it means right now
     local head = W.Text(page, 12, T.accent)
@@ -771,9 +843,12 @@ CUI:RegisterPage("Nameplates", function(page)
     local ds = W.Stepper(page, "Debuff icon size", function() return db.debuffSize or 20 end,
         function(v) db.debuffSize = v; NP.RebuildAuras() end, 12, 36, 2, " px")
     ds:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -6)
+    local qs = W.Stepper(page, "Quest sword size", function() return db.questMarkSize or 14 end,
+        function(v) db.questMarkSize = v; NP.UpdateQuestMarks() end, 8, 28, 2, " px")
+    qs:SetPoint("TOPLEFT", ds, "BOTTOMLEFT", 0, -6)
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", ds, "BOTTOMLEFT", 0, -18)
+    note:SetPoint("TOPLEFT", qs, "BOTTOMLEFT", 0, -18)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)
