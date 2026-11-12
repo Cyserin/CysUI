@@ -14,24 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.17",
+    version = "0.58.18",
     items = {
-        { title = "Queued strikes on the swing timer", page = "Swing Timer", module = "swing",
-          icon = "Interface\\Icons\\Ability_Rogue_Ambush",
-          text = "While Heroic Strike, Cleave, Maul or Raptor Strike waits for your next swing, the swing timer turns orange and shows its name.",
-          where = "Frames & Combat > Swing Timer." },
-        { title = "Vehicle Exit button", page = "Vehicle Exit", module = "vehicleexit",
-          icon = "Interface\\Vehicles\\UI-Vehicles-Button-Exit-Up",
-          text = "A Leave button for vehicles and flight paths that you place yourself in Layout mode.",
-          where = "Move it in Layout mode (Vehicle Exit). Frames & Combat > Vehicle Exit." },
-        { title = "Quest Starter pop-up", page = "Quest Starter", module = "queststart",
-          icon = "Interface\\GossipFrame\\AvailableQuestIcon",
-          text = "Loot an item that starts a quest and a small box pops up with it. Click the item to open the quest.",
-          where = "Loot & Items > Quest Starter. Move it in Layout mode." },
-        { title = "Crate Tracker", page = "Crate Tracker", module = "crates",
-          icon = "Interface\\Icons\\INV_Crate_02",
-          text = "The crates in your bags that ask to be filled, what each one needs and how many you already carry.",
-          where = "Opens beside Cys's Bags when you have a crate. Loot & Items > Crate Tracker, or /cuicrates." },
+        { title = "Talent Planner", page = "Talent Planner", module = "talentplan",
+          icon = "Interface\\Icons\\INV_Misc_Book_11",
+          text = "Plan your leveling talents right in the talents window, see the level each pick comes at, and have them learned for you as you level.",
+          where = "Open your talents (N) and click Planner. Class > General > Talent Planner, or /cuitalents." },
     },
 }
 
