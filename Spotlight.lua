@@ -24,6 +24,10 @@ local SPOTLIGHT = {
           icon = "Interface\\Vehicles\\UI-Vehicles-Button-Exit-Up",
           text = "A Leave button for vehicles and flight paths that you place yourself in Layout mode.",
           where = "Move it in Layout mode (Vehicle Exit). Frames & Combat > Vehicle Exit." },
+        { title = "Quest Starter pop-up", page = "Quest Starter", module = "queststart",
+          icon = "Interface\\GossipFrame\\AvailableQuestIcon",
+          text = "Loot an item that starts a quest and a small box pops up with it. Click the item to open the quest.",
+          where = "Loot & Items > Quest Starter. Move it in Layout mode." },
     },
 }
 

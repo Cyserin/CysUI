@@ -531,6 +531,7 @@ if CysChangelog then
                   "Swing Timer: while Heroic Strike, Cleave, Maul or Raptor Strike is queued for your next swing, the main hand line turns orange and shows its name, so you can see it will go off with the swing. Switch on the Swing Timer page.",
                   "Vehicle Exit: a Leave button of our own for vehicles and flight paths (on a flight path it asks to land at the next stop). Move it in Layout mode (Vehicle Exit); size on the Vehicle Exit page. The game's own button is faded and click-through while it is on.",
                   "Nameplates: Auto threat colors now count you as a tank when no group role is set (always the case solo) and you are a Warrior or Paladin with most of your talent points in Protection, or a Druid in Bear Form. A group role of Damage or Healer still wins.",
+                  "Quest Starter: when an item that starts a quest is in your bags (looted or already there), a small box pops up with it. Click the item to open the quest and accept it, in combat too. The x or a right-click leaves that item alone until you log in again. Move it in Layout mode (Quest Starter); settings on the Quest Starter page.",
                   "Cys's Bags: with grow to fit on, the bags now stop at a tallest height (650 px by default, set on the Automation page) and scroll after that, instead of growing down the screen.",
               },
               fixed = {
