@@ -124,7 +124,7 @@ local function OnItem(tip)
                 local bank = (ok2 and type(all) == "number") and (all - bags) or 0
                 if bags > 0 or bank > 0 then
                     local text = bank > 0 and (bags .. " in bags, " .. bank .. " in bank") or (bags .. " in bags")
-                    tip:AddDoubleLine("You have", text, T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
+                    tip:AddDoubleLine("You have", text, 0.35, 0.78, 1, 0.55, 0.88, 1) -- light blue so it stands out from the item text
                 end
             end
         end

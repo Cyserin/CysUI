@@ -272,6 +272,13 @@ local function CountAll()
             end
         end
     end
+    -- what you wear counts too, so taking gear off (or putting it on) never makes it "new"
+    if GetInventoryItemID then
+        for slot = 1, 19 do
+            local id = GetInventoryItemID("player", slot)
+            if id then t[id] = (t[id] or 0) + 1 end
+        end
+    end
     return t, any
 end
 local function MarkRecent()

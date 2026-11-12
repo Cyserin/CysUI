@@ -267,6 +267,15 @@ local function CastOnUpdate(bar)
     local progress = bar.channel and (bar.endT - now) or (now - bar.startT)
     bar:SetMinMaxValues(0, total)
     bar:SetValue(max(0, min(total, progress)))
+    if bar.time:IsShown() then bar.time:SetFormattedText("%.1f", max(0, bar.endT - now)) end
+end
+
+-- WoW Forever: a locked cast's time left, written by the game's own number (no math on it), ten times a second
+local function LockedTimeOnUpdate(bar, elapsed)
+    bar.tAcc = (bar.tAcc or 0) + elapsed
+    if bar.tAcc < 0.1 then return end
+    bar.tAcc = 0
+    CysUICompat.LockedCastTime(bar.time, bar.lockedDur)
 end
 
 -- cast colored by your interrupt (Kick.lua): grey on cooldown, a tick where it comes ready, green when it is up
@@ -279,6 +288,8 @@ local function UpdateCast(p)
     local bar = p.cast
     if CUI.Kick then CUI.Kick.Clear(bar) end
     if not DB().castBar then bar:Hide(); bar:SetScript("OnUpdate", nil); return end
+    bar.time:SetShown(DB().castTime ~= false)
+    bar.time:SetText("")
     local unit = p.unit
     local name, _, texture, startMS, endMS = UnitCastingInfo(unit)
     local channel = false
@@ -292,6 +303,8 @@ local function UpdateCast(p)
         bar.text:SetText(lname)
         if kind == "channel" then bar:SetStatusBarColor(0.3, 0.6, 1) else bar:SetStatusBarColor(T.accent[1], T.accent[2], T.accent[3]) end
         CysUICompat.RunLockedCastBar(bar, kind, dur)
+        bar.lockedDur, bar.tAcc = dur, 1
+        if dur and bar.time:IsShown() then bar:SetScript("OnUpdate", LockedTimeOnUpdate) end
         bar:Show()
         KickApply(bar, unit, { dur = dur, channel = kind == "channel" })
         return
@@ -324,9 +337,43 @@ function NP:ApplySize(p)
     local db = DB()
     p:SetSize(db.width, db.height)
     p.name:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+    p.level:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
     p.healthText:SetFont(STANDARD_TEXT_FONT, max(db.height - 3, 7), "OUTLINE")
-    p.cast:SetHeight(max(floor(db.height * 0.8), 7))
-    p.cast.icon:SetSize(max(floor(db.height * 0.8), 7), max(floor(db.height * 0.8), 7))
+    local ch = max(floor(db.height * 0.8), 8)
+    p.cast:SetHeight(ch)
+    p.cast.icon:SetSize(ch + 2, ch + 2)
+    -- name on the left and level on the right above the bar, or both centred (the older look)
+    p.name:ClearAllPoints()
+    if db.nameStyle == "center" then
+        p.name:SetPoint("BOTTOM", p, "TOP", 0, 3)
+        p.name:SetWidth(180)
+        p.name:SetJustifyH("CENTER")
+        p.level:Hide()
+    else
+        p.name:SetPoint("BOTTOMLEFT", p, "TOPLEFT", 0, 3)
+        p.name:SetWidth(max(db.width - 28, 30))
+        p.name:SetJustifyH("LEFT")
+        p.level:Show()
+    end
+    -- the gold side marks stand a little off the bar, as tall as the bar plus a bit
+    for _, m in ipairs(p.marks) do m:SetHeight(db.height + 6) end
+end
+
+-- a thin gold bracket beside the plate: [ on the left, ] on the right
+local function Bracket(p, parent, side)
+    local m = CreateFrame("Frame", nil, parent)
+    m:SetWidth(4)
+    if side == "left" then m:SetPoint("RIGHT", p, "LEFT", -2, 0) else m:SetPoint("LEFT", p, "RIGHT", 2, 0) end
+    local edge = side == "left" and "LEFT" or "RIGHT"
+    local v = W.Texture(m, "OVERLAY", T.accent)
+    v:SetPoint("TOP" .. edge, 0, 0); v:SetPoint("BOTTOM" .. edge, 0, 0); v:SetWidth(2)
+    local t = W.Texture(m, "OVERLAY", T.accent)
+    t:SetPoint("TOPLEFT", 0, 0); t:SetPoint("TOPRIGHT", 0, 0); t:SetHeight(2)
+    local b = W.Texture(m, "OVERLAY", T.accent)
+    b:SetPoint("BOTTOMLEFT", 0, 0); b:SetPoint("BOTTOMRIGHT", 0, 0); b:SetHeight(2)
+    m.parts = { v, t, b }
+    m:Hide()
+    return m
 end
 
 local function CreatePlate(base)
@@ -347,27 +394,29 @@ local function CreatePlate(base)
     p.healthText = overlay:CreateFontString(nil, "OVERLAY")
     p.healthText:SetPoint("CENTER", p, "CENTER", 0, 0)
     p.name = overlay:CreateFontString(nil, "OVERLAY")
-    p.name:SetPoint("BOTTOM", p, "TOP", 0, 3)
     p.name:SetWordWrap(false)
-    p.name:SetWidth(180)
+    p.level = overlay:CreateFontString(nil, "OVERLAY")
+    p.level:SetPoint("BOTTOMRIGHT", p, "TOPRIGHT", 0, 3)
+    p.level:SetJustifyH("RIGHT")
+    p.marks = { Bracket(p, overlay, "left"), Bracket(p, overlay, "right") }
 
     p.raid = overlay:CreateTexture(nil, "OVERLAY")
     p.raid:SetSize(16, 16)
-    p.raid:SetPoint("RIGHT", p, "LEFT", -4, 0)
+    p.raid:SetPoint("RIGHT", p, "LEFT", -9, 0)
     p.raid:Hide()
 
     -- quest marker: a small sword to the right of the plate (see UpdateQuestMark)
     p.quest = overlay:CreateTexture(nil, "OVERLAY")
     p.quest:SetTexture("Interface\\CURSOR\\Attack")
     p.quest:SetSize(14, 14)
-    p.quest:SetPoint("LEFT", p, "RIGHT", 3, 0)
+    p.quest:SetPoint("LEFT", p, "RIGHT", 8, 0)
     p.quest:Hide()
 
-    -- cast bar under the plate
+    -- cast bar tucked right under the plate
     p.cast = CreateFrame("StatusBar", nil, p)
     p.cast:SetStatusBarTexture(FLAT)
-    p.cast:SetPoint("TOPLEFT", p, "BOTTOMLEFT", 0, -3)
-    p.cast:SetPoint("TOPRIGHT", p, "BOTTOMRIGHT", 0, -3)
+    p.cast:SetPoint("TOPLEFT", p, "BOTTOMLEFT", 0, -1)
+    p.cast:SetPoint("TOPRIGHT", p, "BOTTOMRIGHT", 0, -1)
     W.Texture(p.cast, "BACKGROUND", { 0, 0, 0, 0.7 }):SetAllPoints()
     W.Border(p.cast, 1, { 0, 0, 0, 1 }, "BORDER")
     p.cast.icon = p.cast:CreateTexture(nil, "ARTWORK")
@@ -375,7 +424,14 @@ local function CreatePlate(base)
     p.cast.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     p.cast.text = p.cast:CreateFontString(nil, "OVERLAY")
     p.cast.text:SetFont(STANDARD_TEXT_FONT, 8, "OUTLINE")
-    p.cast.text:SetPoint("CENTER", p.cast, "CENTER", 0, 0)
+    p.cast.text:SetPoint("LEFT", p.cast, "LEFT", 3, 0)
+    p.cast.text:SetPoint("RIGHT", p.cast, "RIGHT", -24, 0)
+    p.cast.text:SetJustifyH("LEFT")
+    p.cast.text:SetWordWrap(false)
+    p.cast.time = p.cast:CreateFontString(nil, "OVERLAY")
+    p.cast.time:SetFont(STANDARD_TEXT_FONT, 8, "OUTLINE")
+    p.cast.time:SetPoint("RIGHT", p.cast, "RIGHT", -3, 0)
+    p.cast.time:SetJustifyH("RIGHT")
     p.cast:Hide()
 
     p.auras = {}
@@ -452,8 +508,19 @@ function NP:Update(p)
     if not r then r, g, b = BaseColor(unit) end
     p.health:SetStatusBarColor(r, g, b)
 
-    if db.healthText and not locked and mx > 0 then
-        p.healthText:SetText(format("%d%%", mx <= 100 and cur or floor(cur / mx * 100 + 0.5)))
+    -- health text: percent, value, both or none (older saves: healthText off = none)
+    local hm = db.healthMode or (db.healthText == false and "none") or "percent"
+    if hm == "none" then
+        p.healthText:SetText("")
+    elseif locked then
+        -- WoW Forever: the game formats the locked numbers itself
+        CysUICompat.LockedUnitText(p.healthText, unit, "health", hm == "both" and "valuepct" or hm)
+    elseif mx > 0 then
+        local pct = mx <= 100 and cur or floor(cur / mx * 100 + 0.5)
+        local short = AbbreviateNumbers and AbbreviateNumbers(cur) or tostring(cur)
+        if hm == "value" then p.healthText:SetText(short)
+        elseif hm == "both" then p.healthText:SetText(format("%s  |cFFFFD100%d%%|r", short, pct))
+        else p.healthText:SetText(format("%d%%", pct)) end
     else
         p.healthText:SetText("")
     end
@@ -466,7 +533,27 @@ function NP:Update(p)
     else
         name = name or ""
     end
-    if name and db.showLevel then
+    local split = db.nameStyle ~= "center"
+    if split then
+        -- level on the right in its difficulty color, a gold + for elites, Rare for rares, ?? for bosses
+        local lt = ""
+        if db.showLevel then
+            local level = UnitLevel(unit)
+            if Secret(level) then level = nil end
+            local cls = UnitClassification and UnitClassification(unit)
+            if Secret(cls) then cls = nil end
+            if level and level > 0 then
+                local lc = GetLevelColor(unit)
+                lt = format("|cFF%02x%02x%02x%d|r", floor(lc[1] * 255 + 0.5), floor(lc[2] * 255 + 0.5), floor(lc[3] * 255 + 0.5), level)
+            else
+                lt = "|cFFFF4040??|r"
+            end
+            if cls == "elite" or cls == "rareelite" then lt = lt .. "|cFFFFD100+|r" end
+            if cls == "rare" or cls == "rareelite" then lt = "|cFFC0C8D8Rare|r " .. lt end
+        end
+        p.level:SetText(lt)
+    end
+    if name and db.showLevel and not split then
         local level = UnitLevel(unit)
         if level and level > 0 then
             local lc = GetLevelColor(unit)
@@ -480,10 +567,20 @@ function NP:Update(p)
     local nr, ng, nb = BaseColor(unit)
     p.name:SetTextColor(nr, ng, nb)
 
-    -- the target gets a gold frame and a little extra size
-    local isTarget = db.targetHighlight and UnitIsUnit(unit, "target")
+    -- the target gets a gold frame, gold side marks and a little extra size; other plates fade a little
+    local onTarget = UnitIsUnit(unit, "target")
+    if Secret(onTarget) then onTarget = false end
+    local isTarget = db.targetHighlight and onTarget
     W.SetBorder(p.border, isTarget and T.accent or { 0, 0, 0, 1 })
     p:SetScale(isTarget and 1.15 or 1)
+    local marks = onTarget and db.targetMarks ~= false
+    for _, m in ipairs(p.marks) do
+        if marks then for _, t in ipairs(m.parts) do t:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 1) end end
+        m:SetShown(marks)
+    end
+    local alpha = 1
+    if db.fadeOthers ~= false and not onTarget and UnitExists("target") then alpha = (db.fadeAlpha or 70) / 100 end
+    p:SetAlpha(alpha)
 
     local index = GetRaidTargetIndex and GetRaidTargetIndex(unit)
     if index and SetRaidTargetIconTexture then
@@ -753,10 +850,16 @@ CUI:RegisterPage("Nameplates", function(page)
         cb:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
-    Check("Show the level before the name", "showLevel")
-    Check("Show health percent on the bar", "healthText")
+    if db.targetMarks == nil then db.targetMarks = true end
+    if db.fadeOthers == nil then db.fadeOthers = true end
+    if db.castTime == nil then db.castTime = true end
+    if not db.healthMode then db.healthMode = db.healthText == false and "none" or "percent" end
+    Check("Show the level", "showLevel")
     Check("Class colors for players", "classColors")
     Check("Gold frame and extra size for your target", "targetHighlight")
+    Check("Gold side marks on your target", "targetMarks")
+    Check("Fade the other plates while you have a target", "fadeOthers")
+    Check("Show the time left on casts", "castTime")
     Check("Show my debuffs on the mob", "myDebuffs")
     Check("Show a small cast bar", "castBar")
     if db.kickCast == nil then db.kickCast = true end
@@ -840,9 +943,31 @@ CUI:RegisterPage("Nameplates", function(page)
     NP.RefreshRole()
     Paint()
 
+    -- rows of choices: health text and name layout
+    local function Choices(anchor, label, key, defs, fallback)
+        local lab = W.Text(page, 12, T.accent)
+        lab:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -16)
+        lab:SetText(label)
+        local set, first = {}, nil
+        local function PaintRow() for k, bt in pairs(set) do bt:SetPrimary((db[key] or fallback) == k) end end
+        for n, def in ipairs(defs) do
+            local bt = W.Button(page, 96, 22, def[2])
+            bt:SetPoint("TOPLEFT", lab, "BOTTOMLEFT", (n - 1) * 102, -6)
+            bt:SetScript("OnClick", function() db[key] = def[1]; PaintRow(); NP:ApplyAll() end)
+            set[def[1]] = bt
+            first = first or bt
+        end
+        PaintRow()
+        return first
+    end
+    local hrow = Choices(box, "Health text on the bar", "healthMode",
+        { { "percent", "Percent" }, { "value", "Value" }, { "both", "Both" }, { "none", "None" } }, "percent")
+    local nrow = Choices(hrow, "Name and level above the bar", "nameStyle",
+        { { "split", "Name | Level" }, { "center", "Centred" } }, "split")
+
     local w = W.Stepper(page, "Plate width", function() return db.width end,
         function(v) db.width = v; NP:ApplyAll() end, 60, 220, 4)
-    w:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -16) -- follows the description, whatever its height
+    w:SetPoint("TOPLEFT", nrow, "BOTTOMLEFT", 0, -16)
     local h = W.Stepper(page, "Plate height", function() return db.height end,
         function(v) db.height = v; NP:ApplyAll() end, 4, 24, 1)
     h:SetPoint("TOPLEFT", w, "BOTTOMLEFT", 0, -6)
@@ -852,9 +977,12 @@ CUI:RegisterPage("Nameplates", function(page)
     local qs = W.Stepper(page, "Quest sword size", function() return db.questMarkSize or 14 end,
         function(v) db.questMarkSize = v; NP.UpdateQuestMarks() end, 8, 28, 2, " px")
     qs:SetPoint("TOPLEFT", ds, "BOTTOMLEFT", 0, -6)
+    local fa = W.Stepper(page, "Faded plates", function() return db.fadeAlpha or 70 end,
+        function(v) db.fadeAlpha = v; NP:ApplyAll() end, 20, 100, 5, " %")
+    fa:SetPoint("TOPLEFT", qs, "BOTTOMLEFT", 0, -6)
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", qs, "BOTTOMLEFT", 0, -18)
+    note:SetPoint("TOPLEFT", fa, "BOTTOMLEFT", 0, -18)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)

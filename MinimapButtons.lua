@@ -122,6 +122,15 @@ local function Reanchor()
     local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
     if not bx then return end
     panel:ClearAllPoints()
+    if panel.SetClampedToScreen then panel:SetClampedToScreen(true) end
+    local side = DB().openSide or "left"
+    if side == "left" or side == "right" then
+        -- out to the side, lined up with the top of the button (or its bottom in the lower half of the screen)
+        local v = by > sh / 2 and "TOP" or "BOTTOM"
+        if side == "left" then panel:SetPoint(v .. "RIGHT", button, v .. "LEFT", -4, 0)
+        else panel:SetPoint(v .. "LEFT", button, v .. "RIGHT", 4, 0) end
+        return
+    end
     local below = by > sh / 2
     local right = bx > sw / 2
     local pt = (below and "TOP" or "BOTTOM") .. (right and "RIGHT" or "LEFT")
@@ -346,6 +355,21 @@ CUI:RegisterPage("Minimap Button", function(page)
         function() return db.collect end, function(on) db.collect = on end))
     Add(W.Checkbox(page, "Close the panel after clicking one of its buttons",
         function() return db.closeOnClick end, function(on) db.closeOnClick = on end))
+
+    -- where the panel opens from the button
+    local lab = W.Text(page, 12, T.accent)
+    lab:SetPoint("TOPLEFT", 4, y - 4)
+    lab:SetText("Open the panel")
+    local sides, sideButtons = { { "left", "To the left" }, { "right", "To the right" }, { "auto", "Above / below" } }, {}
+    local function PaintSides() for k, bt in pairs(sideButtons) do bt:SetPrimary((db.openSide or "left") == k) end end
+    for n, def in ipairs(sides) do
+        local bt = W.Button(page, 110, 22, def[2])
+        bt:SetPoint("TOPLEFT", 4 + (n - 1) * 116, y - 24)
+        bt:SetScript("OnClick", function() db.openSide = def[1]; PaintSides(); Reanchor() end)
+        sideButtons[def[1]] = bt
+    end
+    PaintSides()
+    y = y - 56
 
     local cols = W.Stepper(page, "Buttons per row", function() return db.columns end,
         function(v) db.columns = v; MB:Layout() end, 2, 8, 1, "")

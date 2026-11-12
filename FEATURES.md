@@ -6,7 +6,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Action bars** *(layout)*: bars 1-8, pet bar and stance bar, flat and resizable, using Blizzard's own buttons so keybinds and macros behave. Rarity and gold edges.
 - **Unit frames** *(layout)*: player (with a mana number on the mana bar), target, target-of-target, pet and party, with auras and combo points. Small corner names, an Elite / Rare / Boss tag beside the name, a soft gold line on the target frame, a crown beside the group leader.
 - **Raid frames** *(layout)*: 10, 20 and 40-player layouts (auto-picked or forced), class colors, missing health, incoming heals, debuff icons with colored borders (only the ones you can dispel, optional), range fade, role icons, a preview mode.
-- **Nameplates**: class and reaction colors, "mob is on you" coloring, your debuffs, a small cast bar, a gold target frame, a sword on mobs you still need for a quest.
+- **Nameplates**: class and reaction colors, "mob is on you" coloring, your debuffs, a cast bar under the plate with spell name and time left, a gold target frame with gold side marks while the other plates fade a little, name on the left and level (with elite / rare marks) on the right, health text as percent, value, both or none, a sword on mobs you still need for a quest.
 - **Cast bars** *(layout)*: for you and your target, with icon, spell name, time left and an interrupt flag. The target's bar can be joined to the bottom of the target frame.
 - **Player auras** *(layout)*: movable buff and debuff rows with gold borders; right-click to cancel.
 - **Group loot boxes** *(layout)*: skins Blizzard's Need / Greed roll boxes.
