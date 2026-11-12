@@ -19,6 +19,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Micro menu** *(layout)*: a text menu for Character, Spells, Talents, Quests, Social, Guild, Bags, Menu.
 - **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
 - **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). Works in combat.
+- **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too.
 - **Your Characters**: a minimap button (or `/cuichars`) opens a window with the rested XP of all your characters, worked out while they are logged out, and when each will be full.
 - **UI scale**: pixel-perfect scale for your resolution.
 - **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`.

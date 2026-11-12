@@ -191,6 +191,18 @@ local function Scan()
                 if info.conjured and (not topConj or amount > topConj.amount) then topConj = e end
             end
         end
+        -- eat older, lower food / water first (plain only) while it restores at least half as much as the best,
+        -- so it gets used up instead of sitting in the bags
+        if db.useLowerFirst and top and not top.buff and (kind.field == "food" or kind.field == "drink") then
+            local bestAmount = top.amount
+            for id, it in pairs(items) do
+                local info = it and it.info
+                local amount = info and info.usable and not info.conjured and not info.buff and info[kind.field]
+                if amount and amount >= bestAmount * 0.5 and amount < top.amount then
+                    top = { id = id, amount = amount, count = it.count, conjured = false, buff = false }
+                end
+            end
+        end
         -- conjured first while it restores at least 3/4 of the best (it disappears anyway)
         if db.conjuredFirst and topConj and top and topConj.amount >= top.amount * 0.75
             and not (preferBuff and top.buff) then top = topConj end
@@ -389,8 +401,10 @@ local function Restock()
                 local name, price, perBuy, available = MerchantInfo(p.i)
                 perBuy = max(perBuy or 1, 1)
                 local _, _, _, _, minLevel, _, _, stackSize = GetItemInfo(id)
-                -- anything you carry that is as good or better counts toward the stacks, whatever its name
-                local need = want[kind] * (stackSize or 20) - CarriedAtLeast(kind, p.amount)
+                -- anything you carry that is as good or better counts toward the stacks, whatever its name;
+                -- with "count lower food" on, so does food from the step below (at least half as good)
+                local least = db.countLower ~= false and floor(p.amount * 0.5) or p.amount
+                local need = want[kind] * (stackSize or 20) - CarriedAtLeast(kind, least)
                 -- below your level's step (or not known yet): leave it on the shelf
                 if not minLevel or minLevel < StepForLevel() then need = 0 end
                 if available and available >= 0 then need = min(need, available * perBuy) end
@@ -523,13 +537,19 @@ CUI:RegisterPage("Consumables", function(page)
     W.Stepper(page, "Best water: stacks to keep", function() return db.drinkStacks or 0 end,
         function(v) db.drinkStacks = v end, 0, 10, 1):SetPoint("TOPLEFT", 4, y); y = y - 28
     W.Stepper(page, "Never buy below this much gold", function() return db.goldFloor or 0 end,
-        function(v) db.goldFloor = v end, 0, 100, 1, " g"):SetPoint("TOPLEFT", 4, y); y = y - 26
+        function(v) db.goldFloor = v end, 0, 100, 1, " g"):SetPoint("TOPLEFT", 4, y); y = y - 30
+    local c4 = W.Checkbox(page, "Count lower food and water I carry toward the stacks",
+        function() return db.countLower ~= false end, function(on) db.countLower = on and true or false end)
+    c4:SetPoint("TOPLEFT", 4, y); y = y - 26
+    local c5 = W.Checkbox(page, "Eat and drink the lower ones first (Food / Water macros)",
+        function() return db.useLowerFirst end, function(on) db.useLowerFirst = on; Refresh() end)
+    c5:SetPoint("TOPLEFT", 4, y); y = y - 30
     local foodNote = W.Text(page, 11, T.desc)
     foodNote:SetPoint("TOPLEFT", 4, y)
     foodNote:SetWidth(width - 8)
     foodNote:SetJustifyH("LEFT")
-    foodNote:SetText("0 stacks = off. Bought when you open a vendor that sells food or water of your level's step (1, 5, 15, 25, 35, 45) - never anything lower. Plain food you already carry that is as good or better counts, whatever it is called; Well Fed food does not.")
-    y = y - 40
+    foodNote:SetText("0 stacks = off. Bought when you open a vendor that sells food or water of your level's step (1, 5, 15, 25, 35, 45) - never anything lower. Plain food you already carry that is as good or better counts, whatever it is called (with the switch above, food from the step below counts too, so 2 stacks of it and 4 to keep buys 2); Well Fed and conjured food do not.")
+    y = y - 54
 
     ---------------------------------------------------------------- restock list
     W.Header(page, "Restock list (this character)", width):SetPoint("TOPLEFT", 0, y); y = y - 28

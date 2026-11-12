@@ -33,6 +33,7 @@ local function DB()
     if db.hideAtMax == nil then db.hideAtMax = true end
     if db.questXP == nil then db.questXP = true end
     if db.questBar == nil then db.questBar = true end
+    if db.killsText == nil then db.killsText = true end
     for k, v in pairs(COLOR_DEFAULTS) do if db[k] == nil then db[k] = v end end
     return db
 end
@@ -93,6 +94,9 @@ local function Refresh()
     local extra = ""
     if rest > 0 then extra = extra .. format("   +%d%% Rested", floor(rest / maxXP * 100)) end
     if q > 0 then extra = extra .. format("   +%d%% Quests", floor(q / maxXP * 100)) end
+    local KT = CUI.KillTracker
+    local n = db.killsText and KT and KT.KillsToLevel and KT.KillsToLevel()
+    if n then extra = extra .. format("   ~%d kills", n) end
     text:SetText(line .. extra) -- one string, so the whole line is centred on the bar
     text2:SetText("")
     local mode = db.textMode
@@ -173,6 +177,14 @@ local function ShowTooltip(self)
     end
     GameTooltip:AddDoubleLine("Rested:", format("+%d (%.2f%%)", rest, rest / maxXP * 100), 0.8, 0.8, 0.8,
         rest > 0 and 0.3 or 0.8, rest > 0 and 0.6 or 0.8, rest > 0 and 1 or 0.8)
+    local KT = CUI.KillTracker
+    local n, avg
+    if KT and KT.Active and KT.Active() then n, avg = KT.KillsToLevel() end
+    if n then
+        GameTooltip:AddDoubleLine("Kills to level:", format("~%d  (%d XP each)", n, avg), 0.8, 0.8, 0.8, 1, 0.82, 0)
+    elseif KT and KT.Active and KT.Active() then
+        GameTooltip:AddDoubleLine("Kills to level:", "after your first kill", 0.8, 0.8, 0.8, 0.6, 0.6, 0.6)
+    end
     GameTooltip:Show()
 end
 
@@ -300,8 +312,11 @@ CUI:RegisterPage("XP Bar", function(page)
             if on and CUI.ActionBars and CUI.ActionBars.HideStatusBars then CUI.ActionBars:HideStatusBars() end
         end)
     blizz:SetPoint("TOPLEFT", 4, -176)
+    local kt = W.Checkbox(page, "Show kills to level on the bar (from the Kill Tracker)", function() return db.killsText end,
+        function(on) db.killsText = on; Refresh() end)
+    kt:SetPoint("TOPLEFT", 4, -202)
 
-    W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -212)
+    W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -238)
     local function ColorButton(y, label, key)
         local opts = {}
         for i, p in ipairs(PALETTE) do
@@ -311,12 +326,12 @@ CUI:RegisterPage("XP Bar", function(page)
             function(v) db[key] = v; Refresh() end, label .. ": ")
         b:SetPoint("TOPLEFT", 4, y)
     end
-    ColorButton(-242, "Your XP", "xpColor")
-    ColorButton(-270, "Rested XP", "restedColor")
-    ColorButton(-298, "Completed-quest XP", "questColor")
+    ColorButton(-268, "Your XP", "xpColor")
+    ColorButton(-296, "Rested XP", "restedColor")
+    ColorButton(-324, "Completed-quest XP", "questColor")
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", 4, -336)
+    note:SetPoint("TOPLEFT", 4, -362)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)

@@ -1206,6 +1206,138 @@ CUI:RegisterModule({
 --------------------------------------------------------------------------------
 -- Settings page
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- Keep the player and target frames clear of Cys's Cooldown bars: when a bar would run into one of them, the
+-- frame slides outward (same size) until there is a small gap, and goes back to its layout spot when the bar
+-- gets narrower again. Out of combat only (unit frames are locked during a fight). The frame's layout-mode box
+-- slides with it (the shift is added to the box's spot, never saved), so layout mode shows where the frame is.
+--------------------------------------------------------------------------------
+local CLEAR_GAP = 6
+local CLEAR_BARS = { "CysCooldownBar_main", "CysCooldownBar_utility" }
+local clearPending, clearQueued = false, false
+
+local function ScreenRect(f)
+    local l, b, w, h = f:GetRect()
+    if not (l and w) then return end
+    local s = f:GetEffectiveScale()
+    return l * s, b * s, (l + w) * s, (b + h) * s
+end
+
+function UF.KeepClear()
+    clearQueued = false
+    if InCombatLockdown() then clearPending = true return end
+    clearPending = false
+    local stance = CUI.movers and CUI.movers["cooldowns_stance"]
+    if stance and stance.stanceAttached and not DB().stanceAttach then
+        stance.stanceAttached = nil
+        CUI:ApplyLayout("cooldowns_stance") -- unpinned: back to its own layout spot
+    end
+    local on = DB().keepClear ~= false
+    for _, key in ipairs({ "player", "target" }) do
+        local f, m = UF.frames[key], CUI.movers and CUI.movers[key]
+        local p, rel, rp, mx, my
+        if f and m and m.mover then p, rel, rp, mx, my = m.mover:GetPoint(1) end
+        if p then
+            -- back to the saved spot first (take off the shift added last time)
+            local bx = mx - (m.cysShift or 0)
+            m.mover:ClearAllPoints()
+            m.mover:SetPoint(p, rel, rp, bx, my)
+            m.cysShift = 0
+            f:ClearAllPoints()
+            f:SetPoint("CENTER", m.mover, "CENTER", 0, 0)
+            local fl, fb, fr, ft = ScreenRect(f)
+            if on and fl then
+                local gap = CLEAR_GAP * UIParent:GetEffectiveScale()
+                local fc, shift = (fl + fr) / 2, 0
+                for _, name in ipairs(CLEAR_BARS) do
+                    local bar = _G[name]
+                    if bar and bar:IsVisible() then
+                        local bl, bb, br, bt = ScreenRect(bar)
+                        if bl and bt > fb and bb < ft then -- the bar is level with the frame
+                            if fc < (bl + br) / 2 then
+                                shift = math.min(shift, bl - gap - fr) -- frame left of the bar: slide left
+                            else
+                                shift = math.max(shift, br + gap - fl) -- frame right of the bar: slide right
+                            end
+                        end
+                    end
+                end
+                if shift ~= 0 then
+                    local s = shift / m.mover:GetEffectiveScale()
+                    m.mover:ClearAllPoints()
+                    m.mover:SetPoint(p, rel, rp, bx + s, my)
+                    m.cysShift = s
+                end
+            end
+        end
+    end
+    if UF.AttachStance then UF.AttachStance() end -- defined just below
+end
+
+-- the Cooldown Manager's stance icon pinned above the player frame's top-right corner (follows the frame)
+local function AttachStance()
+    local m, f = CUI.movers and CUI.movers["cooldowns_stance"], UF.frames.player
+    if not (m and f and DB().stanceAttach) then return end
+    -- the stance icon is a plain frame, so it can be re-pinned in combat too; if it ever is a protected one,
+    -- wait for the fight to end instead
+    if InCombatLockdown() and m.frame and m.frame.IsProtected and m.frame:IsProtected() then clearPending = true return end
+    m.mover:ClearAllPoints()
+    m.mover:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, 3)
+    m.stanceAttached = true
+end
+UF.AttachStance = AttachStance
+
+local function QueueKeepClear()
+    if clearQueued then return end
+    clearQueued = true
+    C_Timer.After(0, UF.KeepClear)
+end
+UF.QueueKeepClear = QueueKeepClear
+
+local watchedBars = {}
+local function WatchBars()
+    for _, name in ipairs(CLEAR_BARS) do
+        local bar = _G[name]
+        if bar and not watchedBars[bar] then
+            watchedBars[bar] = true
+            bar:HookScript("OnSizeChanged", QueueKeepClear)
+            bar:HookScript("OnShow", QueueKeepClear)
+            bar:HookScript("OnHide", QueueKeepClear)
+        end
+    end
+end
+
+local clearWatch = CreateFrame("Frame")
+clearWatch:RegisterEvent("PLAYER_ENTERING_WORLD")
+clearWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+local clearHooked = false
+clearWatch:SetScript("OnEvent", function(_, event)
+    if not next(UF.frames) then return end -- unit frames off
+    if event == "PLAYER_REGEN_ENABLED" then
+        if clearPending then QueueKeepClear() end
+        return
+    end
+    if not clearHooked then
+        clearHooked = true
+        hooksecurefunc(CUI, "ApplyLayout", function(_, key)
+            -- ApplyLayout just put the box back on its saved spot: no shift on it any more
+            if (key == "player" or key == "target") and CUI.movers[key] then CUI.movers[key].cysShift = 0 end
+            -- the Cooldown Manager re-places its stance icon (also mid-fight): pin it back straight away
+            if key == "cooldowns_stance" then AttachStance() end
+            if key == "player" or key == "target" or (type(key) == "string" and key:find("^cooldowns_")) then QueueKeepClear() end
+        end)
+        if CUI.ApplyLayoutFilter then hooksecurefunc(CUI, "ApplyLayoutFilter", QueueKeepClear) end
+        for _, key in ipairs({ "player", "target" }) do
+            local f = UF.frames[key]
+            if f then f:HookScript("OnSizeChanged", QueueKeepClear) end
+        end
+    end
+    -- Cys's Cooldown bars are built a little after login
+    for _, t in ipairs({ 0.5, 2, 5 }) do
+        C_Timer.After(t, function() WatchBars(); QueueKeepClear() end)
+    end
+end)
+
 CUI:RegisterPage("Unit Frames", function(page)
     local db = DB()
     local width = 480
@@ -1294,6 +1426,17 @@ CUI:RegisterPage("Unit Frames", function(page)
     auraSize:SetPoint("TOPLEFT", 4, y - 10)
     y = y - 40
 
+    local clearCb = W.Checkbox(page, "Keep player and target frames clear of the cooldown bars",
+        function() return db.keepClear ~= false end,
+        function(on) db.keepClear = on and true or false; UF.KeepClear() end)
+    clearCb:SetPoint("TOPLEFT", 4, y)
+    y = y - 26
+    local stanceCb = W.Checkbox(page, "Pin the stance icon above the player frame",
+        function() return db.stanceAttach end,
+        function(on) db.stanceAttach = on and true or false; UF.KeepClear() end)
+    stanceCb:SetPoint("TOPLEFT", 4, y)
+    y = y - 30
+
     W.Header(page, "Party (for healers)", width):SetPoint("TOPLEFT", 0, y - 8)
     y = y - 38
     local sortCb = W.Checkbox(page, "Order party frames tank, healer, then damage", function() return db.partySort ~= false end,
@@ -1314,6 +1457,7 @@ CUI:RegisterPage("Unit Frames", function(page)
 
     local note = W.Notes(page, 4, y - 52, width, "", {
             "Frames can only be moved or resized out of combat.",
+            "Clear of the cooldown bars: if a Cys Cooldown bar runs into the player or target frame, the frame (and its layout box) slides outward, same size, until there is a small gap; it goes back when the bar gets narrower.",
             "Raid frames have their own page (Raid Frames).",
             "Party outline colors: blue Magic, purple Curse, brown Disease, green Poison.",
             "Only debuffs I can remove goes by the cures you have learned (warlocks: Felhunter out).",

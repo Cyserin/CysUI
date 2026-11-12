@@ -18,9 +18,9 @@ local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a
 
 -- sidebar grouping: { heading (nil = none), { page titles in order } }
 local GROUPS = {
-    { nil,               { "General", "Modules", "Conflicts" } },
+    { nil,               { "General", "New", "Modules", "Conflicts" } },
     { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Durability", "Automation" } },
-    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meter", "Details Skin", "Swing Timer", "Combat Numbers", "Threat Bar", "Marker Wheel" } },
+    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meter", "Details Skin", "Swing Timer", "Combat Numbers", "Threat Bar", "Marker Wheel", "Weapon Swap" } },
     { "Loot & Items",    { "Vendor", "Consumables", "Loot", "Roll Tracker", "Upgrade" } },
     { "Tracking",        { "Quest Tracker", "Kill Tracker", "XP Bar", "Characters", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
 }
@@ -281,7 +281,7 @@ end
 
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
-    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel" } },
+    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel", "weaponswap" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "characters", "micromenu", "tooltip", "skins", "friends", "scale", "durability", "automation", "questlist" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "healadvisor", "warrior", "shoutremind" } },
@@ -463,6 +463,18 @@ local function EnsurePage(index)
     return page
 end
 
+-- NEW tags on sidebar headings: shown while any page under the heading is still new (Spotlight.lua)
+local headTags = {}
+local function RefreshHeadTags()
+    for _, h in ipairs(headTags) do
+        local any = false
+        for _, i in ipairs(h.pages) do
+            if CUI.IsNewPage and CUI:IsNewPage(CUI.pages[i].title) then any = true break end
+        end
+        h.tag:SetShown(any)
+    end
+end
+
 local function SelectPage(index)
     current = index
     for i, f in pairs(pageFrames) do f:Hide() end
@@ -476,6 +488,11 @@ local function SelectPage(index)
         if selected then b.bg:Show() else b.bg:Hide() end
         local c = selected and T.accent or (b.baseColor or T.text)
         b.label:SetTextColor(c[1], c[2], c[3])
+        if selected and b.newTag then
+            b.newTag:Hide()
+            if CUI.MarkPageSeen then CUI:MarkPageSeen(CUI.pages[i].title) end
+            RefreshHeadTags()
+        end
     end
     local def = CUI.pages[index]
     if def.onShow then def.onShow(page) end
@@ -643,6 +660,11 @@ local function CreateWindow()
             h.label = W.Text(h, 11, c)
             h.label:SetPoint("LEFT", section.level == 1 and 14 or 24, 0)
             h.label:SetText(section.level == 1 and string.upper(section.name) or (section.name .. (section.empty and "  (soon)" or "")))
+            local tag = W.Text(h, 9, T.green)
+            tag:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+            tag:SetPoint("LEFT", h.label, "RIGHT", 6, 0)
+            tag:SetText("NEW")
+            headTags[#headTags + 1] = { tag = tag, pages = section.pages }
             h.sign = W.Text(h, 13, T.accent)
             h.sign:SetPoint("RIGHT", -10, 0)
             h.empty = section.empty
@@ -674,6 +696,13 @@ local function CreateWindow()
             b.label = W.Text(b, 12, b.baseColor)
             b.label:SetPoint("LEFT", section.level == 2 and 36 or 14, 0)
             b.label:SetText(LABELS[CUI.pages[i].title] or CUI.pages[i].title)
+            if CUI.IsNewPage and CUI:IsNewPage(CUI.pages[i].title) then
+                -- a small gold NEW tag until the page is opened once (Spotlight.lua)
+                b.newTag = W.Text(b, 9, T.accent)
+                b.newTag:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+                b.newTag:SetPoint("LEFT", b.label, "RIGHT", 6, 0)
+                b.newTag:SetText("NEW")
+            end
             b:SetScript("OnClick", function()
                 SelectPage(i)
                 if f.searchHits and f.ShowHit then f.ShowHit(i) end
@@ -950,6 +979,7 @@ local function CreateWindow()
     tinsert(UISpecialFrames, "CysUIConfigFrame")
     CUI:ManageWindow(f, "center", 0) -- opens beside Blizzard's windows instead of on top of them
 
+    RefreshHeadTags()
     SelectPage(1)
 end
 

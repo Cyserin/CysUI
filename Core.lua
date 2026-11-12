@@ -530,11 +530,18 @@ if CysChangelog then
               added = {
                   "Your Characters: a new minimap button (or /cuichars) opens a small window with the rested XP of every character you have logged in on, how rested each one is now and when it will be fully rested, best first. Characters you are not on are worked out from when they logged out (faster for ones that logged out in an inn or city, marked zzz). Shift + right-click a row to forget a character. Settings on the Characters page.",
                   "Marker Wheel: hold a key and a ring of the eight raid markers (and Clear) opens around your mouse. Move toward one and let go to put it on your target, or let go in the middle to cancel. Works in combat and in dungeons. Pick the key on the Marker Wheel page; you can also have it mark the unit under your mouse first.",
+                  "Weapon Swap: two weapon sets, for example sword and shield and a two-hander, and one key that swaps between them, in combat too. Fill the sets with Use what I'm wearing or by dropping weapons on the slots, and pick the key on the Weapon Swap page. An optional box on screen shows both sets (the one you wear outlined in gold) so you can fill or empty them without opening the settings; move it in Layout mode.",
+                  "Unit Frames: when a Cys Cooldown bar would run into your player or target frame, the frame now slides outward (same size) until there is a small gap, and goes back when the bar gets narrower. Changes wait until a fight ends. Switch on the Unit Frames page.",
+                  "Unit Frames: new switch to pin the Cooldown Manager stance icon above the player frame, so it moves with the frame.",
+                  "Cast Bar: your own cast bar can now be joined to the bottom of the player frame too (same width, follows the frame). Switch on the Cast Bar page.",
+                  "Kill Tracker: kills to level now also shows on the XP bar and in its tooltip, so the separate box can be switched off. New pop-up when you target a mob whose kill will level you (This kill levels you!), solo; move it in Layout mode, switch on the Kill Tracker page.",
+                  "New page at the top of the settings: what each update adds, where to find it and a button that takes you there. New pages (and the headings they sit under) get a small NEW tag in the sidebar until you open them, and a short pop-up lists the new features once after an update.",
                   "Battle.net pop-ups (friend online / offline, invites) now have the Cys look: a dark flat plate, the theme edge with a gold stripe, and the friend's name in gold. They also have their own box in Layout mode (Battle.net pop-ups), so you can put them anywhere. Switch on the Chat page.",
               },
               fixed = {
                   "Quest window: the greeting text and the Current Quests / Available Quests headings no longer show in dark ink when you first talk to a quest giver.",
                   "Cys's Bags: the search is cleared when you close your bags.",
+                  "Consumables: food and water from the step below (at least half as good) now count toward your stacks to keep, so 2 stacks of it with 4 to keep buys 2, not 4. Switch on the Consumables page, plus a new option to eat and drink the lower ones first so they get used up.",
               },
             },
             { version = "0.58.14", date = "2026-11-12",

@@ -33,6 +33,7 @@ local function DB()
     if db.format == nil then db.format = 1 end
     if db.resetOnLevel == nil then db.resetOnLevel = true end
     if db.hideAtMax == nil then db.hideAtMax = true end
+    if db.levelAlert == nil then db.levelAlert = true end
     return db
 end
 
@@ -72,6 +73,33 @@ local function TargetXP()
     xp = floor(xp)
     local rested = GetXPExhaustion and GetXPExhaustion() or 0
     return xp + math.min(rested, xp)
+end
+
+-- for the XP bar: average XP per kill and kills left (nil until the first kill)
+function KT.Active() return frame ~= nil end
+function KT.Average() return (kills > 0 and totalXP > 0) and totalXP / kills or nil end
+function KT.KillsToLevel()
+    local avg = KT.Average()
+    if not avg then return nil end
+    return max(0, ceil(((UnitXPMax("player") or 0) - (UnitXP("player") or 0)) / avg)), floor(avg)
+end
+
+-- "This kill levels you!": a short pop-up when you target a mob whose kill finishes the level
+local alert, alertText, alertShown
+local function LevelAlert()
+    if not alert or not DB().levelAlert then return end
+    local remaining = (UnitXPMax("player") or 0) - (UnitXP("player") or 0)
+    local ok, tx = pcall(TargetXP)
+    local hit = ok and tx and remaining > 0 and tx >= remaining
+    local okG, guid = pcall(UnitGUID, "target")
+    if not okG or (CysUICompat and CysUICompat.Secret and CysUICompat.Secret(guid)) then guid = nil end
+    if not hit then return end
+    if guid and guid == alertShown then return end -- once per mob
+    alertShown = guid
+    alertText:SetText("This kill levels you!")
+    alert:SetAlpha(1)
+    alert:Show()
+    alert.left = 3
 end
 
 local function Refresh()
@@ -159,6 +187,7 @@ local function OnEvent(_, event, msg)
         Refresh()
     elseif event == "PLAYER_TARGET_CHANGED" then
         Refresh()
+        LevelAlert()
     elseif event == "PLAYER_LEVEL_UP" then
         if DB().resetOnLevel then totalXP, kills = 0, 0 end
         Refresh()
@@ -186,6 +215,21 @@ function KT.Enable()
     frame:RegisterEvent("PLAYER_TARGET_CHANGED")
     frame:SetScript("OnEvent", OnEvent)
     lastXP, lastMax = UnitXP("player"), UnitXPMax("player")
+
+    alert = CreateFrame("Frame", "CysUIKillLevelAlert", UIParent)
+    alert:SetSize(300, 30)
+    alert:SetFrameStrata("HIGH")
+    alertText = alert:CreateFontString(nil, "OVERLAY")
+    alertText:SetFont(STANDARD_TEXT_FONT, 20, "OUTLINE")
+    alertText:SetTextColor(T.green[1], T.green[2], T.green[3])
+    alertText:SetPoint("CENTER")
+    alert:Hide()
+    alert:SetScript("OnUpdate", function(self, elapsed)
+        self.left = (self.left or 0) - elapsed
+        if self.left <= 0 then self:Hide() return end
+        if self.left < 1 then self:SetAlpha(self.left) end -- fade out over the last second
+    end)
+    CUI:RegisterMovable(alert, "killalert", "Level-up kill alert", { point = "CENTER", x = 0, y = 160 })
     Refresh()
 end
 
@@ -220,15 +264,20 @@ CUI:RegisterPage("Kill Tracker", function(page)
         function(on) db.hideAtMax = on; Refresh() end)
     cap:SetPoint("TOPLEFT", 4, -124)
 
+    local la = W.Checkbox(page, "Pop-up when the target I pick will level me", function() return db.levelAlert end,
+        function(on) db.levelAlert = on end)
+    la:SetPoint("TOPLEFT", 4, -150)
+
     local reset = W.Button(page, 160, 22, "Reset this session")
-    reset:SetPoint("TOPLEFT", 4, -158)
+    reset:SetPoint("TOPLEFT", 4, -184)
     reset:SetScript("OnClick", function() KT:Reset() end)
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", 4, -196)
+    note:SetPoint("TOPLEFT", 4, -222)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)
     note:SetText("It learns from the kills you make while you play, so the first number appears after your first kill. "
-        .. "Quest rewards don't count as kills.")
+        .. "Quest rewards don't count as kills. Kills to level also shows on the XP bar and its tooltip, so this box can be "
+        .. "switched off. The pop-up works solo (group XP is split) and can be moved in layout mode.")
 end)
