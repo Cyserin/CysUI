@@ -4023,19 +4023,23 @@ local function SkinDropdowns()
             fr = EnumerateFrames(fr)
         end
     end
-    local function Kick()
-        Safe(ScanMenus)
-        Safe(ScanAll)
-        if C_Timer and C_Timer.After then
-            for _, t in ipairs({ 0, 0.1, 0.3 }) do C_Timer.After(t, function() Safe(ScanAll) end) end
+    -- Only the open menu and the frames right under WorldFrame / UIParent are looked at (the game parents its
+    -- menus and submenus to WorldFrame). Walking every frame in the game (EnumerateFrames) on each click took up
+    -- to a second and was the stutter when right-clicking; that full walk is left only for /cysmenu.
+    local function ScanOpen()
+        local manager = Menu and Menu.GetManager and Menu.GetManager()
+        local open = manager and manager.GetOpenMenu and manager:GetOpenMenu()
+        if open then pcall(SkinMenuFrame, open, 2) end
+        if WorldFrame then
+            for _, c in ipairs(Kids(WorldFrame)) do
+                if not c.cysMenuBg and Candidate(c) then pcall(SkinMenuFrame, c, 2) end
+            end
         end
+        ScanMenus()
     end
-    -- a click anywhere may open a menu (or one of its submenus): look right after it
-    do
-        local clicks = CreateFrame("Frame")
-        if pcall(clicks.RegisterEvent, clicks, "GLOBAL_MOUSE_UP") then
-            clicks:SetScript("OnEvent", function() Kick() end)
-        end
+    local function Kick()
+        Safe(ScanOpen)
+        if C_Timer and C_Timer.After then C_Timer.After(0, function() Safe(ScanOpen) end) end
     end
     SLASH_CYSMENU1 = "/cysmenu"
     SlashCmdList["CYSMENU"] = function()
@@ -4059,7 +4063,7 @@ local function SkinDropdowns()
             acc = acc + dt
             if acc < 0.2 then return end
             acc = 0
-            if manager.GetOpenMenu and manager:GetOpenMenu() then Safe(ScanAll) end
+            if manager.GetOpenMenu and manager:GetOpenMenu() then Safe(ScanOpen) end
         end)
     end
     HookNewMenus()

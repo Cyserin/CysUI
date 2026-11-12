@@ -543,6 +543,7 @@ if CysChangelog then
                   "Friends: the window no longer stays where it was moved aside to. It still opens beside Blizzard's windows (character, spellbook, map...), and goes back to its own spot once they close.",
                   "Battle.net pop-ups (friend online / offline) now show above the chat tabs instead of off the left edge of the screen.",
                   "Cys's Bags: gear you take off is no longer listed under New Items.",
+                  "Fixed a stutter on mouse clicks: the right-click menu skin looked through every frame in the game after each click; it now only looks at the menu that opened.",
               },
             },
             { version = "0.58.13", date = "2026-11-11",
