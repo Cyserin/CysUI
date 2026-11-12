@@ -355,19 +355,22 @@ local function LayoutTrees()
     local rows, cols = 1, 1
     for _, g in ipairs(Tree.groups) do rows = math.max(rows, g.rows); cols = math.max(cols, g.cols) end
     local treeW = math.floor((areaW - (nG - 1) * 12) / nG)
-    local pitch = math.floor(math.min((treeW - 24) / cols, (areaH - 56) / rows, 60))
+    local pitch = math.floor(math.min((treeW - 24) / cols, (areaH - 56) / rows, 66))
     local icon = math.floor(pitch * 0.72)
     for gi, g in ipairs(Tree.groups) do
         local tf = treeFrames[gi]
         if not tf then
             tf = CreateFrame("Frame", nil, win.trees)
-            tf.bg = W.Texture(tf, "BACKGROUND", T.card)
+            tf.bg = tf:CreateTexture(nil, "BACKGROUND", nil, 4)
             tf.bg:SetAllPoints()
+            tf.bg:SetColorTexture(0, 0, 0, 0.18) -- see-through: the class artwork shows behind
             W.Border(tf, 1, T.line)
             tf.icon = tf:CreateTexture(nil, "ARTWORK")
-            tf.icon:SetSize(24, 24)
+            tf.icon:SetSize(30, 30)
             tf.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-            tf.name = W.Text(tf, 13, T.accent)
+            tf.name = W.Text(tf, 15, T.text)
+            tf.name:SetShadowOffset(1, -1)
+            tf.name:SetShadowColor(0, 0, 0, 1)
             tf.name:SetPoint("LEFT", tf.icon, "RIGHT", 6, 0)
             tf.lines = {}
             treeFrames[gi] = tf
@@ -377,13 +380,15 @@ local function LayoutTrees()
         tf:SetPoint("TOPLEFT", win.trees, "TOPLEFT", (gi - 1) * (treeW + 12), 0)
         tf.icon:SetTexture(g.icon)
         tf.icon:ClearAllPoints()
-        tf.icon:SetPoint("TOPLEFT", 12, -10)
+        tf.icon:SetPoint("TOP", tf, "TOP", -50, -12)
         tf.group = g
         tf:Show()
         -- center the grid in the tree
         local gridW = g.cols * pitch
         local ox = math.floor((treeW - gridW) / 2 + (pitch - icon) / 2)
-        local oy = -48
+        -- and vertically in the space under the header, so the card has no empty band at the bottom
+        local free = (areaH - 56) - (g.rows * pitch - (pitch - icon))
+        local oy = -56 - math.max(0, math.floor(free / 2 - 8))
         for _, ln in ipairs(tf.lines) do ln:Hide() end
         local li = 0
         for _, n in ipairs(g.nodes) do
@@ -431,7 +436,7 @@ local function LayoutTrees()
                 if pn and pn.col == n.col and pn.row < n.row then
                     li = li + 1
                     local ln = tf.lines[li]
-                    if not ln then ln = W.Texture(tf, "ARTWORK", T.line); tf.lines[li] = ln end
+                    if not ln then ln = W.Texture(tf, "ARTWORK", { 0.85, 0.68, 0.25, 0.75 }); tf.lines[li] = ln end -- arrows in soft gold
                     ln:ClearAllPoints()
                     ln:SetWidth(2)
                     ln:SetPoint("TOP", tf, "TOPLEFT", ox + pn.col * pitch + icon / 2, oy - pn.row * pitch - icon)
@@ -520,7 +525,8 @@ function Paint()
     local count, spent, bad, level, valid = Simulate(plan.points)
     for _, tf in ipairs(treeFrames) do
         if tf:IsShown() and tf.group then
-            tf.name:SetText(("%s  |cffffffff%d|r"):format(tf.group.name, spent[tf.group] or 0))
+            local pts = spent[tf.group] or 0
+            tf.name:SetText(("%s  %s%d|r"):format(tf.group.name, pts > 0 and "|cffff9933" or "|cff8a8a8a", pts))
         end
     end
     for id, b in pairs(buttons) do
@@ -621,6 +627,18 @@ local function Box(mode)
         eb:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
         sf:SetScrollChild(eb)
         box.sf, box.eb = sf, eb
+        local nm = CreateFrame("EditBox", nil, box)
+        nm:SetSize(WIN_W - 30, 24)
+        nm:SetPoint("TOPLEFT", 10, -52)
+        nm:SetAutoFocus(false)
+        nm:SetFont(STANDARD_TEXT_FONT, 12, "")
+        nm:SetTextInsets(6, 6, 0, 0)
+        nm:SetMaxLetters(40)
+        W.Texture(nm, "BACKGROUND", T.field):SetAllPoints()
+        W.Border(nm, 1, T.border)
+        nm:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
+        nm:SetScript("OnEnterPressed", function() box.ok:Click() end)
+        box.name = nm
         box.ok = W.Button(box, 100, 22, "OK", true)
         box.ok:SetPoint("BOTTOMRIGHT", -10, 10)
         box.cancel = W.Button(box, 80, 22, "Close")
@@ -629,6 +647,16 @@ local function Box(mode)
         box.rows = {}
     end
     for _, r in ipairs(box.rows) do r:Hide() end
+    -- Save only needs a name: a short box at the top of the list; the others use the whole list area
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", win.list, "TOPLEFT")
+    if mode == "save" then
+        box:SetPoint("TOPRIGHT", win.list, "TOPRIGHT")
+        box:SetHeight(122)
+    else
+        box:SetPoint("BOTTOMRIGHT", win.list, "BOTTOMRIGHT")
+    end
+    box.name:Hide()
     box.sf:Show()
     box.ok:Show()
     box.eb:SetText("")
@@ -658,13 +686,15 @@ local function Box(mode)
         end)
     elseif mode == "save" then
         box.title:SetText("Save plan")
-        box.note:SetText("Type a name and press Save. A plan with the same name is replaced.")
-        box.eb:SetText(plan.name or "")
-        box.eb:SetFocus()
-        box.eb:HighlightText()
+        box.note:SetText("Type a name and press Save (or Enter). A plan with the same name is replaced.")
+        box.sf:Hide()
+        box.name:Show()
+        box.name:SetText(plan.name or "")
+        box.name:SetFocus()
+        box.name:HighlightText()
         box.ok:SetLabel("Save")
         box.ok:SetScript("OnClick", function()
-            local name = (box.eb:GetText() or ""):gsub("[\r\n]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+            local name = (box.name:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
             if name == "" then return end
             local copy = {}
             for i, id in ipairs(plan.points) do copy[i] = id end
@@ -740,10 +770,38 @@ local function BuildWindow()
     W.Texture(win, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
     W.Border(win, 1, T.border)
 
-    -- trees: left part
+    -- trees: left part, over the game's own class artwork (the same picture the talents window shows)
     win.trees = CreateFrame("Frame", nil, win)
     win.trees:SetPoint("TOPLEFT", 12, -12)
     win.trees:SetPoint("BOTTOMRIGHT", -(SIDE_W + 24), 34)
+    win.art = win:CreateTexture(nil, "BACKGROUND", nil, 2)
+    win.art:SetAllPoints(win.trees)
+    local atlas
+    local specVis = _G.SpecializationVisuals
+    local classID = select(3, UnitClass("player"))
+    if specVis then
+        for _, v in pairs(specVis) do
+            if v.background and v.background:lower():find(CLASS:lower(), 1, true) then atlas = v.background; break end
+        end
+    end
+    atlas = atlas or ("talent-background-" .. CLASS:lower())
+    local okArt = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas)
+    if okArt then
+        win.art:SetAtlas(atlas)
+    else
+        win.art:SetColorTexture(0, 0, 0, 0)
+    end
+    -- a soft dark wash at the top so the tree names read well
+    win.shade = win:CreateTexture(nil, "BACKGROUND", nil, 3)
+    win.shade:SetPoint("TOPLEFT", win.trees, "TOPLEFT")
+    win.shade:SetPoint("TOPRIGHT", win.trees, "TOPRIGHT")
+    win.shade:SetHeight(60)
+    win.shade:SetColorTexture(1, 1, 1, 1)
+    if win.shade.SetGradient and CreateColor then
+        win.shade:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0.6))
+    else
+        win.shade:SetColorTexture(0, 0, 0, 0.3)
+    end
     win.status = W.Text(win, 11, T.dim)
     win.status:SetPoint("BOTTOMLEFT", 14, 12)
     win.status:SetPoint("RIGHT", win.trees, "RIGHT", 0, 0)
