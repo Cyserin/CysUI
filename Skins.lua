@@ -1561,6 +1561,12 @@ local function SkinQuestDialog()
             p:HookScript("OnShow", function() Safe(PaintQuestDialog) end)
         end
     end
+    -- The game shows the greeting / detail panel BEFORE the window itself, so on first open the panel's paint thinks
+    -- the text sits on the map's parchment and uses dark ink. Paint again once the window is really open.
+    f:HookScript("OnShow", function()
+        Safe(PaintQuestDialog)
+        if C_Timer and C_Timer.After then C_Timer.After(0, function() Safe(PaintQuestDialog) end) end
+    end)
     local panel = Panel(f, 11, -12, -30, 60)
     if CysUICompat and CysUICompat.isForever then FitPanelToButtons(f, panel, 0, 0) end -- Forever: new window shape
     SkinClose(Get("QuestFrameCloseButton"), panel)

@@ -493,6 +493,71 @@ local function SetupMover()
 end
 
 --------------------------------------------------------------------------------
+-- Battle.net pop-ups (friend online / offline, invites) in the Cys look: a dark flat plate, the theme edge
+-- with a gold stripe on the left, and the friend's name in gold. Art only: Blizzard's backdrop pieces are
+-- faded, nothing of theirs is moved, replaced or re-scripted (OnShow is only hooked).
+--------------------------------------------------------------------------------
+local TOAST_PIECES = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner",
+                       "TopEdge", "BottomEdge", "LeftEdge", "RightEdge", "Center" }
+local toastDone = setmetatable({}, { __mode = "k" })
+
+local function FadeToastArt(toast)
+    for _, key in ipairs(TOAST_PIECES) do
+        local t = toast[key]
+        if t and t.SetAlpha then t:SetAlpha(0) end
+    end
+end
+
+-- the name line: drop Blizzard's blue color code and show it in gold (the text is set before the pop-up shows)
+local function GoldName(toast)
+    local line = toast.TopLine
+    if not (line and line:IsShown()) then return end
+    local txt = line:GetText()
+    if type(txt) ~= "string" or txt == "" then return end
+    local plain = txt:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    if plain ~= txt then line:SetText(plain) end
+    line:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+end
+
+local function SkinToast(toast)
+    if not toast or toastDone[toast] then return end
+    toastDone[toast] = true
+    FadeToastArt(toast)
+    W.Texture(toast, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.94 }, -8):SetAllPoints()
+    W.Border(toast, 1, T.border, "ARTWORK", 7)
+    local stripe = W.Texture(toast, "ARTWORK", T.border, 7)
+    stripe:SetPoint("TOPLEFT", 1, -1)
+    stripe:SetPoint("BOTTOMLEFT", 1, 1)
+    stripe:SetWidth(2)
+    if toast.glow and toast.glow.SetVertexColor then toast.glow:SetVertexColor(T.accent[1], T.accent[2], T.accent[3]) end
+    toast:HookScript("OnShow", function(self)
+        FadeToastArt(self)
+        pcall(GoldName, self)
+    end)
+end
+
+local TOASTS = { "BNToastFrame", "TimeAlertFrame", "ShardTransferImminentFrame" }
+function Chat.SkinToasts()
+    local missing = false
+    for _, name in ipairs(TOASTS) do
+        if _G[name] then Guarded(name, SkinToast, _G[name]) else missing = true end
+    end
+    -- on some clients the pop-ups come with a Blizzard add-on that loads a little later
+    if missing and not Chat.toastWatch then
+        local f = CreateFrame("Frame")
+        Chat.toastWatch = f
+        f:RegisterEvent("ADDON_LOADED")
+        f:SetScript("OnEvent", function(_, _, name)
+            if name == "Blizzard_BNet" or name == "Blizzard_SocialToast" then
+                for _, n in ipairs(TOASTS) do
+                    if _G[n] then Guarded(n, SkinToast, _G[n]) end
+                end
+            end
+        end)
+    end
+end
+
+--------------------------------------------------------------------------------
 -- Start-up
 --------------------------------------------------------------------------------
 function Chat.Enable()
@@ -511,6 +576,7 @@ function Chat.Enable()
     if db.classColors then Guarded("class colors", Chat.ApplyColors, Chat, true) end
     if db.timestamps then Guarded("timestamps", Chat.ApplyTimestamps, Chat) end
     Guarded("layout", SetupMover)
+    if db.toastSkin ~= false then Guarded("toast skin", Chat.SkinToasts) end
 end
 
 CUI:RegisterModule({
@@ -549,12 +615,15 @@ CUI:RegisterPage("Chat", function(page)
     Check("Restyle the chat windows", "skin", -214)
     Check("Hide the scroll and menu buttons", "hideButtons", -240)
     Check("Chat tabs always visible, gold line under the active one", "tabsSolid", -266)
+    local toast = W.Checkbox(page, "Battle.net pop-ups in the Cys look", function() return db.toastSkin ~= false end,
+        function(on) db.toastSkin = on end)
+    toast:SetPoint("TOPLEFT", 4, -292)
 
     local copy = W.Button(page, 110, 22, "Copy chat")
-    copy:SetPoint("TOPLEFT", 4, -306)
+    copy:SetPoint("TOPLEFT", 4, -332)
     copy:SetScript("OnClick", function() Chat:ShowCopy(1) end)
 
-    local note = W.Notes(page, 4, -344, width, "", {
+    local note = W.Notes(page, 4, -370, width, "", {
             "Chat window 1 can be moved and resized in layout mode.",
             "Every chat window also has a small Copy button in its top-right corner.",
             "If anything looks off, untick Chat under Modules and reload: the game's own chat comes straight back.",

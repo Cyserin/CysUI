@@ -12,12 +12,13 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Group loot boxes** *(layout)*: skins Blizzard's Need / Greed roll boxes.
 
 ## Interface
-- **Chat** *(layout)*: flat, gold-edged windows with a Copy button, class-colored names and timestamps.
+- **Chat** *(layout)*: flat, gold-edged windows with a Copy button, class-colored names and timestamps. Battle.net pop-ups in the Cys look, shown above the chat tabs.
 - **Tooltips** *(layout)*: flat gold-edged, rarity borders, class-colored names, vendor sell price, movable.
 - **Minimap** *(layout)*: square, zone bar, coordinates, mouse-wheel zoom. **Minimap Button** gathers every other addon's minimap button behind one Cys button.
 - **Info bar** *(layout)*: combat timer, guild and friends online, durability, bag slots, gold, FPS and latency, clock. Can be split across a main bar and a bar under the minimap.
 - **Micro menu** *(layout)*: a text menu for Character, Spells, Talents, Quests, Social, Guild, Bags, Menu.
 - **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
+- **Your Characters**: a minimap button (or `/cuichars`) opens a window with the rested XP of all your characters, worked out while they are logged out, and when each will be full.
 - **UI scale**: pixel-perfect scale for your resolution.
 - **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`.
 - **Layout mode**: drag and resize everything, snap to a grid, reset one or all.

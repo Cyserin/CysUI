@@ -2158,6 +2158,7 @@ function CysBags:CreateFrames()
         if SOUNDKIT and SOUNDKIT.IG_BACKPACK_CLOSE then PlaySound(SOUNDKIT.IG_BACKPACK_CLOSE) end
         frame:StopMovingOrSizing()
         sb:ClearFocus()
+        if sb:GetText() ~= "" then sb:SetText("") end -- reopen with no search (clears the game's bag search too)
         CysBags.bagFilter = nil -- reopen showing every bag
         CysBags:ClearRecent() -- New Items empties once you have seen them
         if CysBags.editor then CysBags.editor:Hide() end

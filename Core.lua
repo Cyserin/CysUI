@@ -523,9 +523,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.14",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.15",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.15", date = "2026-11-12",
+              added = {
+                  "Your Characters: a new minimap button (or /cuichars) opens a small window with the rested XP of every character you have logged in on, how rested each one is now and when it will be fully rested, best first. Characters you are not on are worked out from when they logged out (faster for ones that logged out in an inn or city, marked zzz). Shift + right-click a row to forget a character. Settings on the Characters page.",
+                  "Battle.net pop-ups (friend online / offline, invites) now have the Cys look: a dark flat plate, the theme edge with a gold stripe, and the friend's name in gold. Switch on the Chat page.",
+              },
+              fixed = {
+                  "Quest window: the greeting text and the Current Quests / Available Quests headings no longer show in dark ink when you first talk to a quest giver.",
+                  "Cys's Bags: the search is cleared when you close your bags.",
+              },
+            },
             { version = "0.58.14", date = "2026-11-12",
               added = {
                   "Interrupt announcer now works on WoW Forever too. Forever has no combat log for addons, so it watches your own interrupt spells (Kick, Pummel, Shield Bash, Earth Shock, Counterspell, Silence, Spell Lock, Feral Charge) and your target or focus having its cast cut short a moment later. When the game keeps the enemy spell hidden, the line leaves it out (Interrupted Defias Pillager!).",
