@@ -14,16 +14,16 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.16",
+    version = "0.58.17",
     items = {
-        { title = "Gold and currencies on all your characters", page = "Characters", module = "characters",
-          icon = "Interface\\Icons\\INV_Misc_Coin_02",
-          text = "The Your Characters window now has Gold and Currencies tabs: the gold on every character with the total, and the currencies each character holds.",
-          where = "Click the Your Characters minimap button or type /cuichars gold." },
-        { title = "Spot other Cys's UI users", page = "Cys's UI Users", module = "hello",
-          icon = "Interface\\Icons\\INV_Misc_GroupNeedMore",
-          text = "Players in your group or guild who also run Cys's UI get a Cys's UI line on their tooltip, with their version. Only the version is shared.",
-          where = "Interface > Cys's UI Users. /cuiusers lists who has been seen." },
+        { title = "Queued strikes on the swing timer", page = "Swing Timer", module = "swing",
+          icon = "Interface\\Icons\\Ability_Rogue_Ambush",
+          text = "While Heroic Strike, Cleave, Maul or Raptor Strike waits for your next swing, the swing timer turns orange and shows its name.",
+          where = "Frames & Combat > Swing Timer." },
+        { title = "Vehicle Exit button", page = "Vehicle Exit", module = "vehicleexit",
+          icon = "Interface\\Vehicles\\UI-Vehicles-Button-Exit-Up",
+          text = "A Leave button for vehicles and flight paths that you place yourself in Layout mode.",
+          where = "Move it in Layout mode (Vehicle Exit). Frames & Combat > Vehicle Exit." },
     },
 }
 

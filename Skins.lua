@@ -1498,21 +1498,45 @@ if GetMaterialTextColors then
     if ok and type(title) == "table" and title[1] then PARCHMENT_TITLE = { title[1], title[2], title[3] } end
 end
 
+-- The NPC greeting (its text, the Current / Available Quests headings and the quest list) only ever shows in the
+-- dark NPC window, never on the map's parchment, so it is always painted light - also when the window swaps panels
+-- without closing (turn in a quest and the NPC has another one), when the parchment check can't tell.
+local SKIN_LIGHT = LIGHT
+local function PaintGreeting()
+    for _, fs in ipairs({ Get("CurrentQuestsText"), Get("AvailableQuestsText"), Get("QuestFrameNpcNameText") }) do
+        SetColor(fs, T.accent)
+    end
+    SetColor(Get("GreetingText"), SKIN_LIGHT)
+    for i = 1, 32 do -- the list of quests an NPC offers / wants back
+        local b = Get("QuestTitleButton" .. i)
+        local fs = b and b.GetFontString and b:GetFontString()
+        if fs then SetColor(fs, SKIN_LIGHT); LightenInlineBlack(fs) end
+    end
+    -- WoW Forever builds that list from a pool of unnamed buttons, written in parchment ink
+    local gp = Get("QuestFrameGreetingPanel")
+    local pool = gp and gp.titleButtonPool
+    if pool and pool.EnumerateActive then
+        for b in pool:EnumerateActive() do
+            local fs = b.GetFontString and b:GetFontString()
+            if fs then SetColor(fs, SKIN_LIGHT); LightenInlineBlack(fs) end
+        end
+    end
+end
+
 local function PaintQuestDialog()
+    PaintGreeting()
     local parchment = QuestTextOnParchment()
     local gold = parchment and PARCHMENT_TITLE or T.accent
     local LIGHT = parchment and PARCHMENT_TEXT or LIGHT
     local rf = Get("QuestInfoRewardsFrame")
     for _, fs in ipairs({ Get("QuestInfoTitleHeader"), Get("QuestInfoDescriptionHeader"), Get("QuestInfoObjectivesHeader"),
-        rf and rf.Header, Get("QuestProgressTitleText"), Get("QuestProgressRequiredItemsText"),
-        Get("CurrentQuestsText"), Get("AvailableQuestsText"), Get("QuestFrameNpcNameText") }) do
+        rf and rf.Header, Get("QuestProgressTitleText"), Get("QuestProgressRequiredItemsText") }) do
         SetColor(fs, gold)
     end
     for _, fs in ipairs({ Get("QuestInfoDescriptionText"), Get("QuestInfoObjectivesText"), Get("QuestInfoGroupSize"),
         Get("QuestInfoRewardText"), Get("QuestInfoSpellObjectiveLearnLabel"), Get("QuestInfoRequiredMoneyText"),
         rf and rf.ItemChooseText, rf and rf.ItemReceiveText, rf and rf.PlayerTitleText,
-        rf and rf.XPFrame and rf.XPFrame.ReceiveText, Get("QuestProgressText"), Get("QuestProgressRequiredMoneyText"),
-        Get("GreetingText") }) do
+        rf and rf.XPFrame and rf.XPFrame.ReceiveText, Get("QuestProgressText"), Get("QuestProgressRequiredMoneyText") }) do
         SetColor(fs, LIGHT)
     end
     if rf and rf.spellHeaderPool then
@@ -1524,20 +1548,6 @@ local function PaintQuestDialog()
         if fs then
             local r = fs:GetTextColor()
             if type(r) == "number" and r > 0.1 and r < 0.5 then SetColor(fs, { 0.40, 0.85, 0.40 }) else SetColor(fs, { 0.95, 0.95, 0.95 }) end
-        end
-    end
-    for i = 1, 32 do -- the list of quests an NPC offers / wants back
-        local b = Get("QuestTitleButton" .. i)
-        local fs = b and b.GetFontString and b:GetFontString()
-        if fs then SetColor(fs, LIGHT); LightenInlineBlack(fs) end
-    end
-    -- WoW Forever builds that list from a pool of unnamed buttons, written in parchment ink
-    local gp = Get("QuestFrameGreetingPanel")
-    local pool = gp and gp.titleButtonPool
-    if pool and pool.EnumerateActive then
-        for b in pool:EnumerateActive() do
-            local fs = b.GetFontString and b:GetFontString()
-            if fs then SetColor(fs, LIGHT); LightenInlineBlack(fs) end
         end
     end
 end
@@ -1558,7 +1568,11 @@ local function SkinQuestDialog()
         local p = Get(n)
         if p then
             Strip(p)
-            p:HookScript("OnShow", function() Safe(PaintQuestDialog) end)
+            p:HookScript("OnShow", function()
+                Safe(PaintQuestDialog)
+                -- Blizzard sets some colours after the panel shows: paint again next frame
+                if C_Timer and C_Timer.After then C_Timer.After(0, function() Safe(PaintQuestDialog) end) end
+            end)
         end
     end
     -- The game shows the greeting / detail panel BEFORE the window itself, so on first open the panel's paint thinks

@@ -8,6 +8,7 @@
 -- Settings live in CysUIDB.friends and on the Friends page of /cui.
 --------------------------------------------------------------------------------
 local CUI = CysUI
+local lastMOTD -- guild message of the day, read out of combat
 local W = CUI.W
 local T = W.T
 
@@ -632,7 +633,12 @@ local function Rebuild()
             end
             table.sort(on, ByRank)
             table.sort(off, SortName)
-            local motd = GetGuildRosterMOTD and GetGuildRosterMOTD() or ""
+            -- WoW Forever: the guild message of the day is locked during a fight; show the last one read
+            if not InCombatLockdown() and GetGuildRosterMOTD then
+                local ok, m = pcall(GetGuildRosterMOTD)
+                if ok and type(m) == "string" then lastMOTD = m end
+            end
+            local motd = lastMOTD or ""
             if motd ~= "" and q == "" then
                 view[#view + 1] = { kind = "motd", guild = (GetGuildInfo and GetGuildInfo("player")) or "Guild", text = motd }
             end

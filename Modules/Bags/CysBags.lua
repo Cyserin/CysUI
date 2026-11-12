@@ -972,7 +972,10 @@ function CysBags:FitHeight(contentH)
     if not (frame and AutoSize()) or self.fitting then return end
     local want = HEADER_H + FOOTER_H + PAD * 2 + 2 + contentH + 6 -- a few pixels spare so the list never scrolls
     local minH = max(HEADER_H + FOOTER_H + (self.sidebarH or 320), 200) -- the sidebar's rows must still fit
-    local maxH = floor((UIParent:GetHeight() or 900) * 0.85)
+    -- grow to fit, but only up to the tallest height chosen on the Automation page; more items than that scroll
+    local auto = CysUIDB and CysUIDB.automation
+    local tallest = (auto and tonumber(auto.bagsMaxH)) or 650
+    local maxH = floor(min((UIParent:GetHeight() or 900) * 0.85, tallest))
     want = floor(max(minH, min(want, maxH)) + 0.5)
     if math.abs((frame:GetHeight() or 0) - want) < 1 then return end
     self.fitting = true

@@ -32,6 +32,7 @@ local DEFAULTS = {
     autoBags = true,         -- open Cys's Bags at a vendor / bank / mailbox / Auction House, close them after
     hideEmptyBagCats = true, -- Cys's Bags sidebar leaves out empty categories
     bagsAutoSize = true,     -- Cys's Bags grows to fit its items (no scrolling)
+    bagsMaxH = 650,          -- ...but no taller than this; more items scroll
     acceptInvites = false,   -- accept group invites from friends and guildmates
     questAnnounce = false,   -- tell the party when one of your quests is ready to turn in
     bagSplit = true,         -- Cys's Bags: own split box on Shift-click (type a number, split to a free slot)
@@ -714,6 +715,11 @@ CUI:RegisterPage("Automation", function(page)
     Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
     local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
     fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)
+    W.Stepper(page, "Cys's Bags: tallest height", function() return db.bagsMaxH end, function(v)
+        db.bagsMaxH = v
+        if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end
+    end, 300, 1000, 25, " px"):SetPoint("TOPLEFT", 4, y)
+    y = y - 28
     Check("Accept resurrections (not while the caster is still fighting)", "autoResurrect")
     Check("Skip cinematics (hold Shift when one starts to watch it)", "skipCinematics")
     Check("Hide red error messages (bag full and similar still show)", "hideErrors"):HookScript("OnClick", function() pcall(CUI.ApplyErrorFilter) end)
@@ -735,6 +741,7 @@ CUI:RegisterPage("Automation", function(page)
         { "Auto release", "waits if you have a Soulstone or Reincarnation, so you can still use it." },
         { "Fast loot", "follows the game's auto-loot setting and the auto-loot key." },
         { "Resurrections", "are accepted a moment after the offer, unless the caster is still in combat; then the normal pop-up stays." },
+        { "Bags height", "with grow to fit on, the bags grow with your items up to the tallest height, then scroll. Dragging the corner grip sets your own height instead." },
         { "Red errors", "hides messages like Not enough rage and Out of range. Bags full, quest log full and not enough money still show." },
         { "Level check", "works while your group is listed in Looking For Group (using the listed dungeon) and inside the dungeon. It shows when someone joins; close it with the X and move it in layout mode." },
     })

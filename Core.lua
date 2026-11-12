@@ -523,9 +523,21 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.16",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.17",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.17", date = "2026-11-12",
+              added = {
+                  "Swing Timer: while Heroic Strike, Cleave, Maul or Raptor Strike is queued for your next swing, the main hand line turns orange and shows its name, so you can see it will go off with the swing. Switch on the Swing Timer page.",
+                  "Vehicle Exit: a Leave button of our own for vehicles and flight paths (on a flight path it asks to land at the next stop). Move it in Layout mode (Vehicle Exit); size on the Vehicle Exit page. The game's own button is faded and click-through while it is on.",
+                  "Nameplates: Auto threat colors now count you as a tank when no group role is set (always the case solo) and you are a Warrior or Paladin with most of your talent points in Protection, or a Druid in Bear Form. A group role of Damage or Healer still wins.",
+                  "Cys's Bags: with grow to fit on, the bags now stop at a tallest height (650 px by default, set on the Automation page) and scroll after that, instead of growing down the screen.",
+              },
+              fixed = {
+                  "Friends: opening the Guild tab during a fight no longer causes a blocked-action error (the guild message of the day is read out of combat).",
+                  "Quest window: the greeting text and the Current Quests / Available Quests headings no longer turn dark when the window reopens right after a turn-in.",
+              },
+            },
             { version = "0.58.16", date = "2026-11-12",
               added = {
                   "Your Characters: the window now has three tabs. Gold lists the gold on every character, the richest first, with the total of all your characters at the bottom (also shown on the minimap button tooltip). Currencies lists the currencies each character holds (they stay with that character); hover a character to see them by name. Gold and currencies are saved whenever they change, so log in on each character once to fill the list. /cuichars gold and /cuichars currencies open the window on that tab.",

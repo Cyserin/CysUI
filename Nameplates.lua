@@ -120,13 +120,33 @@ local function HasRockbiter()
     return false
 end
 
+-- Warriors and Paladins whose most talent points are in Protection
+local PROT_TAB = { WARRIOR = 3, PALADIN = 2 }
+local function ProtectionBuild()
+    local tab = PROT_TAB[playerClass]
+    if not tab then return false end
+    local prot, best = TalentPoints(tab), 0
+    for i = 1, 3 do if i ~= tab then best = max(best, TalentPoints(i)) end end
+    return prot > 0 and prot > best
+end
+
+-- Druids in Bear Form / Dire Bear Form
+local function InBearForm()
+    if playerClass ~= "DRUID" then return false end
+    local id = GetShapeshiftFormID and GetShapeshiftFormID()
+    if id == 5 or id == 8 then return true end
+    return HasBuffNamed(5487) or HasBuffNamed(9634)
+end
+
 local function DetectRole()
     -- 1. the role you picked for your group (Group Finder / right-click a party member > Set Role)
     local r = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
     if r == "TANK" then return "tank", "your group role is Tank" end
-    -- 2. a Shaman with Rockbiter Weapon on is tanking (unless you set Damage or Healer for the group)
-    if r ~= "DAMAGER" and r ~= "HEALER" and HasRockbiter() then return "tank", "Rockbiter Weapon is on" end
     if r == "DAMAGER" or r == "HEALER" then return "dps", "your group role is " .. (r == "HEALER" and "Healer" or "Damage") end
+    -- 2. no role picked (always the case while solo): read it from what you are doing
+    if HasRockbiter() then return "tank", "Rockbiter Weapon is on" end
+    if InBearForm() then return "tank", "you are in Bear Form" end
+    if ProtectionBuild() then return "tank", "most of your talent points are in Protection" end
     return "dps", "no group role set"
 end
 function NP.RefreshRole()
@@ -892,6 +912,8 @@ CUI:RegisterPage("Nameplates", function(page)
         { "Damage", "orange when a mob is on you" },
         { "Healer", "the same as Damage: healers don't hold threat, so a mob on you is the warning that matters" },
         { "Shaman with Rockbiter Weapon on", "Tank, unless you set Damage or Healer for your group" },
+        { "Warrior or Paladin with most points in Protection", "Tank, unless you set Damage or Healer for your group" },
+        { "Druid in Bear Form", "Tank, unless you set Damage or Healer for your group" },
         { "No role set", "the same as Damage" },
     }
     local rows = {}

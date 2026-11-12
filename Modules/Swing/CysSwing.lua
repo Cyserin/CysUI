@@ -23,7 +23,7 @@ local Secret = CysUICompat.Secret
 CysUIDB.swing = CysUIDB.swing or {}
 local db = CysUIDB.swing
 local DEFAULTS = { width = 240, height = 8, match = true, show = "combat", text = false, fontSize = 10,
-    offhand = true, ranged = true, spark = true, color = "gold" }
+    offhand = true, ranged = true, spark = true, color = "gold", queued = true }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
@@ -119,7 +119,8 @@ local function Layout()
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -n * (h + GAP))
             row:SetSize(w, h)
-            row.bar:SetStatusBarColor(r, g, b, kind == MAIN and 1 or 0.75)
+            if kind == MAIN and row.queued then row.bar:SetStatusBarColor(1, 0.5, 0.12, 1) -- a queued strike (below)
+            else row.bar:SetStatusBarColor(r, g, b, kind == MAIN and 1 or 0.75) end
             row.text:SetFont(STANDARD_TEXT_FONT, db.fontSize, "OUTLINE")
             row.text:SetShown(db.text and h >= 8)
             row:Show()
@@ -190,14 +191,66 @@ local function Swing(duration, kind)
     end
 end
 
+--------------------------------------------------------------------------------
+-- "On next swing" abilities (Heroic Strike, Cleave, Maul, Raptor Strike): while one is queued the main hand line
+-- turns orange and names it, so you can see it will land with the next swing.
+--------------------------------------------------------------------------------
+local NEXT_SWING = { 78, 845, 6807, 2973 } -- Heroic Strike, Cleave, Maul, Raptor Strike (any rank: checked by name)
+local QUEUE_COLOR = { 1, 0.5, 0.12 }
+local nextNames
+local function NextSwingNames()
+    if nextNames then return nextNames end
+    nextNames = {}
+    for _, id in ipairs(NEXT_SWING) do
+        local name = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or (GetSpellInfo and GetSpellInfo(id))
+        if name then nextNames[#nextNames + 1] = name end
+    end
+    return nextNames
+end
+
+local function IsQueued(name)
+    local ok, on
+    if C_Spell and C_Spell.IsCurrentSpell then ok, on = pcall(C_Spell.IsCurrentSpell, name)
+    elseif IsCurrentSpell then ok, on = pcall(IsCurrentSpell, name) end
+    return ok and not Secret(on) and on and true or false
+end
+
+local queuedLabel
+local function UpdateQueued()
+    local row = rows[MAIN]
+    if not queuedLabel then
+        queuedLabel = row.text:GetParent():CreateFontString(nil, "OVERLAY")
+        queuedLabel:SetPoint("LEFT", 3, 0)
+    end
+    local queued
+    if db.queued then
+        for _, name in ipairs(NextSwingNames()) do
+            if IsQueued(name) then queued = name break end
+        end
+    end
+    local r, g, b = FillColor()
+    if queued then r, g, b = QUEUE_COLOR[1], QUEUE_COLOR[2], QUEUE_COLOR[3] end
+    row.queued = queued
+    row.bar:SetStatusBarColor(r, g, b, 1)
+    if queued and db.height >= 7 then
+        queuedLabel:SetFont(STANDARD_TEXT_FONT, max(7, min(db.fontSize, db.height + 2)), "OUTLINE")
+        queuedLabel:SetText(queued)
+        queuedLabel:Show()
+    else
+        queuedLabel:Hide()
+    end
+end
+
 local function Refresh()
     Layout()
     UpdateShown()
+    UpdateQueued()
 end
 if type(CUI.SetLayoutMode) == "function" then hooksecurefunc(CUI, "SetLayoutMode", UpdateShown) end
 
 local ev = CreateFrame("Frame")
-for _, event in ipairs({ "PLAYER_SWING", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
+for _, event in ipairs({ "PLAYER_SWING", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+                         "CURRENT_SPELL_CAST_CHANGED" }) do
     pcall(ev.RegisterEvent, ev, event)
 end
 pcall(ev.RegisterUnitEvent, ev, "UNIT_INVENTORY_CHANGED", "player")
@@ -205,6 +258,9 @@ pcall(ev.RegisterUnitEvent, ev, "UNIT_ATTACK_SPEED", "player")
 ev:SetScript("OnEvent", function(_, event, a, b)
     if event == "PLAYER_SWING" then
         Swing(a, b)
+        C_Timer.After(0.05, UpdateQueued) -- the queued strike went off with this swing
+    elseif event == "CURRENT_SPELL_CAST_CHANGED" then
+        UpdateQueued()
     elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
         UpdateShown()
     else
@@ -258,6 +314,7 @@ CUI:RegisterPage("Swing Timer", function(page)
     Check("A line for your ranged weapon while you shoot", "ranged")
     Check("Bright tick at the front of the bar", "spark")
     Check("Show the time left (lines 8 px or taller)", "text")
+    Check("Turn orange while Heroic Strike / Cleave is queued", "queued")
     Step("Text size", "fontSize", 7, 18, 1)
     y = y - 6
 
@@ -277,6 +334,7 @@ CUI:RegisterPage("Swing Timer", function(page)
     local note = W.Notes(page, 4, y, width, "", {
         { "On top of the Resource Bar", "with Match ticked on both pages the two bars are the same width: drag Swing Timer onto the Resource Bar's top edge in Layout mode." },
         { "The game's own swing timer", "is separate (the game's Options). Switch it off there if you only want this one." },
+        { "Queued strikes", "Heroic Strike, Cleave, Maul and Raptor Strike wait for your next swing. While one is queued the main hand line turns orange and shows its name (lines 7 px or taller)." },
         "The bar only animates while a swing is running, so it costs nothing out of combat.",
     })
     y = y - ((note and note.GetHeight and note:GetHeight() or 80) + 12)
