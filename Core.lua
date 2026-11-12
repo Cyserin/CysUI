@@ -544,6 +544,8 @@ if CysChangelog then
                   "Battle.net pop-ups (friend online / offline) now show above the chat tabs instead of off the left edge of the screen.",
                   "Cys's Bags: gear you take off is no longer listed under New Items.",
                   "Fixed a stutter on mouse clicks: the right-click menu skin looked through every frame in the game after each click; it now only looks at the menu that opened.",
+                  "Conflicts: Details! Damage Meter is now noticed, so you can pick it or Cys's Damage Meter instead of running both.",
+                  "Conflicts (Forever): picking Cys's version now really switches the other addon off (it kept loading, so the window asked again after every reload). Review conflicts now also closes the settings window so the conflicts window is not hidden behind it.",
               },
             },
             { version = "0.58.13", date = "2026-11-11",

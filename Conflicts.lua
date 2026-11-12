@@ -43,6 +43,7 @@ local LIST = {
     { addon = "Chatter",            label = "Chatter",            modules = { "chat" } },
     { addon = "Prat-3.0",           label = "Prat",               match = "^Prat", modules = { "chat" } },
     { addon = "Quartz",             label = "Quartz",             modules = { "castbar" } },
+    { addon = "Details",            label = "Details! Damage Meter", match = "^Details", modules = { "meter" } },
     { addon = "MinimapButtonButton", label = "MinimapButtonButton", match = "^MinimapButtonButton", modules = { "mmbuttons" } },
     { addon = "MBB",                label = "Minimap Button Bag", modules = { "mmbuttons" } },
     { addon = "SexyMap",            label = "SexyMap",            modules = { "minimap" } },
@@ -103,10 +104,13 @@ local function Apply(found, choice, noReload)
             if pick == "theirs" then off[key] = true end
         end
         if pick == "cys" then
-            local me = UnitName("player")
+            -- WoW Forever wants the character's GUID here (a name is silently ignored); Classic Era takes the name
+            local me = (CysUICompat.isForever and UnitGUID("player")) or UnitName("player")
             for _, folder in ipairs(Folders(c)) do pcall(DisableAddOn, folder, me) end
         end
     end
+    -- keep the change through the reload (Blizzard's own AddOns list saves the same way)
+    if AddOns and AddOns.SaveAddOns then pcall(AddOns.SaveAddOns) end
     for key in pairs(covered) do CUI:SetModuleEnabled(key, not off[key]) end
     if not noReload then CysUICompat.Reload() end
 end
@@ -120,6 +124,7 @@ local function Build()
     if frame then return frame end
     frame = CreateFrame("Frame", "CysUIConflicts", UIParent)
     frame:SetFrameStrata("DIALOG")
+    frame:SetToplevel(true)
     frame:SetSize(620, 200)
     frame:SetPoint("CENTER", 0, 80)
     frame:SetMovable(true)
@@ -274,7 +279,13 @@ CUI:RegisterPage("Conflicts", function(page)
     info:SetJustifyV("TOP")
     info:SetSpacing(4)
     local btn = W.Button(page, 190, 24, "Review conflicts now", true)
-    btn:SetScript("OnClick", function() CysUIDB.conflictsSnoozed = nil; Show(Found()) end)
+    btn:SetScript("OnClick", function()
+        CysUIDB.conflictsSnoozed = nil
+        -- close the settings window first: the conflicts window would open underneath it
+        local cfg = _G.CysUIConfigFrame
+        if cfg and cfg:IsShown() then cfg:Hide() end
+        Show(Found())
+    end)
     page.refresh = function()
         local found = Found()
         local lines = {}
