@@ -27,6 +27,7 @@ local function DB()
     if db.tooltip == nil then db.tooltip = true end
     if db.chatNote == nil then db.chatNote = false end
     if db.guild == nil then db.guild = true end
+    if db.frameMark == nil then db.frameMark = true end
     db.seen = db.seen or {} -- [Name-Realm] = { v = version, t = last seen }
     return db
 end
@@ -112,11 +113,71 @@ end
 local answered = {} -- [key] = GetTime() of our last answer (this session)
 local noted = {}    -- chat note shown this session
 
+--------------------------------------------------------------------------------
+-- Mark on Cys's UI unit frames (target, focus, party): a small Cys badge in the top-right corner
+--------------------------------------------------------------------------------
+local MARK_ICON = "Interface\\Icons\\INV_Misc_GroupNeedMore"
+local MARKED = { target = true, focus = true, party1 = true, party2 = true, party3 = true, party4 = true }
+
+local function MarkFor(f)
+    if f.cysUserMark then return f.cysUserMark end
+    local m = CreateFrame("Frame", nil, f)
+    m:SetSize(13, 13)
+    m:SetPoint("CENTER", f, "TOPRIGHT", -3, -1)
+    m:SetFrameLevel(f:GetFrameLevel() + 12)
+    local edge = m:CreateTexture(nil, "BACKGROUND")
+    edge:SetAllPoints()
+    edge:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 1)
+    local icon = m:CreateTexture(nil, "ARTWORK")
+    icon:SetPoint("TOPLEFT", 1, -1)
+    icon:SetPoint("BOTTOMRIGHT", -1, 1)
+    icon:SetTexture(MARK_ICON)
+    icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+    m:EnableMouse(true)
+    m:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("Uses Cys's UI " .. (self.version or ""), T.accent[1], T.accent[2], T.accent[3])
+        GameTooltip:Show()
+    end)
+    m:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    m:Hide()
+    f.cysUserMark = m
+    return m
+end
+
+function Hello.UpdateMarks()
+    local UF = CUI.UnitFrames
+    if not (UF and UF.frames) then return end
+    local on = DB().frameMark
+    for _, f in pairs(UF.frames) do
+        local unit = f.unit
+        if unit and MARKED[unit] then
+            local version
+            if on and UnitExists(unit) then
+                local okP, isPlayer = pcall(UnitIsPlayer, unit)
+                if okP and not Compat.Secret(isPlayer) and isPlayer then
+                    local key = KeyFromUnit(unit)
+                    local e = key and key ~= myKey and DB().seen[key]
+                    version = e and e.v
+                end
+            end
+            if version then
+                local m = MarkFor(f)
+                m.version = version
+                m:Show()
+            elseif f.cysUserMark then
+                f.cysUserMark:Hide()
+            end
+        end
+    end
+end
+
 local function Seen(key, version, sender)
     if not key or key == myKey then return end
     local db = DB()
     local first = not db.seen[key]
     db.seen[key] = { v = version, t = Now() }
+    if Hello.UpdateMarks then pcall(Hello.UpdateMarks) end
     if db.chatNote and not noted[key] and (first or UnitInParty(Ambiguate(sender, "none")) or
         UnitInRaid(Ambiguate(sender, "none"))) then
         noted[key] = true
@@ -188,6 +249,8 @@ function Hello.Enable()
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
     f:RegisterEvent("GROUP_ROSTER_UPDATE")
     f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    pcall(f.RegisterEvent, f, "PLAYER_TARGET_CHANGED")
+    pcall(f.RegisterEvent, f, "PLAYER_FOCUS_CHANGED")
     local greeted = false
     f:SetScript("OnEvent", function(_, ev, ...)
         if ev == "CHAT_MSG_ADDON" then
@@ -203,6 +266,9 @@ function Hello.Enable()
         elseif ev == "GROUP_ROSTER_UPDATE" then
             if greeted then GroupGrew() end
             if not IsInGroup() then lastGroupSize = 0 end
+            C_Timer.After(0.2, function() pcall(Hello.UpdateMarks) end)
+        elseif ev == "PLAYER_TARGET_CHANGED" or ev == "PLAYER_FOCUS_CHANGED" then
+            pcall(Hello.UpdateMarks)
         elseif ev == "PLAYER_REGEN_ENABLED" then
             if pendingGroup or pendingGuild then Flush() end
         end
@@ -251,10 +317,13 @@ CUI:RegisterPage("Cys's UI Users", function(page)
     local cn = W.Checkbox(page, "Chat note when a Cys's UI user joins your group", function() return db.chatNote end,
         function(on) db.chatNote = on end)
     cn:SetPoint("TOPLEFT", 4, -86)
+    local fm = W.Checkbox(page, "Small Cys mark on their target, focus and party frames",
+        function() return db.frameMark end, function(on) db.frameMark = on; pcall(Hello.UpdateMarks) end)
+    fm:SetPoint("TOPLEFT", 4, -112)
     local forget = W.Button(page, 150, 22, "Forget everyone seen")
-    forget:SetPoint("TOPLEFT", 4, -122)
-    forget:SetScript("OnClick", function() wipe(db.seen) end)
-    W.Notes(page, 4, -160, width, "", {
+    forget:SetPoint("TOPLEFT", 4, -148)
+    forget:SetScript("OnClick", function() wipe(db.seen); pcall(Hello.UpdateMarks) end)
+    W.Notes(page, 4, -186, width, "", {
         "Cys's UI quietly says hello to your group when it grows and to your guild when you log in. Other players running it answer, and their tooltip gets a line: Cys's UI and their version.",
         "These are hidden addon messages: nobody sees them in chat, and nothing but the version of Cys's UI is shared. Nothing is sent during a fight.",
         "Players are remembered for 30 days. /cuiusers lists who has been seen.",

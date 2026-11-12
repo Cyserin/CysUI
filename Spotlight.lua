@@ -28,6 +28,10 @@ local SPOTLIGHT = {
           icon = "Interface\\GossipFrame\\AvailableQuestIcon",
           text = "Loot an item that starts a quest and a small box pops up with it. Click the item to open the quest.",
           where = "Loot & Items > Quest Starter. Move it in Layout mode." },
+        { title = "Crate Tracker", page = "Crate Tracker", module = "crates",
+          icon = "Interface\\Icons\\INV_Crate_02",
+          text = "The crates in your bags that ask to be filled, what each one needs and how many you already carry.",
+          where = "Opens beside Cys's Bags when you have a crate. Loot & Items > Crate Tracker, or /cuicrates." },
     },
 }
 

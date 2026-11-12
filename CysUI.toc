@@ -84,4 +84,5 @@ Modules\Resource\CysResource.lua
 Modules\Swing\CysSwing.lua
 Modules\VehicleExit\CysVehicleExit.lua
 Modules\QuestStart\CysQuestStart.lua
+Modules\Crates\CysCrates.lua
 Modules\Quests\CysQuests.lua

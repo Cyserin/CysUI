@@ -21,7 +21,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). Works in combat.
 - **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too.
 - **Your Characters**: a minimap button (or `/cuichars`) opens a window with three tabs: rested XP of all your characters (worked out while they are logged out) and when each will be full; gold on every character with the total; and the currencies each character holds.
-- **Cys's UI Users**: other players in your group or guild who run Cys's UI get a Cys's UI line (with their version) on their tooltip. Hidden addon messages, version only, never in combat; optional chat note when one joins your group. `/cuiusers`.
+- **Cys's UI Users**: other players in your group or guild who run Cys's UI get a Cys's UI line (with their version) on their tooltip and a small Cys mark on your target, focus and party frames. Hidden addon messages, version only, never in combat; optional chat note when one joins your group. `/cuiusers`.
 - **UI scale**: pixel-perfect scale for your resolution.
 - **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`.
 - **Layout mode**: drag and resize everything, snap to a grid, reset one or all.
@@ -55,6 +55,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Quest Tracker** (WoW Forever, off until switched on): our own quest list in place of the game's tracker. Tracked quests under a gold header per zone (the zone you are in first), each header folds; a This zone only switch (also a Zone button on the tracker); objective counts on the right colored by progress; Ready to turn in with a sound; quest item buttons; focus marker; fades in combat or while the mouse is away; can hide in raids. *(layout)*
 - **Swing Timer** (WoW Forever): your auto attack as a thin movable bar that fills from swing to swing, with lines for an off hand and a ranged weapon; can match the main cooldown bar's width. Turns orange and names it while Heroic Strike / Cleave / Maul / Raptor Strike is queued.
 - **Quest Starter pop-up** *(layout)*: when an item that starts a quest is in your bags, a small box shows it; click it to open the quest (works in combat).
+- **Crate Tracker**: lists the crates in your bags that ask to be filled, what each needs and how many you carry (green / yellow / red). `/cuicrates`.
 - **Vehicle Exit** *(layout)* (WoW Forever): a Leave button for vehicles and flight paths that you place yourself.
 - **Damage Meter** (WoW Forever): our own meter window in the Cys look, fed by the game's built-in damage meter (damage, healing, damage taken, absorbs, interrupts, dispels; current, overall or an earlier fight; spell list on hover out of combat). No combat log reading.
 - **Frame Combat Text** (WoW Forever): the last hit as one still number in the middle of the player and target health bars (damage, heals, Miss / Dodge / Parry / Block), with an up / down setting.
