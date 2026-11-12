@@ -231,6 +231,66 @@ function V.Enable()
     end)
 end
 
+--------------------------------------------------------------------------------
+-- Known recipes (and anything else the tooltip calls "Already known") at vendors:
+-- the item and its name are dimmed and a green "Known" tag sits in the corner. Visual only.
+--------------------------------------------------------------------------------
+local KNOWN = ITEM_SPELL_KNOWN or "Already known"
+local tags = {}
+local function IsKnown(index)
+    if not (C_TooltipInfo and C_TooltipInfo.GetMerchantItem) then return false end
+    local data = C_TooltipInfo.GetMerchantItem(index)
+    if not (data and data.lines) then return false end
+    for _, line in ipairs(data.lines) do
+        if line.leftText == KNOWN then return true end
+    end
+    return false
+end
+
+local recheck = false
+function V.MarkKnown()
+    local on = CysUIDB.vendor.markKnown ~= false and CUI:IsModuleEnabled("vendor")
+    local per = MERCHANT_ITEMS_PER_PAGE or 10
+    local page = (MerchantFrame and MerchantFrame.page) or 1
+    local tab = MerchantFrame and PanelTemplates_GetSelectedTab and PanelTemplates_GetSelectedTab(MerchantFrame) or 1
+    local total = GetMerchantNumItems and GetMerchantNumItems() or 0
+    local missing = false
+    for i = 1, 12 do
+        local cell = _G["MerchantItem" .. i]
+        if cell then
+            local known = false
+            if on and tab == 1 and i <= per then
+                local index = (page - 1) * per + i
+                if index <= total then
+                    local ok, k = pcall(IsKnown, index)
+                    known = ok and k or false
+                    if ok and not k and GetMerchantItemLink and not GetMerchantItemLink(index) then missing = true end
+                end
+            end
+            local tag = tags[i]
+            if known and not tag then
+                tag = W.Text(cell, 10, T.green, "RIGHT")
+                tag:SetPoint("TOPRIGHT", -4, -3)
+                tag:SetText("Known")
+                tags[i] = tag
+            end
+            if tag then tag:SetShown(known) end
+            local ib = _G["MerchantItem" .. i .. "ItemButton"]
+            local nm = _G["MerchantItem" .. i .. "Name"]
+            if ib then ib:SetAlpha(known and 0.4 or 1) end
+            if nm then nm:SetAlpha(known and 0.5 or 1) end
+        end
+    end
+    -- item data still loading: look again once shortly after
+    if missing and not recheck then
+        recheck = true
+        C_Timer.After(0.6, function() recheck = false; pcall(V.MarkKnown) end)
+    end
+end
+if hooksecurefunc and MerchantFrame_Update then
+    hooksecurefunc("MerchantFrame_Update", function() pcall(V.MarkKnown) end)
+end
+
 CUI:RegisterModule({
     key = "vendor",
     name = "Vendor",
@@ -260,12 +320,17 @@ CUI:RegisterPage("Vendor", function(page)
     local coin = W.Checkbox(page, "Mark the quest reward that sells for the most with a gold coin",
         function() return db.questCoin ~= false end, function(on) db.questCoin = on end)
     coin:SetPoint("TOPLEFT", 4, -124)
+    local known = W.Checkbox(page, "Dim recipes you already know and tag them Known",
+        function() return db.markKnown ~= false end,
+        function(on) db.markKnown = on; if MerchantFrame and MerchantFrame:IsShown() then pcall(V.MarkKnown) end end)
+    known:SetPoint("TOPLEFT", 4, -154)
 
-    local note = W.Notes(page, 4, -164, width, "", {
+    local note = W.Notes(page, 4, -194, width, "", {
             { "Junk", "means grey (poor quality) items that a vendor will buy." },
             "The Sell Junk button shows up on the vendor window and in Cys's Bags.",
             "Auto-repair pays with your own gold and tells you the cost in chat.",
             "The gold coin only shows when a quest lets you pick one of several rewards.",
+            "Known: recipes, plans and anything else the game calls Already known are dimmed on the vendor, so the ones you can still learn stand out.",
             "Turn the whole Vendor module off under Modules if you'd rather do it by hand.",
         })
 end)

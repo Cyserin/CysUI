@@ -523,9 +523,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.18",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.19",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.19", date = "2026-11-12",
+              added = {
+                  "Vendor: recipes, plans and other items you already know are dimmed on the vendor window with a green Known tag, so the ones you can still learn stand out. Switch on the Vendor page.",
+              },
+            },
             { version = "0.58.18", date = "2026-11-12",
               added = {
                   "Talent Planner (WoW Forever): a Planner button next to Primary / Secondary in your talents switches the talents area to a planner. Click a talent to plan its next point, right-click to take one off. The Level plan lists every pick with the level it comes at, and with Learn these talents as I level switched on each new point is learned for you as you level (after the fight if you are in one). From my talents starts a plan from what you have now; Save, Load, Export and Import keep and share plans. Class > General > Talent Planner, or /cuitalents.",

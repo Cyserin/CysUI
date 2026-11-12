@@ -14,12 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.18",
+    version = "0.58.19",
     items = {
-        { title = "Talent Planner", page = "Talent Planner", module = "talentplan",
-          icon = "Interface\\Icons\\INV_Misc_Book_11",
-          text = "Plan your leveling talents right in the talents window, see the level each pick comes at, and have them learned for you as you level.",
-          where = "Open your talents (N) and click Planner. Class > General > Talent Planner, or /cuitalents." },
+        { title = "Known recipes at vendors", page = "Vendor",
+          icon = "Interface\\Icons\\INV_Scroll_03",
+          text = "Recipes and plans you already know are dimmed on the vendor with a green Known tag, so the new ones stand out.",
+          where = "Any vendor. Switch on Loot & Items > Vendor." },
     },
 }
 
