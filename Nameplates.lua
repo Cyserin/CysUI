@@ -55,11 +55,17 @@ end
 -- Does this mob have you? The threat API isn't on every Classic client, so when it's
 -- missing we fall back to "is the mob targeting me".
 local function HasAggro(unit)
+    -- on Forever both answers can be locked in combat (never test those): then no aggro color this time
     if UnitThreatSituation then
-        local status = UnitThreatSituation("player", unit)
-        if status then return status >= 2 end
+        local ok, status = pcall(UnitThreatSituation, "player", unit)
+        if ok and Secret(status) then return false end
+        if ok and type(status) == "number" then return status >= 2 end
     end
-    return UnitExists(unit .. "target") and UnitIsUnit(unit .. "target", "player") or false
+    local okE, exists = pcall(UnitExists, unit .. "target")
+    if not okE or Secret(exists) or not exists then return false end
+    local okU, me = pcall(UnitIsUnit, unit .. "target", "player")
+    if not okU or Secret(me) then return false end
+    return me and true or false
 end
 
 -- Which role are you playing right now? Classic has no role API, so it is read from what you are doing:

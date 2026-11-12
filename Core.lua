@@ -472,6 +472,9 @@ if CysChangelog then
         entries = {
             { version = "0.58.13", date = "2026-11-11",
               added = {
+                  "Cys's Quest Tracker (Forever): your tracked quests in the Cys look, grouped under a gold header for each zone with the zone you are in at the top. Click a zone header to fold it, or the QUESTS header to fold the list. A Zone button (and a setting) shows only the quests for the zone you are in. Objective counts sit on the right, colored by how far along you are; a finished quest says Ready to turn in and plays a sound. Quest items get a button beside their quest. Click a quest to open it in the quest log, Shift-click to stop tracking, right-click to focus or share it. It can fade in combat or while the mouse is away and hide in raids. It replaces the game's tracker while on. Turn it on under Modules; settings on the Quest Tracker page, move it in Layout mode.",
+                  "Party frames: always in the order tank, healer, then damage (from the roles picked in the group finder or set on the Raid Frames page), so the tank and healer sit in the top two spots. Changes during a fight apply when it ends. Switch on the Unit Frames page.",
+                  "Unit Frames: the group leader crown is bigger and bright gold with a dark shadow so it stands out.",
                   "Nameplates: a small sword beside mobs you still need for a quest - kill objectives and mobs that drop a quest item. It goes away once that objective is done. Switch and size on the Nameplates page.",
                   "Unit Frames: a small crown beside the group leader - on the party frames, and on your own frame when you lead.",
                   "Automation: tell your party when you finish a quest's objectives (off until you turn it on; party chat only, never in raids).",

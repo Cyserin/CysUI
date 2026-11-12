@@ -22,7 +22,7 @@ local GROUPS = {
     { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Durability", "Automation" } },
     { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meter", "Details Skin", "Swing Timer", "Combat Numbers", "Threat Bar" } },
     { "Loot & Items",    { "Vendor", "Consumables", "Loot", "Roll Tracker", "Upgrade" } },
-    { "Tracking",        { "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
+    { "Tracking",        { "Quest Tracker", "Kill Tracker", "XP Bar", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
 }
 
 -- Class pages live under CLASS: a General page (works for every class), then a heading for your own class
@@ -282,7 +282,7 @@ end
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat" } },
-    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale", "durability", "automation" } },
+    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "micromenu", "tooltip", "skins", "friends", "scale", "durability", "automation", "questlist" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "healadvisor", "warrior", "shoutremind" } },
 }

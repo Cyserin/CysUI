@@ -76,3 +76,4 @@ Modules\Consumables\CysConsumables.lua
 Modules\Cooldowns\CysCooldowns.lua
 Modules\Resource\CysResource.lua
 Modules\Swing\CysSwing.lua
+Modules\Quests\CysQuests.lua

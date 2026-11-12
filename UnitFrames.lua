@@ -911,11 +911,9 @@ local function BuildParty()
         onResize = function(a, w, h)
             if InCombatLockdown() then return end
             local mh = math.max(16, math.floor((h + 6) / 4) - 6)
-            for i, pf in ipairs(UF.party) do
-                pf:SetSize(w, mh)
-                pf:ClearAllPoints()
-                pf:SetPoint("TOPLEFT", a, "TOPLEFT", 0, -(i - 1) * (mh + 6))
-            end
+            UF.partyH = mh
+            for _, pf in ipairs(UF.party) do pf:SetSize(w, mh) end
+            if UF.LayoutParty then UF.LayoutParty() end
         end })
     for i = 1, 4 do
         local f = CreateUnitFrame({ unit = "party" .. i, name = "CysUIPartyFrame" .. i, w = 180, h = 38, power = true,
@@ -958,11 +956,57 @@ local function BuildParty()
             end
         end
     end
+    -- party order: tank, then healer, then damage (by role), so the tank and healer sit in the top two spots.
+    -- The frames are secure, so they are only moved out of combat; a change mid-fight is applied after it.
+    local function Rank(unit)
+        if not UnitExists(unit) then return 9 end -- empty slots go to the bottom
+        local okN, name = pcall(UnitName, unit)
+        local roles = CysUIDB and CysUIDB.raidframes and CysUIDB.raidframes.roles
+        local r = okN and type(name) == "string" and roles and roles[name]
+        if not r and UnitGroupRolesAssigned then
+            local okR, g = pcall(UnitGroupRolesAssigned, unit)
+            if okR and type(g) == "string" then r = g end
+        end
+        if r == "TANK" then return 1 end
+        if r == "HEALER" or (r ~= "DAMAGER" and IsHealer(unit)) then return 2 end
+        return 3
+    end
+    local sortPending = false
+    local function LayoutParty()
+        if InCombatLockdown() then sortPending = true; return end
+        sortPending = false
+        local order = { 1, 2, 3, 4 }
+        if DB().partySort ~= false then
+            local rank = {}
+            for i = 1, 4 do rank[i] = Rank("party" .. i) end
+            table.sort(order, function(x, y)
+                if rank[x] ~= rank[y] then return rank[x] < rank[y] end
+                return x < y
+            end)
+        end
+        local mh = UF.partyH or 38
+        for slot, i in ipairs(order) do
+            local pf = UF.party[i]
+            if pf then
+                pf:ClearAllPoints()
+                pf:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(slot - 1) * (mh + 6))
+            end
+        end
+    end
+    UF.LayoutParty = LayoutParty
     local ev = CreateFrame("Frame")
-    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD" }) do pcall(ev.RegisterEvent, ev, e) end
-    ev:SetScript("OnEvent", function() pcall(UpdateHealers) end)
+    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do pcall(ev.RegisterEvent, ev, e) end
+    ev:SetScript("OnEvent", function(_, e)
+        if e == "PLAYER_REGEN_ENABLED" then
+            if sortPending then pcall(LayoutParty) end
+            return
+        end
+        pcall(UpdateHealers)
+        pcall(LayoutParty)
+    end)
     UF.UpdateHealers = UpdateHealers
     pcall(UpdateHealers)
+    pcall(LayoutParty)
     HideBlizzard("party")
 end
 
@@ -1000,10 +1044,17 @@ function UF.UpdateLeaders()
         local f = UF.frames[key]
         if f and f.overlay then
             if not f.leader then
-                f.leader = f.overlay:CreateTexture(nil, "OVERLAY")
+                -- 18 px, pure gold, with a dark copy 1 px down-right as a shadow so it reads on any background
+                f.leaderShadow = f.overlay:CreateTexture(nil, "OVERLAY", nil, 1)
+                f.leaderShadow:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+                f.leaderShadow:SetVertexColor(0, 0, 0, 0.9)
+                f.leaderShadow:SetSize(18, 18)
+                f.leader = f.overlay:CreateTexture(nil, "OVERLAY", nil, 2)
                 f.leader:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
-                f.leader:SetSize(14, 14)
-                f.leader:SetPoint("TOPRIGHT", f, "TOPLEFT", -2, 0)
+                f.leader:SetVertexColor(1, 0.86, 0.25)
+                f.leader:SetSize(18, 18)
+                f.leader:SetPoint("TOPRIGHT", f, "TOPLEFT", -2, 2)
+                f.leaderShadow:SetPoint("TOPLEFT", f.leader, "TOPLEFT", 1, -1)
             end
             local show = false
             if on and grouped and UnitIsGroupLeader then
@@ -1011,6 +1062,7 @@ function UF.UpdateLeaders()
                 show = ok and not Secret(lead) and lead and true or false
             end
             f.leader:SetShown(show)
+            f.leaderShadow:SetShown(show)
         end
     end
 end
@@ -1244,6 +1296,10 @@ CUI:RegisterPage("Unit Frames", function(page)
 
     W.Header(page, "Party (for healers)", width):SetPoint("TOPLEFT", 0, y - 8)
     y = y - 38
+    local sortCb = W.Checkbox(page, "Order party frames tank, healer, then damage", function() return db.partySort ~= false end,
+        function(on) db.partySort = on and true or false; if UF.LayoutParty then UF.LayoutParty() end end)
+    sortCb:SetPoint("TOPLEFT", 4, y)
+    y = y - 26
     local function PartyRefresh() for i = 1, 4 do local pf = UF.frames["party" .. i]; if pf then UF:Update(pf) end end end
     for _, row in ipairs({
         { "partyDebuffs", "Show debuffs beside each party member" },
