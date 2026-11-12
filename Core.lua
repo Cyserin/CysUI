@@ -529,7 +529,8 @@ if CysChangelog then
             { version = "0.58.15", date = "2026-11-12",
               added = {
                   "Your Characters: a new minimap button (or /cuichars) opens a small window with the rested XP of every character you have logged in on, how rested each one is now and when it will be fully rested, best first. Characters you are not on are worked out from when they logged out (faster for ones that logged out in an inn or city, marked zzz). Shift + right-click a row to forget a character. Settings on the Characters page.",
-                  "Battle.net pop-ups (friend online / offline, invites) now have the Cys look: a dark flat plate, the theme edge with a gold stripe, and the friend's name in gold. Switch on the Chat page.",
+                  "Marker Wheel: hold a key and a ring of the eight raid markers (and Clear) opens around your mouse. Move toward one and let go to put it on your target, or let go in the middle to cancel. Works in combat and in dungeons. Pick the key on the Marker Wheel page; you can also have it mark the unit under your mouse first.",
+                  "Battle.net pop-ups (friend online / offline, invites) now have the Cys look: a dark flat plate, the theme edge with a gold stripe, and the friend's name in gold. They also have their own box in Layout mode (Battle.net pop-ups), so you can put them anywhere. Switch on the Chat page.",
               },
               fixed = {
                   "Quest window: the greeting text and the Current Quests / Available Quests headings no longer show in dark ink when you first talk to a quest giver.",

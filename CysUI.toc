@@ -42,6 +42,7 @@ Nameplates.lua
 CysKillTracker.lua
 CysXP.lua
 Modules\Characters\CysCharacters.lua
+Modules\MarkWheel\CysMarkWheel.lua
 GroupLoot.lua
 MicroMenu.lua
 PlayerAuras.lua

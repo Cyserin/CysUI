@@ -489,6 +489,21 @@ local function SetupMover()
             alerts:ClearAllPoints()
             alerts:SetPoint("BOTTOMLEFT", cf, "TOPLEFT", -5, 34)
         end)
+        -- its own box in layout mode ("Battle.net pop-ups"): starts above the chat tabs, once the chat has its spot
+        C_Timer.After(1.5, function()
+            Guarded("toast mover", function()
+                local holder = CreateFrame("Frame", "CysUIToastHolder", UIParent)
+                holder:SetSize(250, 50)
+                local s = cf:GetEffectiveScale() / UIParent:GetEffectiveScale()
+                local l, t = cf:GetLeft(), cf:GetTop()
+                CUI:RegisterMovable(holder, "bntoast", "Battle.net pop-ups", {
+                    point = "BOTTOMLEFT", x = floor(((l or 25) * s) - 5 + 0.5), y = floor(((t or 200) * s) + 34 + 0.5),
+                    scalable = false,
+                })
+                alerts:ClearAllPoints()
+                alerts:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
+            end)
+        end)
     end
 end
 
