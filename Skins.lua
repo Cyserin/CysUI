@@ -1406,7 +1406,7 @@ local LIGHT = { 0.88, 0.88, 0.88 }
 local function LightenInlineBlack(fs)
     if not (fs and fs.GetText and fs.SetText) then return end
     local ok, t = pcall(fs.GetText, fs)
-    if not ok or type(t) ~= "string" or not t:find("|c[fF][fF]000000") then return end
+    if not ok or type(t) ~= "string" or CysUICompat.Secret(t) or not t:find("|c[fF][fF]000000") then return end -- locked text can't be read
     fs:SetText((t:gsub("|c[fF][fF]000000", "|cffeeeeee")))
 end
 

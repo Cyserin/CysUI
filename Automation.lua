@@ -35,6 +35,9 @@ local DEFAULTS = {
     acceptInvites = false,   -- accept group invites from friends and guildmates
     questAnnounce = false,   -- tell the party when one of your quests is ready to turn in
     bagSplit = true,         -- Cys's Bags: own split box on Shift-click (type a number, split to a free slot)
+    bagRecent = true,        -- Cys's Bags: New Items section (what came in since you last closed the bags)
+    bagPin = true,           -- Cys's Bags: Alt-click pins / unpins an item
+    bagPlusSlots = true,     -- Cys's Bags: a "+" drop slot at the end of each category
     trainAll = true,         -- a Train all button on trainer windows (nothing is bought until you click it)
     openContainers = true,   -- open clams, sacks and other openable bag items (Classic Era)
 }
@@ -616,6 +619,10 @@ CUI:RegisterPage("Automation", function(page)
         Check("Open clams, sacks and other openable items (out of combat)", "openContainers")
     end
     Check("Cys's Bags: own split box on Shift-click (type the amount)", "bagSplit")
+    local function BagsRefresh() if _G.CysBags and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end
+    Check("Cys's Bags: New Items section at the top", "bagRecent"):HookScript("OnClick", BagsRefresh)
+    Check("Cys's Bags: Alt-click an item to pin or unpin it", "bagPin")
+    Check("Cys's Bags: + drop slot at the end of each category", "bagPlusSlots"):HookScript("OnClick", BagsRefresh)
     Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
     local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
     fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)

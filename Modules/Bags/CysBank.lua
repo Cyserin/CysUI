@@ -224,6 +224,7 @@ function CysBank:Collect()
     for _, list in pairs(lists) do wipe(list) end
     for _, t in pairs(slotEntries) do wipe(t) end
     wipe(counts)
+    for _, sec in ipairs(SECTIONS) do lists[sec.key] = lists[sec.key] or {} end -- categories added since load
     S.BuildSetLookup()
 
     local filter = self.bagFilter
@@ -253,7 +254,9 @@ function CysBank:Collect()
                     e.highlight = nil
                     slotEntries[bag] = slotEntries[bag] or {}
                     slotEntries[bag][slot] = e
-                    local list = lists[ResolveCategory(e)]
+                    local key = ResolveCategory(e)
+                    local list = lists[key]
+                    if not list then list = {}; lists[key] = list end
                     list[#list + 1] = e
                 end
             end

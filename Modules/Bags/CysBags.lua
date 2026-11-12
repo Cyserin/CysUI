@@ -141,10 +141,26 @@ if LAST_BAG > LAST_NORMAL_BAG then
     tinsert(SECTIONS, #SECTIONS, { key = "REAGENT", title = "Reagent Bag" })
 end
 
+-- Pinned: items you pin (Alt-click, or drop them on it) sit at the top. New Items: what came into your bags
+-- since you last closed them (shown at the top of All Items; it empties when you close the bags).
+SIDEBAR_ICONS.PINNED = "Interface\\Icons\\INV_Misc_Rune_01"
+SIDEBAR_ICONS.RECENT = "Interface\\Icons\\INV_Misc_Bag_07_Green"
+tinsert(SIDEBAR, 3, { key = "PINNED", label = "Pinned" })
+tinsert(SIDEBAR, 4, { key = "RECENT", label = "New Items" })
+tinsert(SECTIONS, 1, { key = "PINNED", title = "Pinned" })
+tinsert(SECTIONS, 2, { key = "RECENT", title = "New Items" })
+
 local VALID_CATEGORY, CATEGORY_TITLE = {}, {}
 for _, sec in ipairs(SECTIONS) do
     VALID_CATEGORY[sec.key] = sec.key ~= "REAGENT" -- a bag, not a category: items can't be dragged into it
     CATEGORY_TITLE[sec.key] = sec.title
+end
+VALID_CATEGORY.RECENT = false -- filled by the game, not by you
+
+-- switches (Automation page); all on unless switched off
+local function Opt(key)
+    local a = CysUIDB and CysUIDB.automation
+    return not (a and a[key] == false)
 end
 
 --------------------------------------------------------------------------------
@@ -204,6 +220,77 @@ local slotEntries = {} -- slotEntries[bag][slot] = entry (for the All Slots view
 local setLookup = {} -- itemIDs found in Cys's Armory's saved sets (rebuilt on every Collect)
 
 for _, s in ipairs(SECTIONS) do lists[s.key] = {} end
+
+-- Your own categories: CysBagsDB.custom = { { key = "CUSTOM_n", name, icon } }, listed just above Miscellaneous
+local CUSTOM_ICONS = {
+    "INV_Misc_Herb_10", "INV_Ore_Copper_01", "INV_Fabric_Linen_01", "INV_Misc_Pelt_Wolf_01", "INV_Misc_Food_15", "INV_Drink_07",
+    "INV_Potion_51", "INV_Misc_Bandage_15", "INV_Misc_Fish_02", "INV_Scroll_03", "INV_Misc_Note_01", "INV_Misc_Key_03",
+    "INV_Sword_04", "INV_Shield_06", "INV_Misc_Ammo_Arrow_01", "INV_Jewelry_Ring_03", "INV_Misc_Coin_01", "INV_Misc_Gear_01",
+    "INV_Pick_02", "INV_Misc_Bag_10", "INV_Misc_Rune_01", "INV_Misc_Orb_01", "Spell_Holy_HolyBolt", "INV_Misc_Gem_Emerald_02",
+}
+for i, n in ipairs(CUSTOM_ICONS) do CUSTOM_ICONS[i] = "Interface\\Icons\\" .. n end
+
+local function InsertBefore(t, beforeKey, row)
+    for i, r in ipairs(t) do if r.key == beforeKey then tinsert(t, i, row); return end end
+    tinsert(t, row)
+end
+local function ApplyCustom(c)
+    if CATEGORY_TITLE[c.key] then -- already listed: rename / new icon
+        for _, r in ipairs(SIDEBAR) do if r.key == c.key then r.label = c.name end end
+        for _, r in ipairs(SECTIONS) do if r.key == c.key then r.title = c.name end end
+    else
+        InsertBefore(SIDEBAR, "MISC", { key = c.key, label = c.name, custom = true })
+        InsertBefore(SECTIONS, "MISC", { key = c.key, title = c.name })
+    end
+    VALID_CATEGORY[c.key] = true
+    CATEGORY_TITLE[c.key] = c.name
+    SIDEBAR_ICONS[c.key] = c.icon
+    lists[c.key] = lists[c.key] or {}
+end
+local function RemoveCustom(key)
+    for i = #SIDEBAR, 1, -1 do if SIDEBAR[i].key == key then table.remove(SIDEBAR, i) end end
+    for i = #SECTIONS, 1, -1 do if SECTIONS[i].key == key then table.remove(SECTIONS, i) end end
+    VALID_CATEGORY[key], CATEGORY_TITLE[key], SIDEBAR_ICONS[key] = nil, nil, nil
+    lists[key] = nil
+    local list = CysBagsDB and CysBagsDB.custom
+    if list then for i = #list, 1, -1 do if list[i].key == key then table.remove(list, i) end end end
+    local o = CysBagsDB and CysBagsDB.overrides
+    if o then for id, k in pairs(o) do if k == key then o[id] = nil end end end -- its items go back to sorting themselves
+end
+
+-- New Items: compare item counts with the last look; anything that went up is new until the bags close
+local seenCounts      -- [itemID] = count at the last look (nil until the first look)
+local recent = {}     -- [itemID] = true
+local function CountAll()
+    local t, any = {}, false
+    for bag = FIRST_BAG, LAST_BAG do
+        for slot = 1, (GetNumSlots(bag) or 0) do
+            local _, count, _, _, link, itemID = GetSlotItem(bag, slot)
+            if link then
+                itemID = itemID or tonumber(link:match("item:(%d+)"))
+                if itemID then t[itemID] = (t[itemID] or 0) + (count or 1); any = true end
+            end
+        end
+    end
+    return t, any
+end
+local function MarkRecent()
+    local cur, any = CountAll()
+    if not seenCounts then
+        if any then seenCounts = cur end -- the first look only sets the baseline
+        return
+    end
+    for id, n in pairs(cur) do
+        if n > (seenCounts[id] or 0) then recent[id] = true end
+    end
+    for id in pairs(recent) do if not cur[id] then recent[id] = nil end end -- gone again (sold, used up)
+    seenCounts = cur
+end
+function CysBags:ClearRecent()
+    wipe(recent)
+    local cur, any = CountAll()
+    if any then seenCounts = cur end
+end
 
 CysBags.filter = "ALL"
 CysBags.search = ""
@@ -485,6 +572,16 @@ local function CreateItemButton(bag, slot)
     btn.cysQuality = CreateBorder(btn, 1, C.text, "OVERLAY", 5)
     ShowBorder(btn.cysQuality, false)
 
+    -- Alt-click: pin the item (or unpin it). The click picks the item up; we file it and put it back.
+    btn:HookScript("PreClick", function(b) b.cysHadCursor = CursorHasItem() end)
+    btn:HookScript("OnClick", function(b, button)
+        if button ~= "LeftButton" or not IsAltKeyDown() or b.cysHadCursor or not Opt("bagPin") then return end
+        local kind, id = GetCursorInfo()
+        if kind ~= "item" or not id then return end
+        local o = CysBagsDB and CysBagsDB.overrides
+        CysBags:AssignCursorItem(o and o[id] == "PINNED" and "ALL" or "PINNED")
+    end)
+
     if CysBags.buttonsProtected == nil then
         CysBags.buttonsProtected = btn:IsProtected() and true or false
     end
@@ -561,6 +658,9 @@ end
 --------------------------------------------------------------------------------
 function CysBags:Collect()
     for _, list in pairs(lists) do wipe(list) end
+    for _, s in ipairs(SECTIONS) do lists[s.key] = lists[s.key] or {} end
+    local useRecent = Opt("bagRecent")
+    if useRecent then MarkRecent() end
     for _, t in pairs(slotEntries) do wipe(t) end
     wipe(counts)
     BuildSetLookup()
@@ -606,6 +706,9 @@ function CysBags:Collect()
                     local category = bag > LAST_NORMAL_BAG and "REAGENT" or ResolveCategory(e)
                     if not lists[category] then lists[category] = {} end
                     lists[category][#lists[category] + 1] = e
+                    -- new since the bags were last closed: also listed under New Items (pinned ones stay pinned)
+                    e.isRecent = useRecent and recent[itemID] and category ~= "PINNED" or nil
+                    if e.isRecent then lists.RECENT[#lists.RECENT + 1] = e end
                 end
             end
         end
@@ -660,7 +763,47 @@ function CysBags:Layout()
     for _, h in pairs(sectionHeaders) do h:Hide() end
     wipe(activeButtons)
     for _, f in ipairs(self.fillers or {}) do f:Hide() end
-    local usedFillers = 0
+    for _, p in ipairs(self.plusSlots or {}) do p:Hide() end
+    local usedFillers, usedPlus = 0, 0
+    -- "+" at the end of a category: drop an item on it to move the item into that category
+    local carrying = CursorHasItem() and true or false
+    local function Plus(key, x, yy)
+        usedPlus = usedPlus + 1
+        self.plusSlots = self.plusSlots or {}
+        local p = self.plusSlots[usedPlus]
+        if not p then
+            p = CreateFrame("Button", nil, content)
+            p:SetSize(SLOT_SIZE, SLOT_SIZE)
+            SolidTexture(p, "BACKGROUND", { C.slot[1], C.slot[2], C.slot[3], 0.45 }):SetAllPoints()
+            p.edges = CreateBorder(p, 1, C.line, "BORDER")
+            p.text = CreateText(p, 16, C.dim, "CENTER")
+            p.text:SetPoint("CENTER", 0, 1)
+            p.text:SetText("+")
+            p:SetScript("OnEnter", function(s)
+                SetBorderColor(s.edges, C.accent[1], C.accent[2], C.accent[3], 0.9)
+                s.text:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+                GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Move to " .. (CATEGORY_TITLE[s.key] or s.key), 1, 1, 1)
+                GameTooltip:AddLine("Drop an item here.", 0.8, 0.8, 0.8)
+                GameTooltip:Show()
+            end)
+            p:SetScript("OnLeave", function(s)
+                SetBorderColor(s.edges, C.line[1], C.line[2], C.line[3], 1)
+                s.text:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
+                GameTooltip:Hide()
+            end)
+            p:SetScript("OnClick", function(s) if CursorHasItem() then CysBags:AssignCursorItem(s.key) end end)
+            p:SetScript("OnReceiveDrag", function(s) CysBags:AssignCursorItem(s.key) end)
+            self.plusSlots[usedPlus] = p
+        end
+        p.key = key
+        p:ClearAllPoints()
+        p:SetPoint("TOPLEFT", content, "TOPLEFT", x, -yy)
+        p:Show()
+    end
+    local function WantsPlus(key)
+        return Opt("bagPlusSlots") and VALID_CATEGORY[key] and key ~= "SETS" and not key:find("^SET_")
+    end
     -- empty dark slots that finish a section's last row, so every section is a neat block (look only)
     local function Filler(x, yy)
         usedFillers = usedFillers + 1
@@ -684,8 +827,17 @@ function CysBags:Layout()
     local function RenderSection(key, title)
         local list = lists[key]
         if not list then return end
+        -- All Items: what is under New Items is not shown twice
+        if filter == "ALL" and key ~= "RECENT" and #(lists.RECENT or {}) > 0 then
+            local keep = {}
+            for i = 1, #list do if not list[i].isRecent then keep[#keep + 1] = list[i] end end
+            list = keep
+        end
         local n = #list
-        if n > 0 then
+        local plus = WantsPlus(key)
+        -- Pinned and your own categories show while you carry an item, even when empty, so you can drop on them
+        local showEmpty = n == 0 and plus and carrying and (key == "PINNED" or key:find("^CUSTOM_"))
+        if n > 0 or showEmpty then
             any = true
             local h = GetSectionHeader(key)
             h:ClearAllPoints()
@@ -705,10 +857,15 @@ function CysBags:Layout()
                 btn:Show()
                 activeButtons[#activeButtons + 1] = btn
             end
-            for i = n + 1, ceil(n / COLS) * COLS do
+            local cells = n
+            if plus then
+                cells = n + 1
+                Plus(key, (n % COLS) * STEP, y + floor(n / COLS) * STEP)
+            end
+            for i = cells + 1, ceil(cells / COLS) * COLS do
                 Filler(((i - 1) % COLS) * STEP, y + floor((i - 1) / COLS) * STEP)
             end
-            y = y + ceil(n / COLS) * STEP - SLOT_GAP + SECTION_GAP
+            y = y + ceil(cells / COLS) * STEP - SLOT_GAP + SECTION_GAP
         end
     end
 
@@ -790,7 +947,7 @@ function CysBags:Layout()
     -- jump about as you click through the sidebar (it only grows past that when a view needs more room).
     local allH = 0
     for _, sec in ipairs(SECTIONS) do
-        local n = lists[sec.key] and #lists[sec.key] or 0
+        local n = sec.key ~= "RECENT" and lists[sec.key] and #lists[sec.key] or 0
         if n > 0 then allH = allH + SECTION_H + 6 + ceil(n / COLS) * STEP - SLOT_GAP + SECTION_GAP end
     end
     allH = max(allH - SECTION_GAP, 1)
@@ -909,6 +1066,7 @@ function CysBags:UpdateSidebar()
     for _, sb in ipairs(sidebarButtons) do
         local cnt = counts[sb.key] or 0
         local keep = sb.key == "ALL" or sb.key == "SLOTS" or sb.key == self.filter or cnt > 0
+            or sb.key == "PINNED" or sb.custom
             or (sb.key == "SETS" and self.filter and self.filter:find("^SET_"))
         if hideEmpty and not keep then
             sb:Hide()
@@ -942,6 +1100,16 @@ function CysBags:UpdateSidebar()
         end
     end
     for _, cb in pairs(setButtons) do if not usedSets[cb] then cb:Hide() end end
+    if self.newCatBtn then
+        self.newCatBtn:ClearAllPoints()
+        self.newCatBtn:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 0, -(y + 2))
+        self.newCatBtn:SetPoint("TOPRIGHT", sidebar, "TOPRIGHT", -1, -(y + 2))
+        self.newCatBtn.label:SetText(slim and "+" or "+ New category")
+        self.newCatBtn.label:ClearAllPoints()
+        if slim then self.newCatBtn.label:SetPoint("CENTER", 0, 0) else self.newCatBtn.label:SetPoint("LEFT", 12, 0) end
+        self.newCatBtn:Show()
+        y = y + 26
+    end
     self.sidebarH = y + 34 -- the rows plus room for the collapse button (used by auto-size)
     for _, sb in ipairs(sidebarButtons) do
         -- Check if this sidebar button is selected OR if it's the Armory Sets tab and a dynamic set is filtered
@@ -1844,12 +2012,12 @@ function CysBags:CreateFrames()
     slimBtn:SetScript("OnClick", function() CysBags:SetSidebarSlim(not Slim()) end)
     self.slimBtn = slimBtn
 
-    for i, cat in ipairs(SIDEBAR) do
+    local function MakeRow(cat)
         local b = CreateFrame("Button", nil, sidebar)
         b.key = cat.key
+        b.custom = cat.custom
         b:SetHeight(26)
-        b:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 0, -(8 + (i - 1) * 27))
-        b:SetPoint("TOPRIGHT", sidebar, "TOPRIGHT", -1, -(8 + (i - 1) * 27))
+        b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b.bg = SolidTexture(b, "BACKGROUND", C.hover)
         b.bg:SetAllPoints()
         b.bg:Hide()
@@ -1893,12 +2061,51 @@ function CysBags:CreateFrames()
             CysBags:UpdateSidebar()
             GameTooltip:Hide()
         end)
-        b:SetScript("OnClick", function(s)
+        b:SetScript("OnClick", function(s, button)
+            if button == "RightButton" then
+                if s.custom then CysBags:EditCategory(s.key) end
+                return
+            end
             if CursorHasItem() then CysBags:AssignCursorItem(s.key) else CysBags:SetFilter(s.key) end
         end)
         b:SetScript("OnReceiveDrag", function(s) CysBags:AssignCursorItem(s.key) end)
-        sidebarButtons[i] = b
+        return b
     end
+    local rowByKey = {}
+    -- (re)build the row list in SIDEBAR order; called again when you add, rename or delete a category
+    function CysBags:SyncSidebarRows()
+        local want = {}
+        wipe(sidebarButtons)
+        for _, cat in ipairs(SIDEBAR) do
+            local b = rowByKey[cat.key]
+            if not b then b = MakeRow(cat); rowByKey[cat.key] = b end
+            b.custom = cat.custom
+            b.label:SetText(cat.label)
+            b.icon:SetTexture(SIDEBAR_ICONS[cat.key] or "Interface\\Icons\\INV_Misc_Bag_08")
+            sidebarButtons[#sidebarButtons + 1] = b
+            want[cat.key] = true
+        end
+        for key, b in pairs(rowByKey) do if not want[key] then b:Hide() end end
+        self:UpdateSidebar()
+    end
+    self:SyncSidebarRows()
+
+    -- "+ New category" under the rows
+    local nb = CreateFrame("Button", nil, sidebar)
+    nb:SetHeight(22)
+    nb.label = CreateText(nb, 10, C.dim)
+    nb.label:SetPoint("LEFT", 12, 0)
+    nb:SetScript("OnEnter", function(s)
+        s.label:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:SetText("New category", 1, 1, 1)
+        GameTooltip:AddLine("Pick a name and an icon, then drop items on it.", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Right-click one of your categories to change or delete it.", 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    nb:SetScript("OnLeave", function(s) s.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
+    nb:SetScript("OnClick", function() CysBags:EditCategory(nil) end)
+    self.newCatBtn = nb
 
     ---------------------------------------------------------------- main panel
     scroll = CreateFrame("ScrollFrame", nil, frame)
@@ -1945,6 +2152,8 @@ function CysBags:CreateFrames()
         frame:StopMovingOrSizing()
         sb:ClearFocus()
         CysBags.bagFilter = nil -- reopen showing every bag
+        CysBags:ClearRecent() -- New Items empties once you have seen them
+        if CysBags.editor then CysBags.editor:Hide() end
     end)
     -- Only runs while visible. Coalesces bursts of BAG_UPDATE into one rebuild per frame.
     frame:SetScript("OnUpdate", function()
@@ -1953,6 +2162,7 @@ function CysBags:CreateFrames()
         if carrying ~= CysBags.carrying then -- show / hide the drop outlines on the sidebar
             CysBags.carrying = carrying
             CysBags:UpdateSidebar()
+            if Opt("bagPlusSlots") then CysBags.dirty = true end -- Pinned / your categories open up as drop spots
         end
     end)
 end
@@ -2173,6 +2383,131 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- Your own categories: a small box to name one and pick its icon (new, or right-click one to change it)
+--------------------------------------------------------------------------------
+function CysBags:EditCategory(key)
+    local ed = self.editor
+    if not ed then
+        ed = CreateFrame("Frame", "CysBagsCategoryEditor", UIParent)
+        ed:SetSize(290, 268)
+        ed:SetFrameStrata("DIALOG")
+        ed:SetToplevel(true)
+        ed:EnableMouse(true)
+        ed:SetClampedToScreen(true)
+        SolidTexture(ed, "BACKGROUND", C.bg):SetAllPoints()
+        CreateBorder(ed, 1, C.border, "BORDER")
+        ed.title = CreateText(ed, 12, C.accent)
+        ed.title:SetPoint("TOPLEFT", 12, -12)
+        local nameLab = CreateText(ed, 11, C.accent)
+        nameLab:SetPoint("TOPLEFT", 12, -40)
+        nameLab:SetText("Name")
+        local box = CreateFrame("EditBox", nil, ed)
+        box:SetSize(210, 22)
+        box:SetPoint("TOPLEFT", 60, -35)
+        box:SetAutoFocus(false)
+        box:SetMaxLetters(24)
+        box:SetFontObject(ChatFontNormal)
+        box:SetTextInsets(6, 6, 0, 0)
+        SolidTexture(box, "BACKGROUND", C.field):SetAllPoints()
+        CreateBorder(box, 1, C.line, "BORDER")
+        ed.box = box
+        local iconLab = CreateText(ed, 11, C.accent)
+        iconLab:SetPoint("TOPLEFT", 12, -70)
+        iconLab:SetText("Icon")
+        ed.icons = {}
+        for i, tex in ipairs(CUSTOM_ICONS) do
+            local b = CreateFrame("Button", nil, ed)
+            b:SetSize(30, 30)
+            b:SetPoint("TOPLEFT", 12 + ((i - 1) % 8) * 33, -88 - floor((i - 1) / 8) * 33)
+            b.tex = b:CreateTexture(nil, "ARTWORK")
+            b.tex:SetPoint("TOPLEFT", 1, -1)
+            b.tex:SetPoint("BOTTOMRIGHT", -1, 1)
+            b.tex:SetTexture(tex)
+            b.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            b.edges = CreateBorder(b, 1, C.line, "OVERLAY")
+            b.path = tex
+            b:SetScript("OnClick", function(s) ed.icon = s.path; ed:PaintIcons() end)
+            ed.icons[i] = b
+        end
+        function ed:PaintIcons()
+            for _, b in ipairs(self.icons) do
+                local on = b.path == self.icon
+                SetBorderColor(b.edges, on and C.accent[1] or C.line[1], on and C.accent[2] or C.line[2], on and C.accent[3] or C.line[3], 1)
+                b.tex:SetAlpha(on and 1 or 0.7)
+            end
+        end
+        local function Btn(label, w)
+            local b = CreateFrame("Button", nil, ed)
+            b:SetSize(w, 22)
+            SolidTexture(b, "BACKGROUND", C.slot):SetAllPoints()
+            b.edges = CreateBorder(b, 1, C.line, "BORDER")
+            b.text = CreateText(b, 11, C.accent, "CENTER")
+            b.text:SetPoint("CENTER", 0, 0)
+            b.text:SetText(label)
+            b:SetScript("OnEnter", function(s) SetBorderColor(s.edges, C.accent[1], C.accent[2], C.accent[3], 1) end)
+            b:SetScript("OnLeave", function(s) SetBorderColor(s.edges, C.line[1], C.line[2], C.line[3], 1) end)
+            return b
+        end
+        ed.save = Btn("Create", 80)
+        ed.save:SetPoint("BOTTOMRIGHT", -12, 12)
+        ed.cancel = Btn("Cancel", 70)
+        ed.cancel:SetPoint("RIGHT", ed.save, "LEFT", -6, 0)
+        ed.delete = Btn("Delete", 70)
+        ed.delete:SetPoint("BOTTOMLEFT", 12, 12)
+        ed.cancel:SetScript("OnClick", function() ed:Hide() end)
+        ed.delete:SetScript("OnClick", function()
+            if not ed.armed then ed.armed = true; ed.delete.text:SetText("Sure?"); return end
+            RemoveCustom(ed.key)
+            if CysBags.filter == ed.key then CysBags.filter = "ALL"; if CysBagsDB then CysBagsDB.filter = "ALL" end end
+            ed:Hide()
+            CysBags:SyncSidebarRows()
+            CysBags.dirty = true
+            if CysBank then CysBank.dirty = true end
+        end)
+        local function Save()
+            local name = strtrim(ed.box:GetText() or "")
+            if name == "" then ed.box:SetFocus(); return end
+            local list = CysBagsDB.custom
+            local c
+            if ed.key then
+                for _, x in ipairs(list) do if x.key == ed.key then c = x end end
+            end
+            if not c then
+                CysBagsDB.customSeq = (CysBagsDB.customSeq or 0) + 1
+                c = { key = "CUSTOM_" .. CysBagsDB.customSeq }
+                list[#list + 1] = c
+            end
+            c.name, c.icon = name, ed.icon or CUSTOM_ICONS[1]
+            ApplyCustom(c)
+            ed:Hide()
+            CysBags:SyncSidebarRows()
+            CysBags.dirty = true
+            if CysBank then CysBank.dirty = true end
+        end
+        ed.save:SetScript("OnClick", Save)
+        box:SetScript("OnEnterPressed", Save)
+        box:SetScript("OnEscapePressed", function() ed:Hide() end)
+        ed:SetScript("OnHide", function() ed.box:ClearFocus() end)
+        self.editor = ed
+    end
+    local c
+    for _, x in ipairs(CysBagsDB.custom or {}) do if x.key == key then c = x end end
+    ed.key = c and c.key or nil
+    ed.icon = c and c.icon or CUSTOM_ICONS[1]
+    ed.armed = false
+    ed.title:SetText(c and "Change category" or "New category")
+    ed.save.text:SetText(c and "Save" or "Create")
+    ed.delete.text:SetText("Delete")
+    ed.delete:SetShown(c and true or false)
+    ed.box:SetText(c and c.name or "")
+    ed:PaintIcons()
+    ed:ClearAllPoints()
+    if frame and frame:IsShown() then ed:SetPoint("TOPRIGHT", frame, "TOPLEFT", -8, 0) else ed:SetPoint("CENTER") end
+    ed:Show()
+    ed.box:SetFocus()
+end
+
 -- Shared with CysBank.lua (loaded after this file) so the bank looks and sorts the same.
 CysBags.Shared = {
     C = C, SIDEBAR = SIDEBAR, SECTIONS = SECTIONS, CATEGORY_TITLE = CATEGORY_TITLE,
@@ -2195,6 +2530,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
         events:UnregisterEvent("ADDON_LOADED")
         CysBagsDB = CysBagsDB or {}
         CysBagsDB.overrides = CysBagsDB.overrides or {}
+        CysBagsDB.custom = CysBagsDB.custom or {}
+        for _, c in ipairs(CysBagsDB.custom) do ApplyCustom(c) end
         local lastFilter = CysBagsDB.filter
         if lastFilter == "SLOTS" or VALID_CATEGORY[lastFilter] then
             CysBags.filter = lastFilter
@@ -2217,6 +2554,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "PLAYER_ENTERING_WORLD" then
         CysBags:PreCreateButtons()
         CysBags.dirty = true
+        C_Timer.After(3, function() if not seenCounts then CysBags:ClearRecent() end end) -- New Items baseline
 
     elseif event == "BAG_UPDATE" then
         -- ignore bank / keyring bags; we only draw the player's bags
