@@ -47,6 +47,36 @@ local function ClassColor(className, fileToken)
     return T.text[1], T.text[2], T.text[3]
 end
 
+-- class icon (the game's own class icon sheet) and a round status dot
+local CLASS_SHEET = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
+local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+local function ClassIcon(tex, className, fileToken)
+    local file = fileToken or (className and classFile[className])
+    local c = file and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[file]
+    if not c then return false end
+    tex:SetTexture(CLASS_SHEET)
+    tex:SetTexCoord(c[1] + 0.012, c[2] - 0.012, c[3] + 0.012, c[4] - 0.012)
+    return true
+end
+-- another Blizzard game (or the app): that game's logo; anything else gets the Battle.net logo
+local BNET_ICON = "Interface\\FriendsFrame\\Battlenet-Battleneticon"
+local GAME_ICONS = {
+    WoW = "Interface\\FriendsFrame\\Battlenet-WoWicon", S2 = "Interface\\FriendsFrame\\Battlenet-Sc2icon",
+    D3 = "Interface\\FriendsFrame\\Battlenet-D3icon", WTCG = "Interface\\FriendsFrame\\Battlenet-WTCGicon",
+    Pro = "Interface\\FriendsFrame\\Battlenet-Overwatchicon",
+}
+local function GameIcon(tex, client)
+    local path = GAME_ICONS[client or ""]
+    local get = BNet_GetClientTexture
+    if not path and type(get) == "function" and client and client ~= "" and client ~= "App" and client ~= "BSAp" then
+        local ok, p = pcall(get, client)
+        if ok and p then path = p end
+    end
+    tex:SetTexture(path or BNET_ICON)
+    tex:SetTexCoord(0.06, 0.94, 0.06, 0.94)
+    return true
+end
+
 local function Hex(r, g, b)
     return format("|cff%02x%02x%02x", floor(r * 255 + 0.5), floor(g * 255 + 0.5), floor(b * 255 + 0.5))
 end
@@ -318,33 +348,83 @@ local function GameLabel(e)
     return GAMES[c] or c or "Online"
 end
 
+-- the round icon on the left: class icon, game icon, or a plain dot; the status dot sits on its corner
+local function SetIcon(r, kind, a, b, online, status)
+    local ok = false
+    if kind == "class" then ok = ClassIcon(r.icon, a, b)
+    elseif kind == "game" then ok = GameIcon(r.icon, a) end
+    if not ok then
+        -- nothing to show (offline, class unknown): a small quiet dot instead of an empty ring
+        r.icon:SetTexture(CIRCLE)
+        r.icon:SetTexCoord(0, 1, 0, 1)
+        r.icon:SetVertexColor(0.32, 0.32, 0.32)
+        r.icon:SetSize(9, 9)
+        r.icon:SetDesaturated(false)
+        r.icon:SetAlpha(1)
+        r.iconBg:Hide()
+    else
+        r.icon:SetVertexColor(1, 1, 1)
+        r.icon:SetSize(24, 24)
+        r.icon:SetDesaturated(not online)
+        r.icon:SetAlpha(online and 1 or 0.45)
+        r.iconBg:SetAlpha(online and 1 or 0.4)
+        r.iconBg:Show()
+    end
+    r.icon:Show()
+    if status then
+        r.status:SetVertexColor(status[1], status[2], status[3])
+        r.status:Show(); r.statusRing:Show()
+    else
+        r.status:Hide(); r.statusRing:Hide()
+    end
+end
+local STATUS_ON, STATUS_AWAY, STATUS_BUSY, STATUS_APP = { 0.30, 0.85, 0.40 }, { 1, 0.75, 0.15 }, { 0.95, 0.25, 0.25 }, { 0.35, 0.60, 0.95 }
+
 local function ShowEntry(r, e)
     r.entry = e
     r:Show()
+    r:SetAlpha(1)
+    r.right:SetText("")
     if e.kind == "header" then
-        r.dot:Hide(); r.sub:Hide(); r.line:Show(); r.card:Hide(); r.hbg:Show()
-        r.line:SetColorTexture(T.border[1], T.border[2], T.border[3], 1)
+        -- quiet section break: small gold caps, a thin rule, the count on the right
+        r.dot:Hide(); r.sub:Hide(); r.card:Hide(); r.hbg:Hide(); r.sel:Hide(); r.edge:Hide()
+        r.icon:Hide(); r.iconBg:Hide(); r.status:Hide(); r.statusRing:Hide()
+        local label, n = (e.text or ""):match("^(.-) %((%d+)%)$")
+        label = label or e.text or ""
+        r.name:SetFont(STANDARD_TEXT_FONT, 11, "")
         r.name:ClearAllPoints()
-        r.name:SetPoint("LEFT", 8, 0)
-        r.name:SetPoint("RIGHT", -6, 0)
+        r.name:SetPoint("BOTTOMLEFT", 4, 7)
         r.name:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
-        r.name:SetText((DB().collapsed[e.group] and "+ " or "- ") .. e.text)
-        r.sel:Hide()
+        r.name:SetText((DB().collapsed[e.group] and "+  " or "-  ") .. label:upper())
+        r.right:ClearAllPoints()
+        r.right:SetPoint("BOTTOMRIGHT", -4, 7)
+        r.right:SetTextColor(T.dim[1], T.dim[2], T.dim[3])
+        r.right:SetText(n or "")
+        r.line:ClearAllPoints()
+        r.line:SetPoint("LEFT", r.name, "RIGHT", 8, 0)
+        r.line:SetPoint("RIGHT", r.right, "LEFT", -8, 0)
+        r.line:SetColorTexture(T.border[1], T.border[2], T.border[3], 0.35)
+        r.line:Show()
         return
     end
-    r.dot:Show(); r.sub:Show(); r.line:Hide()
+    r.dot:Hide(); r.sub:Show(); r.line:Hide(); r.hbg:Hide()
+    r.name:SetFont(STANDARD_TEXT_FONT, 13, "")
     r.sub:ClearAllPoints()
-    r.sub:SetPoint("BOTTOMLEFT", 18, 5)
-    r.sub:SetPoint("BOTTOMRIGHT", -6, 5)
+    r.sub:SetPoint("BOTTOMLEFT", 40, 5)
+    r.sub:SetPoint("BOTTOMRIGHT", -8, 5)
+    r.right:ClearAllPoints()
+    r.right:SetPoint("TOPRIGHT", -8, -6)
+    r.right:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
     r.name:ClearAllPoints()
-    r.name:SetPoint("TOPLEFT", 18, -5)
-    r.name:SetPoint("TOPRIGHT", -6, -5)
-    r.card:Show(); r.hbg:Hide()
-    r.line:SetColorTexture(T.line[1], T.line[2], T.line[3], 1)
-    r.sel:SetShown(selected == e.key)
+    r.name:SetPoint("TOPLEFT", 40, -5)
+    r.name:SetPoint("RIGHT", r.right, "LEFT", -6, 0)
+    r.card:Show()
+    local isSel = selected == e.key
+    r.sel:SetShown(isSel)
+    r.edge:SetShown(isSel)
 
     if e.kind == "ignore" then
-        r.dot:SetColorTexture(T.danger[1], T.danger[2], T.danger[3], 1)
+        SetIcon(r, "none", nil, nil, true, STATUS_BUSY)
         r.name:SetTextColor(T.text[1], T.text[2], T.text[3])
         r.name:SetText(e.name)
         r.sub:SetText(DIM .. "Ignored")
@@ -352,7 +432,7 @@ local function ShowEntry(r, e)
     end
 
     if e.kind == "motd" then
-        r.dot:Hide()
+        r.icon:Hide(); r.iconBg:Hide(); r.status:Hide(); r.statusRing:Hide(); r.edge:Hide()
         r.name:ClearAllPoints()
         r.name:SetPoint("TOPLEFT", 10, -4)
         r.name:SetPoint("TOPRIGHT", -6, -4)
@@ -367,14 +447,15 @@ local function ShowEntry(r, e)
     end
     if e.kind == "guild" then
         local cr, cg, cb = ClassColor(e.class, e.file)
-        local dot = T.green
-        if not e.online then dot = { 0.3, 0.3, 0.3 } elseif e.dnd then dot = T.danger elseif e.afk then dot = T.accent end
-        r.dot:SetColorTexture(dot[1], dot[2], dot[3], 1)
-        if e.online then r.name:SetTextColor(cr, cg, cb) else r.name:SetTextColor(T.dim[1], T.dim[2], T.dim[3]) end
+        local st = nil
+        if e.online then st = (e.dnd and STATUS_BUSY) or (e.afk and STATUS_AWAY) or STATUS_ON end
+        SetIcon(r, "class", e.class, e.file, e.online, st)
+        if e.online then r.name:SetTextColor(cr, cg, cb) else r.name:SetTextColor(T.dim[1], T.dim[2], T.dim[3]); r:SetAlpha(0.75) end
         r.name:SetText(e.name .. DIM .. "   " .. (e.rank or ""))
+        if e.level and e.online then r.right:SetText(e.level) end
         local s
         if e.online then
-            s = format("%sLvl %s %s", e.afk and "<Away> " or (e.dnd and "<Busy> " or ""), tostring(e.level or "?"), e.class or "")
+            s = format("%s%s", e.afk and "<Away> " or (e.dnd and "<Busy> " or ""), e.class or "")
             if e.area and e.area ~= "" then s = s .. " - " .. e.area end
             s = LIGHT .. s
         else
@@ -387,21 +468,25 @@ local function ShowEntry(r, e)
 
     if e.kind == "who" then
         local cr, cg, cb = ClassColor(e.class, e.file)
-        r.dot:SetColorTexture(cr, cg, cb, 1)
+        SetIcon(r, "class", e.class, e.file, true, nil)
         r.name:SetTextColor(cr, cg, cb)
         r.name:SetText(e.name)
-        local s = format("Lvl %s %s %s", tostring(e.level or "?"), e.race or "", e.class or "")
+        if e.level then r.right:SetText(e.level) end
+        local s = format("%s %s", e.race or "", e.class or "")
         if e.area and e.area ~= "" then s = s .. " - " .. e.area end
         r.sub:SetText(LIGHT .. s .. ((e.guild and e.guild ~= "") and (DIM .. "  <" .. e.guild .. ">") or ""))
         return
     end
 
-    local dot = T.green
-    if not e.online then dot = { 0.3, 0.3, 0.3 }
-    elseif e.dnd then dot = T.danger
-    elseif e.afk then dot = T.accent end
-    if e.online and not e.dnd and Category(e) == "app" then dot = { 0.35, 0.6, 0.9 } end
-    r.dot:SetColorTexture(dot[1], dot[2], dot[3], 1)
+    local st = nil
+    if e.online then
+        st = (e.dnd and STATUS_BUSY) or (e.afk and STATUS_AWAY) or (Category(e) == "app" and STATUS_APP) or STATUS_ON
+    end
+    if e.online and e.sameGame then SetIcon(r, "class", e.class, nil, true, st)
+    elseif e.online then SetIcon(r, "game", e.client, nil, true, st)
+    elseif e.kind == "bnet" then SetIcon(r, "game", nil, nil, false, nil) -- Battle.net logo, faded
+    else SetIcon(r, "class", e.class, nil, false, nil) end
+    if not e.online then r:SetAlpha(0.75) end
 
     local sub
     if e.online and e.sameGame then
@@ -413,10 +498,15 @@ local function ShowEntry(r, e)
         r.name:SetText(txt)
         local parts = {}
         if e.afk then parts[#parts + 1] = "<Away>" elseif e.dnd then parts[#parts + 1] = "<Busy>" end
-        if e.level and e.level > 0 then parts[#parts + 1] = "Lvl " .. e.level end
         if e.class and e.class ~= "" then parts[#parts + 1] = e.class end
+        if e.level and e.level > 0 then r.right:SetText(e.level) end
         local s = table.concat(parts, " ")
-        if e.area and e.area ~= "" then s = s .. (s ~= "" and " - " or "") .. e.area end
+        if e.area and e.area ~= "" then
+            -- the zone in green when they are in the same zone as you
+            local here = GetRealZoneText and GetRealZoneText()
+            local zone = (here and here == e.area) and ("|cFF66DD77" .. e.area .. "|r") or e.area
+            s = s .. (s ~= "" and "  |cFF555555-|r  " or "") .. zone
+        end
         sub = s
     elseif e.online then
         r.name:SetTextColor(T.text[1], T.text[2], T.text[3])
@@ -502,9 +592,16 @@ local function Rebuild()
                 else off[#off + 1] = e end
             end
         end
-        AddGroup("fav", "Favorites", fav)
+        local FAV_ORDER = { wow = 1, wowother = 2, game = 3, app = 4 }
+        table.sort(fav, function(a, b)
+            local ra = a.online and FAV_ORDER[Category(a)] or 5
+            local rb = b.online and FAV_ORDER[Category(b)] or 5
+            if ra ~= rb then return ra < rb end
+            return SortName(a, b)
+        end)
+        AddGroup("fav", "Favorites", fav, true)
         if d.groupByGame then
-            AddGroup("wow", "Playing WoW Classic", cats.wow)
+            AddGroup("wow", CysUICompat.isForever and "Playing WoW Forever" or "Playing WoW Classic", cats.wow) -- the game you are in
             AddGroup("wowother", "Playing other WoW versions", cats.wowother)
             table.sort(cats.game, function(a, b)
                 local ga, gb = GameLabel(a), GameLabel(b)
@@ -517,7 +614,7 @@ local function Rebuild()
             AddGroup("on", "Online", on)
         end
         AddGroup("off", "Offline", off)
-        countText:SetText(format("%d / %d online", online, #all))
+        countText:SetText(format("|cFF4FD66B%d|r online  |cFF555555/|r  %d", online, #all))
     elseif mode == "guild" then
         if not (IsInGuild and IsInGuild()) then
             countText:SetText("No guild")
@@ -541,7 +638,7 @@ local function Rebuild()
             end
             AddGroup("gon", "Online", on, true)
             AddGroup("goff", "Offline", off, true)
-            countText:SetText(format("%d / %d online", online, #all))
+            countText:SetText(format("|cFF4FD66B%d|r online  |cFF555555/|r  %d", online, #all))
         end
     elseif mode == "who" then
         local items, total = CollectWho()
@@ -766,15 +863,46 @@ local function MakeRow(i)
     local r = CreateFrame("Button", nil, list)
     r:SetHeight(ROW_H)
     r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    r.hl = W.Texture(r, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.10 })
+    r.hl = W.Texture(r, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.07 })
     r.hl:SetAllPoints(); r.hl:Hide()
     r.sel = W.Texture(r, "BACKGROUND", { T.brand[1], T.brand[2], T.brand[3], 0.22 })
     r.sel:SetAllPoints(); r.sel:Hide()
     r.dot = W.Texture(r, "ARTWORK", T.green)
     r.dot:SetSize(3, ROW_H - 12)
     r.dot:SetPoint("LEFT", 6, 0)
+    r.dot:Hide()
+    -- round icon: a dark disc, the class / game icon on it, a status dot on its lower-right corner
+    r.iconBg = r:CreateTexture(nil, "ARTWORK", nil, 1)
+    r.iconBg:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    r.iconBg:SetVertexColor(T.border[1], T.border[2], T.border[3], 0.8)
+    r.iconBg:SetSize(26, 26)
+    r.iconBg:SetPoint("LEFT", 7, 0)
+    r.icon = r:CreateTexture(nil, "ARTWORK", nil, 2)
+    r.icon:SetSize(24, 24)
+    r.icon:SetPoint("CENTER", r.iconBg, "CENTER", 0, 0)
+    pcall(function()
+        local mask = r:CreateMaskTexture()
+        mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(r.icon)
+        r.icon:AddMaskTexture(mask)
+    end)
+    r.statusRing = r:CreateTexture(nil, "OVERLAY", nil, 1)
+    r.statusRing:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    r.statusRing:SetVertexColor(T.bg[1], T.bg[2], T.bg[3])
+    r.statusRing:SetSize(11, 11)
+    r.statusRing:SetPoint("CENTER", r.iconBg, "BOTTOMRIGHT", -3, 3)
+    r.status = r:CreateTexture(nil, "OVERLAY", nil, 2)
+    r.status:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    r.status:SetSize(7, 7)
+    r.status:SetPoint("CENTER", r.statusRing, "CENTER", 0, 0)
+    -- gold edge on the left of the selected row
+    r.edge = W.Texture(r, "ARTWORK", T.accent)
+    r.edge:SetWidth(2)
+    r.edge:SetPoint("TOPLEFT", 0, -1)
+    r.edge:SetPoint("BOTTOMLEFT", 0, 1)
+    r.edge:Hide()
     -- every person sits on a soft card; headers get their own darker bar
-    r.card = W.Texture(r, "BACKGROUND", { T.card[1], T.card[2], T.card[3], 0.55 }, -2)
+    r.card = W.Texture(r, "BACKGROUND", { T.card[1], T.card[2], T.card[3], 0.40 }, -2)
     r.card:SetPoint("TOPLEFT", 0, -1)
     r.card:SetPoint("BOTTOMRIGHT", 0, 1)
     r.hbg = W.Texture(r, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.07 }, -2)
@@ -783,6 +911,7 @@ local function MakeRow(i)
     r.hbg:Hide()
     r.name = W.Text(r, 13, T.text)
     r.name:SetWordWrap(false)
+    r.right = W.Text(r, 11, T.accent, "RIGHT") -- level (gold) on people, the count on headers
     r.sub = W.Text(r, 11, T.dim)
     r.sub:SetWordWrap(false)
     r.sub:SetPoint("BOTTOMLEFT", 18, 5)
@@ -882,23 +1011,50 @@ local function Build()
     close:SetScript("OnLeave", function() x:SetTextColor(T.text[1], T.text[2], T.text[3]) end)
     close:SetScript("OnClick", function() CUI:HideWindow(f) end)
 
-    tabFriends = W.Button(f, 58, 22, "Friends")
+    -- tabs: plain words, the open one in gold with a gold line under it
+    local tabRule = W.Texture(f, "BORDER", T.line)
+    tabRule:SetHeight(1)
+    tabRule:SetPoint("TOPLEFT", 10, -55)
+    tabRule:SetPoint("TOPRIGHT", -10, -55)
+    local function Tab(label)
+        local b = CreateFrame("Button", nil, f)
+        b:SetSize(10, 22)
+        b.text = W.Text(b, 12, T.dim, "CENTER")
+        b.text:SetPoint("CENTER", 0, 1)
+        b.text:SetText(label)
+        b:SetWidth(b.text:GetStringWidth() + 16)
+        b.bar = W.Texture(b, "ARTWORK", T.accent)
+        b.bar:SetHeight(2)
+        b.bar:SetPoint("BOTTOMLEFT", 4, -1)
+        b.bar:SetPoint("BOTTOMRIGHT", -4, -1)
+        b.bar:Hide()
+        function b:SetPrimary(on)
+            self.on = on
+            self.bar:SetShown(on)
+            local c = on and T.accent or T.dim
+            self.text:SetTextColor(c[1], c[2], c[3])
+        end
+        b:SetScript("OnEnter", function(s) if not s.on then s.text:SetTextColor(1, 1, 1) end end)
+        b:SetScript("OnLeave", function(s) s:SetPrimary(s.on) end)
+        return b
+    end
+    tabFriends = Tab("Friends")
     tabFriends:SetPoint("TOPLEFT", 10, -32)
     tabFriends:SetScript("OnClick", function() SetMode("friends") end)
-    tabWho = W.Button(f, 50, 22, "Who")
-    tabWho:SetPoint("LEFT", tabFriends, "RIGHT", 4, 0)
+    tabWho = Tab("Who")
+    tabWho:SetPoint("LEFT", tabFriends, "RIGHT", 2, 0)
     tabWho:SetScript("OnClick", function() SetMode("who") end)
-    tabGuild = W.Button(f, 54, 22, "Guild")
-    tabGuild:SetPoint("LEFT", tabWho, "RIGHT", 4, 0)
+    tabGuild = Tab("Guild")
+    tabGuild:SetPoint("LEFT", tabWho, "RIGHT", 2, 0)
     -- WoW Forever: /who lives in Blizzard's Looking For Group window there, so ours steps aside
     if CysUICompat.isForever then
         tabWho:Hide()
         tabGuild:ClearAllPoints()
-        tabGuild:SetPoint("LEFT", tabFriends, "RIGHT", 4, 0)
+        tabGuild:SetPoint("LEFT", tabFriends, "RIGHT", 2, 0)
     end
     tabGuild:SetScript("OnClick", function() SetMode("guild") end)
-    tabIgnore = W.Button(f, 54, 22, "Ignore")
-    tabIgnore:SetPoint("LEFT", tabGuild, "RIGHT", 4, 0)
+    tabIgnore = Tab("Ignore")
+    tabIgnore:SetPoint("LEFT", tabGuild, "RIGHT", 2, 0)
     tabIgnore:SetScript("OnClick", function() SetMode("ignore") end)
 
     countText = W.Text(f, 10, T.dim, "RIGHT")

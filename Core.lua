@@ -478,6 +478,7 @@ if CysChangelog then
                   "Cys's Bags: Pinned - Alt-click an item (or drop it on Pinned) to keep it at the top of your bags; Alt-click again to unpin.",
                   "Cys's Bags: New Items - whatever came into your bags since you last closed them shows at the top of All Items, and empties when you close the bags.",
                   "Cys's Bags: categories of your own. + New category at the bottom of the sidebar asks for a name and an icon; drop items on it to fill it. Right-click one of your categories to rename it, change its icon or delete it (its items sort themselves again).",
+                  "Friends: a fresh look - each friend has a round class icon (or the icon of the game they are in) with a small status dot (green online, yellow away, red busy, blue on the app), the level in gold on the right, their zone in green when it is your zone, quiet gold section headings, and tabs with a gold underline. Offline friends are dimmed.",
                   "Cys's Bags: a + slot at the end of each category - drop an item on it to move the item there. While you carry an item, Pinned and your own categories open up as drop spots even when empty.",
                   "Nameplates: a small sword beside mobs you still need for a quest - kill objectives and mobs that drop a quest item. It goes away once that objective is done. Switch and size on the Nameplates page.",
                   "Unit Frames: a small crown beside the group leader - on the party frames, and on your own frame when you lead.",
