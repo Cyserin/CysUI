@@ -2184,7 +2184,7 @@ local function PaintBlock(block)
         local fs = line and line.Text
         if not (fs and fs.GetText) then return end
         local ok, text = pcall(fs.GetText, fs)
-        if not ok or type(text) ~= "string" then return end
+        if not ok or type(text) ~= "string" or CysUICompat.Secret(text) then return end
         local a, n = text:match("(%d+)%s*/%s*(%d+)")
         a, n = tonumber(a), tonumber(n)
         if a and n and n > 0 then
@@ -2223,7 +2223,7 @@ local function QuestColors()
             local fs = _G[name .. "TextLeft" .. i]
             if fs then
                 local ok, text = pcall(fs.GetText, fs)
-                if ok and type(text) == "string" and not text:find("|c") then
+                if ok and type(text) == "string" and not CysUICompat.Secret(text) and not text:find("|c") then
                     local a, n = text:match("(%d+)%s*/%s*(%d+)")
                     a, n = tonumber(a), tonumber(n)
                     if a and n and n > 0 and n < 1000 then fs:SetTextColor(ProgressColor(a, n)) end

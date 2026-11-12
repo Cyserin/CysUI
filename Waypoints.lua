@@ -312,7 +312,9 @@ local function HookWorldMap()
         local down = IsMouseButtonDown("LeftButton") and IsControlKeyDown()
         if down and not wasDown then
             local area = map.ScrollContainer or canvas
-            if MouseIsOver(area) then
+            -- (the old MouseIsOver() helper is gone on WoW Forever: ask the frame itself)
+            local okOver, over = pcall(area.IsMouseOver, area)
+            if okOver and over == true then
                 local x, y = Cursor()
                 local mapID = MapID(map)
                 if x and y and mapID and x >= 0 and y >= 0 and x <= 1 and y <= 1 then

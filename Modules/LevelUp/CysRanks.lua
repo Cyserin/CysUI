@@ -4,7 +4,8 @@
 -- A window that sits beside the spellbook and answers three questions:
 --   To Train    what can I learn at my trainer right now, what does it cost, and what comes later
 --   Max Ranks   which of my spells are behind the best rank for my level
---   Weapons     which weapon skills my class can learn, and which I already have
+--   Trainers    city by city: my class trainers, then each weapon master and the weapons they can still
+--               teach me (a master with nothing left to teach is left out)
 --
 -- Where the list comes from: the spellbook (what you know, and any spells the game lists as still to come)
 -- and your class trainer. Levels and prices are remembered every time you open your class trainer, so one
@@ -28,6 +29,7 @@ CysUIDB.ranks = CysUIDB.ranks or {}
 local db = CysUIDB.ranks
 if db.open == nil then db.open = true end
 db.tab = db.tab or "train"
+if db.tab == "weapons" then db.tab = "where" end -- Weapons is part of Trainers now
 db.trainer = db.trainer or {}
 local _, CLASS = UnitClass("player")
 CLASS = CLASS or "?"
@@ -146,6 +148,17 @@ local function ReadTrainer()
     end
     if not ranked then return false end
 
+    -- remember who this trainer is and where (the Trainers tab marks the ones you have opened)
+    pcall(function()
+        local npc = UnitName("npc")
+        if type(npc) ~= "string" or npc == "" then return end
+        local zone = GetRealZoneText and GetRealZoneText() or ""
+        local sub = GetSubZoneText and GetSubZoneText() or ""
+        db.seen = db.seen or {}
+        db.seen[CLASS] = db.seen[CLASS] or {}
+        db.seen[CLASS][npc] = (sub ~= "" and sub ~= zone) and (zone .. ", " .. sub) or zone
+    end)
+
     local rec = db.trainer[CLASS]
     if not rec or type(rec.rows) ~= "table" then
         rec = { rows = {} }
@@ -210,6 +223,107 @@ local WEAPONS = {
 local WEAPON_NOTES = {
     SHAMAN = "Two-Handed Axes and Two-Handed Maces come from a talent, not a weapon master.",
 }
+
+-- Weapon masters (Classic's own): city, where in the city, then each master and the weapon skills they teach
+local WEAPON_MASTERS = {
+    Alliance = {
+        { "Stormwind", "Trade District", { { "Woo Ping", { 201, 202, 200, 227, 5011, 1180 } } } },
+        { "Ironforge", "Military Ward", { { "Buliwyf Stonehand", { 196, 197, 198, 199, 15590, 266 } },
+                                          { "Bixi Wobblebonk", { 1180, 5011, 2567 } } } },
+        { "Darnassus", "Warrior's Terrace", { { "Ilyenia Moonfire", { 1180, 15590, 227, 264, 2567 } } } },
+    },
+    Horde = {
+        { "Orgrimmar", "Valley of Honor", { { "Hanashi", { 196, 197, 227, 264, 2567 } },
+                                            { "Sayoc", { 196, 197, 1180, 15590, 264, 2567 } } } },
+        { "Thunder Bluff", "Lower rise", { { "Ansekhwa", { 198, 199, 227, 266 } } } },
+        { "Undercity", "War Quarter", { { "Archibald", { 201, 202, 1180, 200, 5011 } } } },
+    },
+}
+local WEAPON_EXTRA = { [5009] = "Wands: every class that can use them knows the skill from the start." }
+
+-- Class trainers in the capital cities (Classic's own): city, where in the city, who
+local CITY_TRAINERS = {
+    Alliance = {
+        WARRIOR = {
+            { "Stormwind", "Old Town, Command Center", { "Ilsa Corbin", "Wu Shen", "Lyria Du Lac" } },
+            { "Ironforge", "Military Ward, Hall of Arms", { "Kelstrum Stonebreaker", "Bilban Tosslespanner", "Kelv Sternhammer" } },
+            { "Darnassus", "Warrior's Terrace", { "Arias'ta Bladesinger", "Sildanair", "Darnath Bladesinger" } },
+        },
+        PALADIN = {
+            { "Stormwind", "Cathedral of Light", { "Lord Grayson Shadowbreaker", "Arthur the Faithful", "Katherine the Pure" } },
+            { "Ironforge", "Mystic Ward, Hall of Mysteries", { "Valgar Highforge", "Beldruk Doombrow", "Brandur Ironhammer" } },
+        },
+        HUNTER = {
+            { "Stormwind", "Dwarven District", { "Einris Brightspear", "Ulfir Ironbeard", "Thorfin Stoneshield" } },
+            { "Ironforge", "Military Ward, Hall of Arms", { "Regnus Thundergranite", "Daera Brightspear", "Olmin Burningbeard" } },
+            { "Darnassus", "Cenarion Enclave", { "Jocaste", "Dorion", "Jeen'ra Nightrunner" } },
+        },
+        ROGUE = {
+            { "Stormwind", "Old Town, SI:7", { "Osborne the Night Man", "Lord Tony Romano", "Renzik \"The Shiv\"" } },
+            { "Ironforge", "The Forlorn Cavern", { "Hulfdan Blackbeard", "Ormyr Flinteye", "Fenthwick" } },
+            { "Darnassus", "Cenarion Enclave", { "Syurna", "Anishar", "Erion Shadewhisper" } },
+        },
+        PRIEST = {
+            { "Stormwind", "Cathedral of Light", { "High Priestess Laurena", "Brother Joshua", "Brother Benjamin" } },
+            { "Ironforge", "Mystic Ward, Hall of Mysteries", { "High Priest Rohan", "Braenna Flintcrag", "Toldren Deepiron" } },
+            { "Darnassus", "Temple of the Moon", { "Jandria", "Lariia", "Astarii Starseeker" } },
+        },
+        MAGE = {
+            { "Stormwind", "Mage Quarter, Wizard's Sanctum", { "Jennea Cannon", "Elsharin", "Maginor Dumas" } },
+            { "Ironforge", "Mystic Ward, Hall of Mysteries", { "Juli Stormkettle", "Bink", "Dink" } },
+        },
+        WARLOCK = {
+            { "Stormwind", "Mage Quarter, The Slaughtered Lamb", { "Demisette Cloyce", "Ursula Deline", "Sandahl" } },
+            { "Ironforge", "The Forlorn Cavern", { "Briarthorn", "Alexander Calder", "Thistleheart" } },
+        },
+        DRUID = {
+            { "Stormwind", "The Park", { "Sheldras Moontree", "Theridran", "Maldryn" } },
+            { "Darnassus", "Cenarion Enclave", { "Mathrengyl Bearwalker", "Denatharion", "Fylerian Nightwing" } },
+            { "Moonglade", "Nighthaven", { "Loganaar" } },
+        },
+    },
+    Horde = {
+        WARRIOR = {
+            { "Orgrimmar", "Valley of Honor", { "Grezz Ragefist", "Sorek", "Zel'mak" } },
+            { "Thunder Bluff", "Hunter Rise", { "Sark Ragetotem", "Ker Ragetotem", "Torm Ragetotem" } },
+            { "Undercity", "War Quarter", { "Angela Curthas", "Baltus Fowler", "Christoph Walker" } },
+        },
+        HUNTER = {
+            { "Orgrimmar", "Valley of Honor", { "Ormak Grimshot", "Xor'juul", "Sian'dur" } },
+            { "Thunder Bluff", "Hunter Rise", { "Holt Thunderhorn", "Urek Thunderhorn", "Kary Thunderhorn" } },
+        },
+        ROGUE = {
+            { "Orgrimmar", "Cleft of Shadow", { "Shenthul", "Ormok", "Gest" } },
+            { "Undercity", "Rogues' Quarter", { "Carolyn Ward", "Miles Dexter", "Gregory Charles" } },
+        },
+        PRIEST = {
+            { "Orgrimmar", "Valley of Spirits", { "Ur'kyo", "X'yera", "Zayus" } },
+            { "Thunder Bluff", "Spirit Rise, Pools of Vision", { "Father Cobb", "Malakai Cross", "Miles Welsh" } },
+            { "Undercity", "War Quarter", { "Aelthalyste", "Father Lankester", "Father Lazarus" } },
+        },
+        SHAMAN = {
+            { "Orgrimmar", "Valley of Wisdom", { "Kardris Dreamseeker", "Sian'tsu", "Sagorne Creststrider" } },
+            { "Thunder Bluff", "Spirit Rise", { "Tigor Skychaser", "Beram Skychaser", "Siln Skychaser" } },
+        },
+        MAGE = {
+            { "Orgrimmar", "Valley of Spirits", { "Pephredo", "Enyo", "Deino" } },
+            { "Thunder Bluff", "Spirit Rise, Pools of Vision", { "Archmage Shymm", "Thurston Xane", "Ursyn Ghull" } },
+            { "Undercity", "Magic Quarter", { "Kaelystia Hatebringer", "Pierce Shackleton", "Anastasia Hartwell" } },
+        },
+        WARLOCK = {
+            { "Orgrimmar", "Cleft of Shadow", { "Mirket", "Grol'dar", "Zevrost" } },
+            { "Undercity", "Magic Quarter", { "Kaal Soulreaper", "Luther Pickman", "Richard Kerwin" } },
+        },
+        DRUID = {
+            { "Thunder Bluff", "Elder Rise", { "Turak Runetotem", "Sheal Runetotem", "Kym Wildmane" } },
+            { "Moonglade", "Nighthaven", { "Loganaar" } },
+        },
+    },
+}
+local function Faction()
+    local ok, f = pcall(UnitFactionGroup, "player")
+    return ok and f or nil
+end
 
 local function SpellKnown(id)
     if C_SpellBook and C_SpellBook.IsSpellKnown then
@@ -357,6 +471,8 @@ local function Hex(c)
     return string.format("|cFF%02X%02X%02X", math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
 end
 local GREY = { 0.50, 0.50, 0.50 }
+local TICK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t"
+local CROSS = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:14:14|t"
 
 -- a note takes as many rows as it needs (rows are one line high)
 local NOTE_CHARS = 48
@@ -418,17 +534,88 @@ local function BuildView()
         if #data.max == 0 then
             Note("No ranked spells found yet. Open your class trainer once so the ranks are known.")
         end
-    else
-        for _, w in ipairs(data.weapons) do
-            view[#view + 1] = { kind = "weapon", w = w, dim = not w.known,
-                                right = w.known and (Hex(T.green) .. "Known|r") or "Not learned" }
+    else -- "where": one block per city - class trainers, then weapon masters and what they teach you
+        local seen = (db.seen and db.seen[CLASS]) or {}
+        local listed, byID = {}, {}
+        for _, w in ipairs(data.weapons) do byID[w.id] = w end
+        local fac = Faction() or ""
+        local trainers = CITY_TRAINERS[fac] and CITY_TRAINERS[fac][CLASS] or {}
+        local masters = WEAPON_MASTERS[fac] or {}
+        local cities, order = {}, {}
+        local function City(name)
+            if not cities[name] then cities[name] = {}; order[#order + 1] = name end
+            return cities[name]
         end
-        if #data.weapons == 0 then
-            Note("No weapon list for this class.")
-        elseif data.weaponsKnown == 0 then
-            Note("The game did not report any of these as known, so this list can't be trusted on this client yet.")
+        for _, c in ipairs(trainers) do City(c[1]).trainers = c end
+        local taught = {}
+        for _, m in ipairs(masters) do
+            local list = {}
+            for _, who in ipairs(m[3]) do
+                local mine = {}
+                for _, id in ipairs(who[2]) do
+                    if byID[id] then
+                        mine[#mine + 1] = byID[id]
+                        taught[id] = true
+                        byID[id].from = byID[id].from or {}
+                        byID[id].from[#byID[id].from + 1] = who[1] .. " (" .. m[1] .. ")"
+                    end
+                end
+                -- a master with nothing left to teach you is left out (unless the game can't tell us what you know)
+                local left = 0
+                for _, w in ipairs(mine) do if not w.known then left = left + 1 end end
+                table.sort(mine, function(x, y)
+                    if x.known ~= y.known then return not x.known end
+                    return x.name < y.name
+                end)
+                if #mine > 0 and (left > 0 or data.weaponsKnown == 0) then list[#list + 1] = { who[1], mine } end
+            end
+            if #list > 0 then
+                local c = City(m[1])
+                c.masters, c.masterPlace = list, m[2]
+            end
         end
-        if WEAPON_NOTES[CLASS] then Note(WEAPON_NOTES[CLASS]) end
+        for _, name in ipairs(order) do
+            local c = cities[name]
+            view[#view + 1] = { kind = "head", text = name }
+            if c.trainers then
+                view[#view + 1] = { kind = "line", text = Hex(T.accent) .. "Class trainers|r", right = c.trainers[2] }
+                for _, who in ipairs(c.trainers[3]) do
+                    listed[who] = true
+                    view[#view + 1] = { kind = "line", text = who, indent = true,
+                                        right = seen[who] and (Hex(T.green) .. "visited|r") or "" }
+                end
+            end
+            for _, m in ipairs(c.masters or {}) do
+                view[#view + 1] = { kind = "line", text = Hex(T.accent) .. "Weapon master:|r " .. m[1], right = c.masterPlace }
+                for _, w in ipairs(m[2]) do
+                    view[#view + 1] = { kind = "weapon", w = w, gold = not w.known, right = w.known and TICK or CROSS }
+                end
+            end
+        end
+        if #trainers == 0 then Note("No city list for this class and faction yet. Trainers you open are remembered below.") end
+        -- weapon skills no weapon master of your faction teaches
+        local rest = {}
+        for _, w in ipairs(data.weapons) do if not taught[w.id] then rest[#rest + 1] = w end end
+        if #rest > 0 then
+            view[#view + 1] = { kind = "head", text = "Not from a weapon master" }
+            for _, w in ipairs(rest) do
+                view[#view + 1] = { kind = "weapon", w = w, gold = not w.known, right = w.known and TICK or CROSS }
+                if WEAPON_EXTRA[w.id] then Note(WEAPON_EXTRA[w.id]) end
+            end
+            if WEAPON_NOTES[CLASS] then Note(WEAPON_NOTES[CLASS]) end
+        end
+        if #data.weapons > 0 and data.weaponsKnown == 0 then
+            Note("The game did not report any weapon skill as known, so Known / Not learned can't be trusted here yet.")
+        end
+        local extra = {}
+        for name in pairs(seen) do if not listed[name] then extra[#extra + 1] = name end end
+        table.sort(extra)
+        if #extra > 0 then
+            view[#view + 1] = { kind = "head", text = "Also visited" }
+            for _, name in ipairs(extra) do
+                view[#view + 1] = { kind = "line", text = name, indent = true, right = seen[name] }
+            end
+        end
     end
 end
 
@@ -451,7 +638,12 @@ local function Summary()
         return (data.ranked - data.behind) .. " of " .. data.ranked .. " spells are at their best rank.",
             data.behind > 0 and "The ones at the top have a rank waiting at your trainer." or "Nothing to catch up on."
     end
-    return "Weapon skills your class can learn.", "Weapon masters in the capital cities teach the ones you lack."
+    local left = 0
+    for _, w in ipairs(data.weapons) do if not w.known then left = left + 1 end end
+    local second = (data.weaponsKnown == 0) and "Class trainers, then what each weapon master teaches."
+        or (left == 0 and "Every weapon skill your class can use is learned." or
+            (left == 1 and "1 weapon skill to learn." or (left .. " weapon skills to learn.")))
+    return "Where your class trains, city by city.", second
 end
 
 local function PaintRows()
@@ -465,7 +657,7 @@ local function PaintRows()
             row:Hide()
         else
             row:Show()
-            local head, note = v.kind == "head", v.kind == "note"
+            local head, note = v.kind == "head", v.kind == "note" or v.kind == "line"
             row.rule:SetShown(head)
             row.mark:SetShown(v.mark and true or false)
             row.icon:SetShown(not head and not note)
@@ -479,15 +671,16 @@ local function PaintRows()
                 row.right:SetText(v.right or "")
                 row.right:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
             elseif note then
-                row.name:SetPoint("LEFT", 6, 0)
-                row.name:SetPoint("RIGHT", -6, 0)
+                row.name:SetPoint("LEFT", v.indent and 16 or 6, 0)
+                row.name:SetPoint("RIGHT", row.right, "LEFT", -6, 0)
                 row.name:SetText(v.text)
                 row.name:SetTextColor(T.desc[1], T.desc[2], T.desc[3])
-                row.right:SetText("")
+                row.right:SetText(v.right or "")
+                row.right:SetTextColor(GREY[1], GREY[2], GREY[3])
             else
                 row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
                 row.name:SetPoint("RIGHT", row.right, "LEFT", -6, 0)
-                local c = v.dim and GREY or T.text
+                local c = v.dim and GREY or (v.gold and T.accent or T.text)
                 local e, label = v.e, nil
                 if v.kind == "weapon" then
                     label = v.w.name
@@ -553,12 +746,19 @@ local function RowTip(self)
     elseif v.kind == "weapon" then
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(v.w.name, T.accent[1], T.accent[2], T.accent[3])
-        GameTooltip:AddLine(v.w.known and "You can use these." or "Learned from a weapon master.", 1, 1, 1)
+        if v.w.known then
+            GameTooltip:AddLine("You can use these.", 1, 1, 1)
+        elseif v.w.from then
+            GameTooltip:AddLine("Taught by:", 1, 1, 1)
+            for _, who in ipairs(v.w.from) do GameTooltip:AddLine("  " .. who, 1, 1, 1) end
+        else
+            GameTooltip:AddLine("Not taught by a weapon master.", 1, 1, 1)
+        end
         GameTooltip:Show()
     end
 end
 
-local TABS = { { "train", "To Train" }, { "max", "Max Ranks" }, { "weapons", "Weapons" } }
+local TABS = { { "train", "To Train" }, { "max", "Max Ranks" }, { "where", "Trainers" } }
 
 function Refresh()
     if not win then return end
@@ -607,7 +807,7 @@ local function BuildWindow()
     close:SetScript("OnClick", function() db.open = false; Sync() end)
 
     win.tabs = {}
-    local tw = math.floor((WIDTH - 24 - 8) / 3)
+    local tw = math.floor((WIDTH - 24 - 4 * (#TABS - 1)) / #TABS)
     for i, t in ipairs(TABS) do
         local b = W.Button(win, tw, 22, t[2])
         b.key = t[1]
@@ -653,7 +853,7 @@ local function BuildWindow()
         row.name = W.Text(row, 12, T.text)
         row.name:SetWordWrap(false)
         row:SetScript("OnEnter", function(self)
-            if self.v and self.v.kind ~= "head" and self.v.kind ~= "note" then self.hl:Show() end
+            if self.v and (self.v.kind == "spell" or self.v.kind == "weapon") then self.hl:Show() end
             RowTip(self)
         end)
         row:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
@@ -822,6 +1022,7 @@ CUI:RegisterPage("Spell Ranks", function(page)
     W.Notes(page, 4, -130, width, "", {
         "Levels and prices are read from your class trainer. Open it once and the whole list fills in; it is read again on every visit.",
         "Point at a spell for every rank, the level it comes at and its price.",
+        "The Trainers tab lists the cities that train your class, where in the city, and who. Weapon masters are at the bottom of the Weapons tab.",
         { "/cuiranks", "open or close the window; /cuiranks check prints what was read" },
     })
 end)

@@ -151,7 +151,8 @@ local function OnUnit(tip)
     if not tip.cysPanel then return end
     local db = DB()
     local _, unit = tip:GetUnit()
-    if not unit then return end
+    -- WoW Forever: in combat the unit can come back locked; nothing here can use it then
+    if not unit or CysUICompat.Secret(unit) then return end
     if db.hideUnitInCombat and InCombatLockdown() then tip:Hide() return end
 
     if UnitIsPlayer(unit) then

@@ -350,8 +350,17 @@ local function PlaceEditBox(cf, eb)
     local above = bottom and (bottom * scale < (eb:GetHeight() + 10))
     eb:ClearAllPoints()
     if above then
-        eb:SetPoint("BOTTOMLEFT", cf, "TOPLEFT", -5, 6)
-        eb:SetPoint("BOTTOMRIGHT", cf, "TOPRIGHT", 5, 6)
+        -- above the tab row, not on it: the box takes clicks even while it is faded, so sitting on the tabs
+        -- made them unclickable
+        local lift = tabLift + 30
+        pcall(function()
+            local tab = _G[cf:GetName() .. "Tab"]
+            local tt, ct = tab:GetTop(), cf:GetTop()
+            local ts, cs = tab:GetEffectiveScale(), cf:GetEffectiveScale()
+            if tt and ct and ts and cs and cs > 0 then lift = math.max(6, tt * ts / cs - ct + 4) end
+        end)
+        eb:SetPoint("BOTTOMLEFT", cf, "TOPLEFT", -5, lift)
+        eb:SetPoint("BOTTOMRIGHT", cf, "TOPRIGHT", 5, lift)
     else
         eb:SetPoint("TOPLEFT", cf, "BOTTOMLEFT", -5, -6)
         eb:SetPoint("TOPRIGHT", cf, "BOTTOMRIGHT", 5, -6)
@@ -450,6 +459,8 @@ local function SetupMover()
     local eb = _G.ChatFrame1EditBox
     if eb then
         eb:HookScript("OnShow", function(self) PlaceEditBox(cf, self) end)
+        eb:HookScript("OnEditFocusGained", function(self) PlaceEditBox(cf, self) end)
+        C_Timer.After(2, function() PlaceEditBox(cf, eb) end) -- once the tabs have settled into place
         PlaceEditBox(cf, eb)
     end
     if cf.SetUserPlaced then pcall(cf.SetUserPlaced, cf, true) end

@@ -829,6 +829,7 @@ local function CreateUnitFrame(def)
     if def.unit == "target" or def.unit == "targettarget" then pcall(f.RegisterEvent, f, "PLAYER_TARGET_CHANGED") end
     if def.combo then pcall(f.RegisterEvent, f, "PLAYER_COMBO_POINTS") end
     if def.unit == "pet" then pcall(f.RegisterEvent, f, "UNIT_PET") end
+    if def.unit == "focus" then pcall(f.RegisterEvent, f, "PLAYER_FOCUS_CHANGED") end
     if def.unit == "player" and def.power then
         for _, ev in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
                               "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_DELAYED" }) do
@@ -859,6 +860,9 @@ local DEFS = {
                      noHealthText = true, label = "Target of Target", point = "CENTER", x = 262, y = -246 },
     pet          = { unit = "pet", name = "CysUIPetFrame", w = 130, h = 32, power = true, watch = true, fontSize = 10,
                      noHealthText = true, label = "Pet Frame", point = "CENTER", x = -250, y = -246 },
+    -- WoW Forever only (Classic Era has no focus); on unless switched off
+    focus        = { unit = "focus", name = "CysUIFocusFrame", w = 150, h = 32, power = true, watch = true, fontSize = 10,
+                     noHealthText = true, label = "Focus Frame", point = "CENTER", x = -420, y = -60 },
 }
 
 local BLIZZARD = {
@@ -866,6 +870,7 @@ local BLIZZARD = {
     target = { "TargetFrame", "ComboFrame" },
     targettarget = { "TargetFrameToT" },
     pet = { "PetFrame" },
+    focus = { "FocusFrame" },
     party = { "PartyMemberFrame1", "PartyMemberFrame2", "PartyMemberFrame3", "PartyMemberFrame4", "PartyFrame" },
 }
 
@@ -968,7 +973,9 @@ function UF.Enable()
     end
     local db = DB()
     for key in pairs(DEFS) do
-        if db[key] then
+        local on = db[key]
+        if key == "focus" then on = db.focus ~= false and CysUICompat and CysUICompat.isForever end
+        if on then
             local ok, err = pcall(Build, key)
             if not ok then CUI:Print("|cFFFF9F43Unit Frames: " .. key .. " skipped (" .. tostring(err) .. ")|r") end
         end
@@ -1059,6 +1066,7 @@ function UF.ApplyNameStyle()
     local small = db.nameCornerSmall ~= false
     Style(UF.frames.targettarget, small, math.min(size, 9), 10)
     Style(UF.frames.pet, small, math.min(size, 9), 10)
+    Style(UF.frames.focus, small, math.min(size, 9), 10)
     for i = 1, 4 do Style(UF.frames["party" .. i], small, math.min(size, 10), 10, -18) end
 end
 
@@ -1195,8 +1203,12 @@ CUI:RegisterPage("Unit Frames", function(page)
     W.Header(page, "Which frames (needs a /reload)", width):SetPoint("TOPLEFT", 0, -222)
     local y = -252
     for _, row in ipairs({ { "player", "Player" }, { "target", "Target (with buffs, debuffs, combo points)" },
-                           { "targettarget", "Target of target" }, { "pet", "Pet" }, { "party", "Party" } }) do
-        local cb = W.Checkbox(page, row[2], function() return db[row[1]] end, function(on) db[row[1]] = on end)
+                           { "targettarget", "Target of target" }, { "pet", "Pet" }, { "focus", "Focus (WoW Forever; /focus sets it)" },
+                           { "party", "Party" } }) do
+        local cb = W.Checkbox(page, row[2], function()
+            if row[1] == "focus" then return db.focus ~= false end
+            return db[row[1]]
+        end, function(on) db[row[1]] = on and true or false end)
         cb:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end

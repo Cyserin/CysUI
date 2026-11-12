@@ -328,6 +328,9 @@ function MM.Enable()
     local FOREVER_ICONS = {
         { function() return MinimapCluster and (MinimapCluster.Tracking or MinimapCluster.TrackingFrame) end, "TOPLEFT", 3, -3 },
         { function() return _G.AddonCompartmentFrame end, "TOPRIGHT", -3, -28 },
+        -- the day / night indicator: Blizzard puts it on the round map's top-right edge, which is now under
+        -- our square map
+        { function() return MinimapCluster and MinimapCluster.DielFrame end, "BOTTOMRIGHT", -3, 3 },
     }
     for _, icon in ipairs(FOREVER_ICONS) do
         local okF, f = pcall(icon[1])
@@ -349,6 +352,21 @@ function MM.Enable()
                 hooksecurefunc(f, "SetPoint", function() if not placing then C_Timer.After(0, Place) end end)
             end)
         end
+    end
+
+    -- WoW Forever: the queue icon (LFG, battlegrounds) is an Edit Mode piece, so its place is yours to set in
+    -- Edit Mode. We only lift it above the map so it can't hide underneath; its position is left alone.
+    if CUI.isForever and _G.QueueStatusButton then
+        Step("queue icon", function()
+            local q = _G.QueueStatusButton
+            local function Lift()
+                if InCombatLockdown() then return end
+                pcall(q.SetFrameStrata, q, "HIGH")
+                pcall(q.SetFrameLevel, q, Minimap:GetFrameLevel() + 10)
+            end
+            Lift()
+            q:HookScript("OnShow", Lift)
+        end)
     end
 
     -- gold edge + overlay for coordinates (children of the map so they draw above it)
