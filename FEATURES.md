@@ -20,7 +20,8 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
 - **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). Works in combat.
 - **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too.
-- **Your Characters**: a minimap button (or `/cuichars`) opens a window with the rested XP of all your characters, worked out while they are logged out, and when each will be full.
+- **Your Characters**: a minimap button (or `/cuichars`) opens a window with three tabs: rested XP of all your characters (worked out while they are logged out) and when each will be full; gold on every character with the total; and the currencies each character holds.
+- **Cys's UI Users**: other players in your group or guild who run Cys's UI get a Cys's UI line (with their version) on their tooltip. Hidden addon messages, version only, never in combat; optional chat note when one joins your group. `/cuiusers`.
 - **UI scale**: pixel-perfect scale for your resolution.
 - **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`.
 - **Layout mode**: drag and resize everything, snap to a grid, reset one or all.
@@ -88,7 +89,7 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 
 ## Added in 0.57.0
 - **Consumables**: self-updating Food, Drink, HP Potion, MP Potion, Bandage and Healthstone macros (conjured first), plus a per-character restock list bought at vendors, the best food and water for your level kept at so many stacks, and a gold floor.
-- **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, party quest-complete announce, group level check (LFG listing and inside dungeons).
+- **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, party quest-complete announce, group level check (LFG listing and inside dungeons), accept resurrections (not while the caster fights), skip cinematics (Shift to watch), hide red error spam.
 - **Durability**: a small movable warning box in place of Blizzard's armor figure.
 - **Minimap tracking menu**: right-click the minimap.
 - **Quest reward coin**, **Kill Tracker** level-up alerts, **Combat Numbers** boxes with a Flash in place style.

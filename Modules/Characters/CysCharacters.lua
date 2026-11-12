@@ -2,12 +2,15 @@
 -- Cys's UI - Your Characters
 --
 -- A small window, opened from its own minimap button (or /cuichars), with what Cys's UI knows about every
--- character on your account. First view: rested XP, how rested each one is now and when it will be full.
--- Built as views so more can be added later (gold, currencies...): add an entry to VIEWS.
+-- character on your account. Three views, picked with the tabs under the title:
+--   Rested XP   how rested each character is now and when it will be full
+--   Gold        the gold on each character, the richest first, with the total in the footer
+--   Currencies  each character's own currencies (Classic cannot share them between characters)
 --
 -- Rested XP: each character saves its own rested XP, level, whether it is resting and the time, when it
 -- logs out and whenever these change. The others are worked out from that time: 5% of a level every
 -- 8 hours while resting in an inn or city, a quarter of that elsewhere, up to 1.5 levels.
+-- Gold and currencies: saved per character in CysUIDB.characters.data when they change.
 --------------------------------------------------------------------------------
 local CUI = CysUI
 local W = CUI.W
@@ -21,9 +24,13 @@ local LEVEL_CAP = 60
 local RATE_RESTING = 0.05 / (8 * 3600) -- share of a level gained per second while resting
 local RESTED_CAP = 1.5
 local RESTING_ICON = "|TInterface\\CharacterFrame\\UI-StateIcon:12:12:0:0:64:64:0:32:0:27|t"
+local GOLD_ICON = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t"
+local SILVER_ICON = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t"
+local COPPER_ICON = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t"
 local ICON = "Interface\\Icons\\INV_Misc_GroupNeedMore" -- a little party: all your characters
 if GetFileIDFromPath and not GetFileIDFromPath(ICON) then ICON = "Interface\\Icons\\INV_Misc_GroupLooking" end
 local ROWS, ROW_H, WIDTH = 14, 20, 400
+local TOP = 70 -- first row: header 26 + tabs 22 + headings 22
 
 local function DB()
     CysUIDB.characters = CysUIDB.characters or {}
@@ -31,6 +38,9 @@ local function DB()
     if db.minimap == nil then db.minimap = true end
     if db.showMax == nil then db.showMax = false end
     db.angle = db.angle or 215
+    db.view = db.view or "rested"
+    db.data = db.data or {}       -- [key] = { name, realm, class, level, money, cur = { [id] = amount }, time }
+    db.curInfo = db.curInfo or {} -- [id] = { name, icon, quality }
     return db
 end
 
@@ -45,25 +55,92 @@ end
 --------------------------------------------------------------------------------
 local function Now() return (GetServerTime and GetServerTime()) or time() end
 
+-- realm names without spaces or dashes, so "CAMWOW US2 Realm 5 PvE" and "CAMWOWUS2Realm5PvE" (the game gives
+-- either, depending on when it is asked) are the same realm
+local function NormRealm(realm)
+    return ((realm or ""):gsub("[%s%-']", ""))
+end
+
 local function MyKey()
-    local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or GetRealmName() or "?"
-    return (UnitName("player") or "?") .. "-" .. realm, realm
+    local realm = (GetRealmName and GetRealmName()) or ""
+    if realm == "" then realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or "?" end
+    return (UnitName("player") or "?") .. "-" .. NormRealm(realm), realm
+end
+
+-- one entry per character: older versions could save the same character under two realm spellings.
+-- Keep the higher level, then the newer save.
+local function Better(a, b)
+    if (a.level or 0) ~= (b.level or 0) then return (a.level or 0) > (b.level or 0) end
+    return (a.time or 0) >= (b.time or 0)
+end
+
+local function MergeStore(store)
+    local merged = {}
+    for _, c in pairs(store) do
+        if c.name then
+            local key = c.name .. "-" .. NormRealm(c.realm)
+            if not merged[key] or Better(c, merged[key]) then merged[key] = c end
+        end
+    end
+    wipe(store)
+    for key, c in pairs(merged) do store[key] = c end
+end
+
+-- currencies on the character you are on: { [id] = amount }. Entries under a collapsed heading in the
+-- game's currency list cannot be read, so their last saved amounts are kept.
+local function ReadCurrencies(old)
+    local ci = C_CurrencyInfo
+    if not (ci and ci.GetCurrencyListSize and ci.GetCurrencyListInfo) then return old end
+    local db = DB()
+    local cur, collapsed = {}, false
+    local ok, size = pcall(ci.GetCurrencyListSize)
+    if not ok or type(size) ~= "number" then return old end
+    for i = 1, size do
+        local okI, info = pcall(ci.GetCurrencyListInfo, i)
+        if okI and info then
+            if info.isHeader then
+                if info.isHeaderExpanded == false then collapsed = true end
+            elseif info.currencyID and (info.quantity or 0) > 0 then
+                cur[info.currencyID] = info.quantity
+                db.curInfo[info.currencyID] = { name = info.name, icon = info.iconFileID, quality = info.quality }
+            end
+        end
+    end
+    if collapsed and old then
+        for id, q in pairs(old) do if cur[id] == nil then cur[id] = q end end
+    end
+    return cur
 end
 
 function Chars.Save()
     local name = UnitName("player")
     if not name or name == UNKNOWNOBJECT then return end
-    local maxXP = UnitXPMax("player") or 0
-    if maxXP <= 0 then return end
     local key, realm = MyKey()
     local _, class = UnitClass("player")
-    RestDB().chars[key] = {
-        name = name, realm = realm, class = class,
-        level = UnitLevel("player") or 1,
-        rest = GetXPExhaustion() or 0, max = maxXP,
-        resting = IsResting() and true or false,
-        time = Now(),
+    local level = UnitLevel("player") or 1
+    local now = Now()
+    local maxXP = UnitXPMax("player") or 0
+    if maxXP > 0 then
+        RestDB().chars[key] = {
+            name = name, realm = realm, class = class, level = level,
+            rest = GetXPExhaustion() or 0, max = maxXP,
+            resting = IsResting() and true or false,
+            time = now,
+        }
+    end
+    local data = DB().data
+    local old = data[key]
+    data[key] = {
+        name = name, realm = realm, class = class, level = level,
+        money = GetMoney() or 0,
+        cur = ReadCurrencies(old and old.cur),
+        time = now,
     }
+end
+
+function Chars.Forget(key)
+    RestDB().chars[key] = nil
+    DB().data[key] = nil
 end
 
 -- rested XP now and seconds until it is full
@@ -74,6 +151,11 @@ local function Estimate(c, now)
     local rate = RATE_RESTING * (c.resting and 1 or 0.25) * maxXP
     local rest = min(cap, (c.rest or 0) + max(0, now - (c.time or now)) * rate)
     return rest, rest >= cap and 0 or (cap - rest) / rate
+end
+
+local function MeFirst(a, b)
+    if a.me ~= b.me then return a.me end
+    return nil
 end
 
 function Chars.List()
@@ -90,12 +172,74 @@ function Chars.List()
         end
     end
     table.sort(list, function(a, b)
-        if a.me ~= b.me then return a.me end -- the character you are on is always first
+        local m = MeFirst(a, b); if m ~= nil then return m end -- the character you are on is always first
         if a.pct ~= b.pct then return a.pct > b.pct end
         return (a.c.name or "") < (b.c.name or "")
     end)
     return list
 end
+
+function Chars.GoldList()
+    Chars.Save()
+    local myKey = MyKey()
+    local list, total, top = {}, 0, 0
+    for key, c in pairs(DB().data) do
+        local money = c.money or 0
+        list[#list + 1] = { key = key, c = c, money = money, me = key == myKey }
+        total = total + money
+        top = max(top, money)
+    end
+    table.sort(list, function(a, b)
+        local m = MeFirst(a, b); if m ~= nil then return m end
+        if a.money ~= b.money then return a.money > b.money end
+        return (a.c.name or "") < (b.c.name or "")
+    end)
+    return list, total, top
+end
+
+-- currencies belong to each character (Classic cannot share them), so one row per character that holds any
+function Chars.CurrencyList()
+    Chars.Save()
+    local db = DB()
+    local myKey = MyKey()
+    local list = {}
+    for key, c in pairs(db.data) do
+        local items = {}
+        for id, q in pairs(c.cur or {}) do
+            items[#items + 1] = { id = id, info = db.curInfo[id] or {}, q = q }
+        end
+        if #items > 0 then
+            table.sort(items, function(a, b) return (a.info.name or "") < (b.info.name or "") end)
+            list[#list + 1] = { key = key, c = c, items = items, me = key == myKey }
+        end
+    end
+    table.sort(list, function(a, b)
+        local m = MeFirst(a, b); if m ~= nil then return m end
+        return (a.c.name or "") < (b.c.name or "")
+    end)
+    return list
+end
+
+local function Commas(n)
+    if BreakUpLargeNumbers then
+        local ok, s = pcall(BreakUpLargeNumbers, n)
+        if ok and s then return s end
+    end
+    local s = tostring(n)
+    local k
+    repeat s, k = s:gsub("^(%d+)(%d%d%d)", "%1,%2") until k == 0
+    return s
+end
+
+-- gold and silver from 1 gold up (copper is noise there), silver and copper below
+function Chars.MoneyText(copper)
+    copper = floor(copper or 0)
+    local g, s, c = floor(copper / 10000), floor(copper / 100) % 100, copper % 100
+    if g > 0 then return format("%s%s %d%s", Commas(g), GOLD_ICON, s, SILVER_ICON) end
+    if s > 0 then return format("%d%s %d%s", s, SILVER_ICON, c, COPPER_ICON) end
+    return format("%d%s", c, COPPER_ICON)
+end
+local MoneyText = Chars.MoneyText
 
 local function FormatLeft(sec)
     if sec <= 0 then return "|cFF40D040full|r" end
@@ -111,12 +255,22 @@ local function ClassColor(class)
     return 1, 1, 1
 end
 
-local function NameText(e, myRealm)
-    local c = e.c
+local function ClassName(c, myRealm)
     local r, g, b = ClassColor(c.class)
-    local realm = (c.realm and c.realm ~= myRealm) and ("-" .. c.realm) or ""
-    return format("|cFF%02X%02X%02X%s%s|r  |cFFBBBBBB%d|r%s", floor(r * 255 + 0.5), floor(g * 255 + 0.5),
-        floor(b * 255 + 0.5), c.name or "?", realm, c.level or 0, c.resting and ("  " .. RESTING_ICON) or "")
+    local realm = (c.realm and myRealm and NormRealm(c.realm) ~= NormRealm(myRealm)) and ("-" .. c.realm) or ""
+    return format("|cFF%02X%02X%02X%s%s|r", floor(r * 255 + 0.5), floor(g * 255 + 0.5), floor(b * 255 + 0.5),
+        c.name or "?", realm)
+end
+
+local function NameText(c, myRealm, resting)
+    return format("%s  |cFFBBBBBB%d|r%s", ClassName(c, myRealm), c.level or 0,
+        (resting and c.resting) and ("  " .. RESTING_ICON) or "")
+end
+
+local function LastSeen(c)
+    local ago = Now() - (c.time or Now())
+    if ago >= 86400 then return format("%d days ago", floor(ago / 86400)) end
+    return format("%d hours ago", floor(ago / 3600))
 end
 
 --------------------------------------------------------------------------------
@@ -125,36 +279,149 @@ end
 local frame, rows, offset = nil, {}, 0
 local current = {} -- the list the rows show
 
+-- what each view puts in the column headings, footer and empty text
+local VIEWS = {
+    { key = "rested", label = "Rested XP", cols = { "CHARACTER", "RESTED", "FULL" },
+      empty = "Nothing saved yet - log in on your characters once." },
+    { key = "gold", label = "Gold", cols = { "CHARACTER", "SHARE", "GOLD" },
+      empty = "Log in on each character once to save its gold." },
+    { key = "currency", label = "Currencies", cols = { "CHARACTER", "", "CURRENCIES" },
+      empty = "None of your saved characters holds a currency yet." },
+}
+local VIEW_BY_KEY = {}
+for _, v in ipairs(VIEWS) do VIEW_BY_KEY[v.key] = v end
+
+local function CurrencyIcon(info)
+    if not info.icon then return "" end
+    return format("|T%s:14:14:0:0:64:64:5:59:5:59|t ", tostring(info.icon))
+end
+
+local function CurrencyName(info)
+    local r, g, b = 1, 1, 1
+    local q = info.quality
+    if q and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[q] then
+        local qc = ITEM_QUALITY_COLORS[q]; r, g, b = qc.r, qc.g, qc.b
+    end
+    return format("|cFF%02X%02X%02X%s|r", floor(r * 255 + 0.5), floor(g * 255 + 0.5), floor(b * 255 + 0.5),
+        info.name or "?")
+end
+
+local function SetRowLayout(row, view)
+    -- rested: name | bar | % | full in ;  gold: name | bar | gold ;  currency: name ............ total
+    row.bar:SetShown(view ~= "currency")
+    row.pct:SetShown(view == "rested")
+    row.mark:SetShown(view == "rested")
+    if view == "gold" then
+        row.bar:SetStatusBarColor(T.brand[1], T.brand[2], T.brand[3], 0.85)
+        row.bar:SetMinMaxValues(0, 1)
+        row.left:SetTextColor(1, 1, 1)
+    else
+        row.bar:SetStatusBarColor(0.25, 0.55, 1, 0.9)
+        row.bar:SetMinMaxValues(0, RESTED_CAP * 100)
+        if view == "rested" then row.left:SetTextColor(0.45, 0.7, 1) else row.left:SetTextColor(1, 1, 1) end
+    end
+end
+
 local function Paint()
     if not frame or not frame:IsShown() then return end
-    current = Chars.List()
+    local view = VIEW_BY_KEY[DB().view] and DB().view or "rested"
+    local def = VIEW_BY_KEY[view]
+    local total, top = 0, 0
+    if view == "gold" then
+        current, total, top = Chars.GoldList()
+    elseif view == "currency" then
+        current = Chars.CurrencyList()
+    else
+        current = Chars.List()
+    end
     local _, myRealm = MyKey()
     offset = max(0, min(offset, #current - ROWS))
     for i = 1, ROWS do
         local row, e = rows[i], current[i + offset]
         if e then
-            row.entry = e
-            row.name:SetText(NameText(e, myRealm))
-            row.bar:SetValue(min(e.pct, RESTED_CAP * 100))
-            row.pct:SetText(format("%d%%", floor(e.pct + 0.5)))
-            row.left:SetText(FormatLeft(e.left))
-            row.mine:SetShown(e.me)
+            row.entry, row.view = e, view
+            SetRowLayout(row, view)
+            if view == "gold" then
+                row.name:SetText(NameText(e.c, myRealm))
+                row.bar:SetValue(top > 0 and e.money / top or 0)
+                row.left:SetText(MoneyText(e.money))
+            elseif view == "currency" then
+                row.name:SetText(NameText(e.c, myRealm))
+                local parts = {}
+                for _, it in ipairs(e.items) do parts[#parts + 1] = Commas(it.q) .. " " .. CurrencyIcon(it.info) end
+                row.left:SetText(table.concat(parts, "  "))
+            else
+                row.name:SetText(NameText(e.c, myRealm, true))
+                row.bar:SetValue(min(e.pct, RESTED_CAP * 100))
+                row.pct:SetText(format("%d%%", floor(e.pct + 0.5)))
+                row.left:SetText(FormatLeft(e.left))
+            end
+            row.mine:SetShown(e.me and true or false)
             row:Show()
         else
             row.entry = nil
             row:Hide()
         end
     end
+    for i, h in ipairs(frame.heads) do h:SetText(def.cols[i]) end
+    for _, tab in ipairs(frame.tabs) do tab:SetActive(tab.key == view) end
+    if view == "gold" then
+        frame.foot:SetText(format("Total: %s  |cFF999999on %d character%s|r", MoneyText(total), #current,
+            #current == 1 and "" or "s"))
+    elseif view == "currency" then
+        frame.foot:SetText("Hover a character to see its currencies by name.")
+    else
+        frame.foot:SetText(RESTING_ICON .. " logged out resting.   Shift + right-click a row to forget it.")
+    end
     local shown = min(ROWS, #current)
+    frame.empty:SetText(def.empty)
     frame.empty:SetShown(#current == 0)
-    frame:SetHeight(26 + 22 + max(1, shown) * ROW_H + 30)
+    frame:SetHeight(TOP + max(1, shown) * ROW_H + 30)
 end
 Chars.Refresh = Paint
+
+local function TooltipCharacter(self, e)
+    local c = e.c
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(c.name .. (c.realm and (" - " .. c.realm) or ""), ClassColor(c.class))
+    GameTooltip:AddDoubleLine("Level", tostring(c.level or "?"), 0.8, 0.8, 0.8, 1, 1, 1)
+    if self.view == "gold" then
+        GameTooltip:AddDoubleLine("Gold", MoneyText(e.money), 0.8, 0.8, 0.8, 1, 1, 1)
+    else
+        GameTooltip:AddDoubleLine("Rested", format("%d%% of a level", floor(e.pct + 0.5)), 0.8, 0.8, 0.8,
+            0.45, 0.7, 1)
+    end
+    if not e.me then
+        if self.view ~= "gold" then
+            GameTooltip:AddDoubleLine("Logged out", c.resting and "resting (inn or city)" or "not resting",
+                0.8, 0.8, 0.8, 1, 1, 1)
+        end
+        GameTooltip:AddDoubleLine("Last seen", LastSeen(c), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Shift + right-click to forget this character", 0.6, 0.6, 0.6)
+    end
+    GameTooltip:Show()
+end
+
+local function TooltipCurrency(self, e)
+    local c = e.c
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(c.name .. (c.realm and (" - " .. c.realm) or ""), ClassColor(c.class))
+    for _, it in ipairs(e.items) do
+        GameTooltip:AddDoubleLine(CurrencyIcon(it.info) .. CurrencyName(it.info), Commas(it.q), 1, 1, 1, 1, 1, 1)
+    end
+    if not e.me then
+        GameTooltip:AddDoubleLine("Last seen", LastSeen(c), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Shift + right-click to forget this character", 0.6, 0.6, 0.6)
+    end
+    GameTooltip:Show()
+end
 
 local function MakeRow(parent, i)
     local row = CreateFrame("Button", nil, parent)
     row:SetSize(WIDTH - 16, ROW_H)
-    row:SetPoint("TOPLEFT", 8, -(26 + 22 + (i - 1) * ROW_H))
+    row:SetPoint("TOPLEFT", 8, -(TOP + (i - 1) * ROW_H))
     row:RegisterForClicks("RightButtonUp")
     local hl = W.Texture(row, "BACKGROUND", T.hover)
     hl:SetAllPoints()
@@ -183,9 +450,9 @@ local function MakeRow(parent, i)
     W.Texture(row.bar, "BACKGROUND", { 0.02, 0.02, 0.02, 0.9 }):SetAllPoints()
     W.Border(row.bar, 1, T.line, "OVERLAY")
     -- a mark at 100% (one full level of rested XP)
-    local mark = W.Texture(row.bar, "OVERLAY", { 1, 1, 1, 0.35 }, 1)
-    mark:SetSize(1, 8)
-    mark:SetPoint("LEFT", 96 / RESTED_CAP - 1, 0)
+    row.mark = W.Texture(row.bar, "OVERLAY", { 1, 1, 1, 0.35 }, 1)
+    row.mark:SetSize(1, 8)
+    row.mark:SetPoint("LEFT", 96 / RESTED_CAP - 1, 0)
 
     row.pct = W.Text(row, 11, { 0.45, 0.7, 1 }, "RIGHT")
     row.pct:SetPoint("LEFT", row.bar, "RIGHT", 4, 0)
@@ -197,32 +464,50 @@ local function MakeRow(parent, i)
         hl:Show()
         local e = self.entry
         if not e then return end
-        local c = e.c
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(c.name .. (c.realm and (" - " .. c.realm) or ""), ClassColor(c.class))
-        GameTooltip:AddDoubleLine("Level", tostring(c.level or "?"), 0.8, 0.8, 0.8, 1, 1, 1)
-        GameTooltip:AddDoubleLine("Rested", format("%d%% of a level", floor(e.pct + 0.5)), 0.8, 0.8, 0.8, 0.45, 0.7, 1)
-        if not e.me then
-            GameTooltip:AddDoubleLine("Logged out", c.resting and "resting (inn or city)" or "not resting",
-                0.8, 0.8, 0.8, 1, 1, 1)
-            local ago = Now() - (c.time or Now())
-            GameTooltip:AddDoubleLine("Last seen", ago >= 86400 and format("%d days ago", floor(ago / 86400))
-                or format("%d hours ago", floor(ago / 3600)), 0.8, 0.8, 0.8, 1, 1, 1)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Shift + right-click to forget this character", 0.6, 0.6, 0.6)
-        end
-        GameTooltip:Show()
+        if self.view == "currency" then TooltipCurrency(self, e) else TooltipCharacter(self, e) end
     end)
     row:SetScript("OnLeave", function() hl:Hide(); GameTooltip:Hide() end)
     row:SetScript("OnClick", function(self)
         local e = self.entry
-        if e and not e.me and IsShiftKeyDown() then
-            RestDB().chars[e.key] = nil
+        if e and e.key and not e.me and IsShiftKeyDown() then
+            Chars.Forget(e.key)
             GameTooltip:Hide()
             Paint()
         end
     end)
     return row
+end
+
+-- a tab under the title: label with a gold line under the active one
+local function MakeTab(parent, view, x)
+    local tab = CreateFrame("Button", nil, parent)
+    tab.key = view.key
+    tab.text = W.Text(tab, 11, { 1, 1, 1 }, "CENTER")
+    tab.text:SetPoint("CENTER", 0, 1)
+    tab.text:SetText(view.label)
+    tab:SetSize(max(60, (tab.text:GetStringWidth() or 50) + 18), 20)
+    tab:SetPoint("TOPLEFT", x, -27)
+    tab.line = W.Texture(tab, "ARTWORK", T.border)
+    tab.line:SetPoint("BOTTOMLEFT", 6, 0)
+    tab.line:SetPoint("BOTTOMRIGHT", -6, 0)
+    tab.line:SetHeight(2)
+    function tab:SetActive(on)
+        self.active = on
+        self.line:SetShown(on)
+        if on then
+            self.text:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+        else
+            self.text:SetTextColor(0.7, 0.7, 0.7)
+        end
+    end
+    tab:SetScript("OnEnter", function(self) if not self.active then self.text:SetTextColor(1, 1, 1) end end)
+    tab:SetScript("OnLeave", function(self) self:SetActive(self.active) end)
+    tab:SetScript("OnClick", function(self)
+        DB().view = self.key
+        offset = 0
+        Paint()
+    end)
+    return tab
 end
 
 local function BuildWindow()
@@ -266,7 +551,7 @@ local function BuildWindow()
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     local title = W.Text(header, 12, T.accent)
     title:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    title:SetText("Your Characters - Rested XP")
+    title:SetText("Your Characters")
 
     local close = CreateFrame("Button", nil, header)
     close:SetSize(22, 22)
@@ -278,29 +563,37 @@ local function BuildWindow()
     close:SetScript("OnLeave", function(s) s.text:SetTextColor(1, 1, 1) end)
     close:SetScript("OnClick", function() f:Hide() end)
 
-    -- column headings
-    local function Heading(text, point, x, justify)
-        local h = W.Text(f, 10, T.dim, justify)
-        h:SetPoint(point, f, "TOPLEFT", x, -34)
-        h:SetText(text)
+    -- view tabs
+    f.tabs = {}
+    local x = 8
+    for _, v in ipairs(VIEWS) do
+        local tab = MakeTab(f, v, x)
+        f.tabs[#f.tabs + 1] = tab
+        x = x + tab:GetWidth() + 2
     end
-    Heading("CHARACTER", "LEFT", 16)
-    Heading("RESTED", "LEFT", 170)
-    local fullH = W.Text(f, 10, T.dim, "RIGHT")
-    fullH:SetPoint("TOPRIGHT", -14, -29)
-    fullH:SetText("FULL")
+    local tline = W.Texture(f, "BORDER", T.line)
+    tline:SetPoint("TOPLEFT", 8, -47); tline:SetPoint("TOPRIGHT", -8, -47); tline:SetHeight(1)
+
+    -- column headings (text set per view)
+    f.heads = {}
+    local function Heading(point, x2, justify)
+        local h = W.Text(f, 10, T.dim, justify)
+        h:SetPoint(point, f, point == "TOPRIGHT" and "TOPRIGHT" or "TOPLEFT", x2, -53)
+        f.heads[#f.heads + 1] = h
+    end
+    Heading("TOPLEFT", 16)
+    Heading("TOPLEFT", 170)
+    Heading("TOPRIGHT", -14, "RIGHT")
     local cline = W.Texture(f, "BORDER", T.line)
-    cline:SetPoint("TOPLEFT", 8, -45); cline:SetPoint("TOPRIGHT", -8, -45); cline:SetHeight(1)
+    cline:SetPoint("TOPLEFT", 8, -67); cline:SetPoint("TOPRIGHT", -8, -67); cline:SetHeight(1)
 
     for i = 1, ROWS do rows[i] = MakeRow(f, i) end
 
     f.empty = W.Text(f, 11, T.dim, "CENTER")
-    f.empty:SetPoint("TOP", 0, -56)
-    f.empty:SetText("Nothing saved yet - log in on your characters once.")
+    f.empty:SetPoint("TOP", 0, -(TOP + 8))
 
-    local foot = W.Text(f, 10, T.dim)
-    foot:SetPoint("BOTTOMLEFT", 10, 10)
-    foot:SetText(RESTING_ICON .. " logged out resting.   Shift + right-click a row to forget it.")
+    f.foot = W.Text(f, 10, T.dim)
+    f.foot:SetPoint("BOTTOMLEFT", 10, 10)
 
     f:EnableMouseWheel(true)
     f:SetScript("OnMouseWheel", function(_, delta)
@@ -315,14 +608,40 @@ local function BuildWindow()
     end)
 end
 
-function Chars:Toggle()
+function Chars:Toggle(view)
     if not frame then BuildWindow() end
+    if view and VIEW_BY_KEY[view] then
+        DB().view = view
+        if frame:IsShown() then offset = 0; Paint(); return end
+        frame:Show()
+        return
+    end
     frame:SetShown(not frame:IsShown())
 end
 
 SLASH_CYSCHARS1 = "/cuichars"
 SLASH_CYSCHARS2 = "/cuirested"
-SlashCmdList.CYSCHARS = function() Chars:Toggle() end
+SLASH_CYSCHARS3 = "/cuigold"
+SlashCmdList.CYSCHARS = function(msg)
+    msg = (msg or ""):lower():match("^%s*(%S*)")
+    if msg == "probe" then -- what the game says about each currency on this character
+        local ci = C_CurrencyInfo
+        local size = ci and ci.GetCurrencyListSize and ci.GetCurrencyListSize() or 0
+        print("|cFFE6C068Cys's UI|r currencies:", size)
+        for i = 1, size do
+            local info = ci.GetCurrencyListInfo(i)
+            if info and not info.isHeader then
+                print(format("  %s (%s): %s  accountWide=%s transferable=%s", tostring(info.name),
+                    tostring(info.currencyID), tostring(info.quantity), tostring(info.isAccountWide),
+                    tostring(info.isAccountTransferable)))
+            end
+        end
+        return
+    end
+    local view = (msg == "gold" and "gold") or ((msg == "currency" or msg == "currencies") and "currency")
+        or (msg == "rested" and "rested") or nil
+    Chars:Toggle(view)
+end
 
 --------------------------------------------------------------------------------
 -- Minimap button (Cys's minimap button panel picks it up when it collects buttons)
@@ -366,7 +685,11 @@ local function BuildMinimapButton()
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Your Characters", T.accent[1], T.accent[2], T.accent[3])
-        GameTooltip:AddLine("Click: rested XP on all your characters", 1, 1, 1)
+        local _, total = Chars.GoldList()
+        if total > 0 then
+            GameTooltip:AddDoubleLine("Gold on all characters", MoneyText(total), 0.8, 0.8, 0.8, 1, 1, 1)
+        end
+        GameTooltip:AddLine("Click: rested XP, gold and currencies of all your characters", 1, 1, 1)
         GameTooltip:AddLine("Right-click: settings", 1, 1, 1)
         GameTooltip:AddLine("Drag: move around the minimap", 0.6, 0.6, 0.6)
         GameTooltip:Show()
@@ -391,13 +714,25 @@ end
 -- Start-up
 --------------------------------------------------------------------------------
 function Chars.Enable()
-    DB()
+    MergeStore(DB().data)
+    MergeStore(RestDB().chars)
     local saver = CreateFrame("Frame")
     for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "PLAYER_UPDATE_RESTING", "UPDATE_EXHAUSTION",
-                          "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE" }) do
-        saver:RegisterEvent(ev)
+                          "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE", "PLAYER_MONEY", "CURRENCY_DISPLAY_UPDATE" }) do
+        pcall(saver.RegisterEvent, saver, ev)
     end
-    saver:SetScript("OnEvent", function() Chars.Save() end)
+    -- money and currency events can come in bursts (looting, vendoring): save once per burst
+    local pending = false
+    saver:SetScript("OnEvent", function(_, ev)
+        if ev == "PLAYER_LOGOUT" then Chars.Save(); return end
+        if pending then return end
+        pending = true
+        C_Timer.After(0.5, function()
+            pending = false
+            Chars.Save()
+            if frame and frame:IsShown() then Paint() end
+        end)
+    end)
     BuildMinimapButton()
 end
 
@@ -405,7 +740,7 @@ CUI:RegisterModule({
     key = "characters",
     name = "Your Characters",
     addon = "CysUI",
-    desc = "A minimap button and window with the rested XP of all your characters and when each will be full.",
+    desc = "A minimap button and window with the rested XP, gold and currencies of all your characters.",
     onEnable = Chars.Enable,
     open = function() CUI:OpenConfig("Characters") end,
 })
@@ -417,7 +752,7 @@ CUI:RegisterPage("Characters", function(page)
     local mm = W.Checkbox(page, "Show the minimap button", function() return db.minimap end,
         function(on) db.minimap = on; if mmb then mmb:SetShown(on) end end)
     mm:SetPoint("TOPLEFT", 4, -34)
-    local sm = W.Checkbox(page, "Also list characters at level 60", function() return db.showMax end,
+    local sm = W.Checkbox(page, "Rested XP: also list characters at level 60", function() return db.showMax end,
         function(on) db.showMax = on; Paint() end)
     sm:SetPoint("TOPLEFT", 4, -60)
     local open = W.Button(page, 130, 22, "Open the window", true)
@@ -425,10 +760,15 @@ CUI:RegisterPage("Characters", function(page)
     open:SetScript("OnClick", function() if not (frame and frame:IsShown()) then Chars:Toggle() end end)
     local clear = W.Button(page, 130, 22, "Clear the list")
     clear:SetPoint("LEFT", open, "RIGHT", 10, 0)
-    clear:SetScript("OnClick", function() wipe(RestDB().chars); Chars.Save(); Paint() end)
+    clear:SetScript("OnClick", function()
+        wipe(RestDB().chars); wipe(db.data); Chars.Save(); Paint()
+    end)
     W.Notes(page, 4, -134, width, "", {
-        "Each character is added when you log in on it, and saved again when you log out.",
+        "Three views, picked with the tabs at the top of the window: Rested XP, Gold and Currencies.",
+        "Each character is added when you log in on it, and saved again when its gold, currencies or rested XP change and when you log out.",
         "Rested XP of the others is worked out from when they logged out: 5% of a level every 8 hours in an inn or city, a quarter of that elsewhere, up to 1.5 levels.",
-        "The bar is full at 150% (one and a half levels); the thin mark is one level. /cuichars opens the window too.",
+        "Gold: the richest first, with the total of all characters at the bottom (also on the minimap button tooltip).",
+        "Currencies: each character's own currencies (they cannot be shared between characters); hover a character to see them by name.",
+        "/cuichars opens the window, /cuichars gold or /cuichars currencies opens it on that view.",
     })
 end)

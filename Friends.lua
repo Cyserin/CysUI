@@ -929,6 +929,17 @@ local function MakeRow(i)
             GameTooltip:SetText(e.guild or "Guild", 1, 0.82, 0)
             GameTooltip:AddLine(e.text or "", 1, 1, 1, true)
             GameTooltip:Show()
+        elseif e and e.kind == "guild" and GameTooltip then
+            -- guild member: name, rank, level, zone, note, and the Cys's UI line if they run it
+            GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+            local cc = e.file and RAID_CLASS_COLORS and RAID_CLASS_COLORS[e.file]
+            GameTooltip:SetText(Ambiguate(e.name or "?", "guild"), cc and cc.r or 1, cc and cc.g or 1, cc and cc.b or 1)
+            if e.rank then GameTooltip:AddLine(e.rank, 1, 0.82, 0) end
+            GameTooltip:AddLine(format("Level %s %s", tostring(e.level or "?"), e.class or ""), 1, 1, 1)
+            if e.area and e.area ~= "" then GameTooltip:AddLine(e.area, 0.7, 0.7, 0.7) end
+            if e.note and e.note ~= "" then GameTooltip:AddLine(e.note, 0.8, 0.8, 0.8, true) end
+            if CUI.Hello and CUI.Hello.AddLine then CUI.Hello.AddLine(GameTooltip, e.name) end
+            GameTooltip:Show()
         end
     end)
     r:SetScript("OnLeave", function(s)

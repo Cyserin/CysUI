@@ -40,6 +40,9 @@ local DEFAULTS = {
     bagPlusSlots = true,     -- Cys's Bags: a "+" drop slot at the end of each category
     trainAll = true,         -- a Train all button on trainer windows (nothing is bought until you click it)
     openContainers = true,   -- open clams, sacks and other openable bag items (Classic Era)
+    autoResurrect = false,   -- accept a resurrection, unless the caster is still in a fight
+    skipCinematics = false,  -- skip in-game cinematics (hold Shift to watch)
+    hideErrors = false,      -- hide the red error spam ("Not enough rage", "Out of range"...)
 }
 
 local function DB()
@@ -510,6 +513,85 @@ local function TrainerButton()
 end
 
 --------------------------------------------------------------------------------
+-- Accept resurrections (not while the caster is fighting)
+--------------------------------------------------------------------------------
+local function CasterInCombat(name)
+    local short = name and Ambiguate(name, "none")
+    if not short then return false end
+    local prefix, n = "party", 4
+    if IsInRaid() then prefix, n = "raid", 40 end
+    for i = 1, n do
+        local unit = prefix .. i
+        if UnitExists(unit) and UnitName(unit) == short then
+            local ok, fighting = pcall(UnitAffectingCombat, unit)
+            if not ok or (CysUICompat and CysUICompat.Secret(fighting)) then return true end -- can't tell: ask
+            return fighting and true or false
+        end
+    end
+    return false
+end
+
+local function OnResurrect(name)
+    if not DB().autoResurrect or CasterInCombat(name) then return end
+    C_Timer.After(0.3, function()
+        if UnitIsDeadOrGhost("player") and AcceptResurrect then
+            pcall(AcceptResurrect)
+            if StaticPopup_Hide then
+                for _, which in ipairs({ "RESURRECT", "RESURRECT_NO_SICKNESS", "RESURRECT_NO_TIMER" }) do
+                    pcall(StaticPopup_Hide, which)
+                end
+            end
+        end
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- Skip cinematics (hold Shift when it starts to watch it)
+--------------------------------------------------------------------------------
+local function OnCinematic()
+    if not DB().skipCinematics or IsShiftKeyDown() then return end
+    C_Timer.After(0.1, function()
+        if CinematicFrame_CancelCinematic then pcall(CinematicFrame_CancelCinematic)
+        elseif StopCinematic then pcall(StopCinematic) end
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- Hide the red error spam. A few errors you need to see still show.
+--------------------------------------------------------------------------------
+local errFrame, errTaken = nil, false
+local function KeepError(msg)
+    for _, g in ipairs({ "ERR_INV_FULL", "ERR_BAG_FULL", "ERR_QUEST_LOG_FULL", "ERR_ITEM_MAX_COUNT",
+                         "ERR_NOT_ENOUGH_MONEY", "ERR_LOOT_GONE", "ERR_TOO_MANY_CHAT_CHANNELS" }) do
+        if _G[g] and msg == _G[g] then return true end
+    end
+    return false
+end
+
+function CUI.ApplyErrorFilter()
+    local f = UIErrorsFrame
+    if not f then return end
+    if DB().hideErrors then
+        if not errFrame then
+            errFrame = CreateFrame("Frame")
+            errFrame:SetScript("OnEvent", function(_, _, a1, a2)
+                local msg = type(a2) == "string" and a2 or a1
+                if type(msg) == "string" and KeepError(msg) then f:AddMessage(msg, 1, 0.1, 0.1, 1) end
+            end)
+        end
+        if not errTaken then
+            f:UnregisterEvent("UI_ERROR_MESSAGE")
+            errFrame:RegisterEvent("UI_ERROR_MESSAGE")
+            errTaken = true
+        end
+    elseif errTaken then
+        errFrame:UnregisterEvent("UI_ERROR_MESSAGE")
+        f:RegisterEvent("UI_ERROR_MESSAGE")
+        errTaken = false
+    end
+end
+
+--------------------------------------------------------------------------------
 local frame
 local function Enable()
     if frame then return end
@@ -521,7 +603,8 @@ local function Enable()
                          "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "UNIT_LEVEL", "LFG_LIST_ACTIVE_ENTRY_UPDATE",
                          "MERCHANT_SHOW", "MERCHANT_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "MAIL_SHOW",
                          "MAIL_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PARTY_INVITE_REQUEST",
-                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED", "QUEST_LOG_UPDATE", "TRAINER_SHOW", "TRAINER_CLOSED" }) do
+                         "BAG_UPDATE_DELAYED", "LOOT_CLOSED", "QUEST_LOG_UPDATE", "TRAINER_SHOW", "TRAINER_CLOSED",
+                         "RESURRECT_REQUEST", "CINEMATIC_START" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
     if StaticPopup_Show then
@@ -531,8 +614,13 @@ local function Enable()
             end
         end)
     end
+    pcall(CUI.ApplyErrorFilter)
     frame:SetScript("OnEvent", function(_, event, arg1)
-        if event == "PARTY_INVITE_REQUEST" then
+        if event == "RESURRECT_REQUEST" then
+            pcall(OnResurrect, arg1)
+        elseif event == "CINEMATIC_START" then
+            OnCinematic()
+        elseif event == "PARTY_INVITE_REQUEST" then
             pcall(OnInvite, arg1)
         elseif event == "QUEST_LOG_UPDATE" then
             QueueQuestScan()
@@ -626,6 +714,9 @@ CUI:RegisterPage("Automation", function(page)
     Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
     local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
     fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)
+    Check("Accept resurrections (not while the caster is still fighting)", "autoResurrect")
+    Check("Skip cinematics (hold Shift when one starts to watch it)", "skipCinematics")
+    Check("Hide red error messages (bag full and similar still show)", "hideErrors"):HookScript("OnClick", function() pcall(CUI.ApplyErrorFilter) end)
 
     local chLabel = W.Text(page, 12, T.accent)
     chLabel:SetPoint("TOPLEFT", 4, y - 8)
@@ -643,6 +734,8 @@ CUI:RegisterPage("Automation", function(page)
         { "Auto quests", "never pays gold to finish a quest, and leaves the choice to you when a quest offers several rewards." },
         { "Auto release", "waits if you have a Soulstone or Reincarnation, so you can still use it." },
         { "Fast loot", "follows the game's auto-loot setting and the auto-loot key." },
+        { "Resurrections", "are accepted a moment after the offer, unless the caster is still in combat; then the normal pop-up stays." },
+        { "Red errors", "hides messages like Not enough rage and Out of range. Bags full, quest log full and not enough money still show." },
         { "Level check", "works while your group is listed in Looking For Group (using the listed dungeon) and inside the dungeon. It shows when someone joins; close it with the X and move it in layout mode." },
     })
 end)

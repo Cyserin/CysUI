@@ -523,9 +523,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.15",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.16",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.16", date = "2026-11-12",
+              added = {
+                  "Your Characters: the window now has three tabs. Gold lists the gold on every character, the richest first, with the total of all your characters at the bottom (also shown on the minimap button tooltip). Currencies lists the currencies each character holds (they stay with that character); hover a character to see them by name. Gold and currencies are saved whenever they change, so log in on each character once to fill the list. /cuichars gold and /cuichars currencies open the window on that tab.",
+                  "Cys's UI Users: Cys's UI now quietly says hello to your group when it grows and to your guild when you log in, and other players running it answer. Their tooltip then shows a Cys's UI line with their version, and so does their row in the Guild tab of Cys's Friends window (hover a member for their rank, level, zone and note). These are hidden addon messages that nobody sees in chat, only the version is shared, and nothing is sent during a fight. Optional chat note when a Cys's UI user joins your group (off by default). /cuiusers lists who has been seen. Settings on the Cys's UI Users page (Interface).",
+                  "Automation: three new switches, all off until you tick them. Accept resurrections (not while the caster is still fighting; then the normal pop-up stays), skip cinematics (hold Shift when one starts to watch it), and hide the red error messages like Not enough rage and Out of range (bags full, quest log full and not enough money still show).",
+              },
+              fixed = {
+                  "Cys's Bags: a height you set with the corner grip now sticks after closing the bags. Dragging the height switches off grow to fit the items (Automation page), with a note in chat.",
+              },
+            },
             { version = "0.58.15", date = "2026-11-12",
               added = {
                   "Your Characters: a new minimap button (or /cuichars) opens a small window with the rested XP of every character you have logged in on, how rested each one is now and when it will be fully rested, best first. Characters you are not on are worked out from when they logged out (faster for ones that logged out in an inn or city, marked zzz). Shift + right-click a row to forget a character. Settings on the Characters page.",

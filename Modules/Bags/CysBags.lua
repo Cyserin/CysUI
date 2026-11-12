@@ -1788,6 +1788,22 @@ function CysBags:CreateFrames()
             freeMove = true, -- dragged by the title bar, resized by the corner grip
         })
         if CysUI.MakeResizeGrip then CysUI:MakeResizeGrip("bags") end
+        -- a height you set with the grip sticks: stop growing the window to fit the items (Automation switch)
+        local grip = CysUI.movers and CysUI.movers.bags and CysUI.movers.bags.grip
+        if grip then
+            local startH
+            grip:HookScript("OnMouseDown", function() startH = frame:GetHeight() end)
+            grip:HookScript("OnMouseUp", function()
+                if startH and math.abs((frame:GetHeight() or 0) - startH) > 2 and CysUIDB then
+                    CysUIDB.automation = CysUIDB.automation or {}
+                    if CysUIDB.automation.bagsAutoSize ~= false then
+                        CysUIDB.automation.bagsAutoSize = false
+                        print("|cFFE6C068Cys's Bags|r: keeping the height you set. To let the bags grow with your items again, tick it on the Automation page.")
+                    end
+                end
+                startH = nil
+            end)
+        end
         -- once: back to 12 columns (an earlier auto-size widened windows to 16)
         if CysBagsDB and not CysBagsDB.cols12 and CysUIDB then
             CysBagsDB.cols12 = true
