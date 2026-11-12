@@ -771,6 +771,36 @@ local function MenuSize(i)
     menu.sizes[i] = s
     return s
 end
+-- Report the top of a window to chat (out of combat only: in a fight the numbers are locked and can't be sent)
+local function Report(win, channel, count)
+    if InCombatLockdown() or UnitAffectingCombat("player") then
+        CUI:Print("The meter can be reported once the fight is over (the game locks the numbers during it).")
+        return
+    end
+    local mode = Mode(win)
+    local session = Fetch(win)
+    local sources = session and session.combatSources
+    if type(sources) ~= "table" or #sources == 0 then CUI:Print("Nothing to report yet.") return end
+    local function Plain(v) return type(v) == "number" and not Secret(v) and v or nil end
+    local lines = { string.format("%s - %s:", mode.label, SegmentLabel(win)) }
+    for i = 1, math.min(count, #sources) do
+        local s = sources[i]
+        local name = type(s.name) == "string" and not Secret(s.name) and s.name or nil
+        local total, per = Plain(s.totalAmount), Plain(s.amountPerSecond)
+        if name and total then
+            local value = Short(total)
+            if mode.per and per then
+                if mode.first then value = Short(per) .. " (" .. value .. ")" else value = value .. " (" .. Short(per) .. "/s)" end
+            end
+            lines[#lines + 1] = string.format("%d. %s  %s", i, name, value)
+        end
+    end
+    if #lines == 1 then CUI:Print("Nothing to report yet.") return end
+    for _, line in ipairs(lines) do
+        if channel then pcall(SendChatMessage, line, channel) else CUI:Print(line) end
+    end
+end
+
 function OpenMenu(win, which)
     if menu and menu:IsShown() and menu.win == win and menu.which == which then CloseMenu() return end
     if not menu then
@@ -868,6 +898,12 @@ function OpenMenu(win, which)
         Item("New window", false, function() NewWindow(win) end)
         if #wins > 1 then Item("Close this window", false, function() CloseWindow(win) end) end
         Item("Reset all fights", false, ResetAll)
+        Heading("Report the top 5 to")
+        if IsInRaid and IsInRaid() then Item("Raid", false, function() Report(win, "RAID", 5) end)
+        elseif IsInGroup and IsInGroup() then Item("Party", false, function() Report(win, "PARTY", 5) end) end
+        if IsInGuild and IsInGuild() then Item("Guild", false, function() Report(win, "GUILD", 5) end) end
+        Item("Say", false, function() Report(win, "SAY", 5) end)
+        Item("Just me", false, function() Report(win, nil, 5) end)
         Item("More settings", false, function() CUI:OpenConfig("Damage Meter") end)
     end
     menu:SetSize(200, -y + 6)

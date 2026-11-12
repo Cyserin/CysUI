@@ -1304,7 +1304,7 @@ CUI:RegisterPage("Friends", function(page)
         function(on) DB().groupByGame = on; F.Rebuild() end)
     gb:SetPoint("TOPLEFT", 4, -62)
     local note = W.Notes(page, 4, -94, width, "", {
-            { "/cfriends", "opens the window any time; move and resize it in /cui layout." },
+            { "/cfriends", "opens the window any time; drag its title to move it, the corner grip to resize it." },
             "Click a name to select, double-click to whisper, right-click for more.",
             "The Who tab searches players (name, level range, class or zone) when you press Enter.",
             "Blizzard's own friends window is untouched and still opens from the micro menu.",

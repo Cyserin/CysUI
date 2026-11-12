@@ -41,12 +41,29 @@ local function BlizzardRightEdge()
     return edge
 end
 
+-- put a window we moved aside back on its own spot (its layout position); dragged windows stay where they were put
+local function GoHome(f)
+    if not f.cysStacked or f.cysDragged then f.cysStacked = nil return end
+    if f.IsProtected and f:IsProtected() and InCombatLockdown() then return end
+    for _, m in pairs(CUI.movers or {}) do
+        if m.frame == f and m.mover then
+            f:ClearAllPoints()
+            f:SetPoint("CENTER", m.mover, "CENTER", 0, 0)
+            break
+        end
+    end
+    f.cysStacked = nil
+end
+
 local arranging = false
 local function Arrange()
     if arranging or not Enabled() then return end
-    -- only when a Blizzard window is open: on their own, our windows stay where they open (no jump to the left)
+    -- only when a Blizzard window is open: on their own, our windows sit on their own spot (no jump to the left)
     local edge = BlizzardRightEdge()
-    if not edge then return end
+    if not edge then
+        for f in pairs(managed) do if f.cysStacked then GoHome(f) end end
+        return
+    end
     arranging = true
     local x = edge + GAP
     for _, f in ipairs(order) do
@@ -54,6 +71,7 @@ local function Arrange()
             local scale = (f:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
             f:ClearAllPoints()
             f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x / scale, TOP_OFFSET / scale)
+            f.cysStacked = true
             x = x + (f:GetWidth() or 0) * scale + GAP
         end
     end
@@ -77,6 +95,7 @@ function CUI:ManageWindow(frame, area, pushable, extra)
     frame:HookScript("OnHide", function(self)
         self.cysDragged = nil -- dragged by hand: stacks again next time it opens
         for i = #order, 1, -1 do if order[i] == self then table.remove(order, i) end end
+        GoHome(self) -- next time it opens on its own spot, not where it was moved aside to
         Later()
     end)
 end

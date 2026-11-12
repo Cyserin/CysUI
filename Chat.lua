@@ -480,6 +480,16 @@ local function SetupMover()
     end)
     -- the game may restore its own saved layout a moment after login
     C_Timer.After(1, function() CUI:ApplyLayout("chat") end)
+    -- Battle.net pop-ups (friend online / offline) sit on Blizzard's alert holder, which hangs off the chat side
+    -- buttons left of the chat; with the chat near the screen edge they went partly off screen. Hang the holder
+    -- above our chat tabs instead (it is only placed once by Blizzard, at load).
+    local alerts = _G.ChatAlertFrame
+    if alerts then
+        Guarded("toast spot", function()
+            alerts:ClearAllPoints()
+            alerts:SetPoint("BOTTOMLEFT", cf, "TOPLEFT", -5, 34)
+        end)
+    end
 end
 
 --------------------------------------------------------------------------------

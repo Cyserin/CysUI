@@ -2101,9 +2101,27 @@ local function ForeverMapExtras(f, panel)
         local title = (tc and tc.TitleText) or bf.TitleText
         if tc and tc.SetAlpha then tc:SetAlpha(1) end
         if title and title.SetTextColor then title:SetAlpha(1); title:SetTextColor(T.text[1], T.text[2], T.text[3]) end
+        -- the X and the size button stay Blizzard's own, in Blizzard's own spot: moving the X onto the map's
+        -- corner put it on top of the size button. The fade above dimmed their art too, so it is shown again.
+        local function Unfade(fr, depth)
+            if not fr or depth > 3 then return end
+            if fr.SetAlpha then fr:SetAlpha(1) end
+            local okR, regions = pcall(function() return { fr:GetRegions() } end)
+            if okR then for _, r in ipairs(regions) do if not r.cysOwn and r.SetAlpha then r:SetAlpha(1) end end end
+            for _, c in ipairs(Kids(fr)) do Unfade(c, depth + 1) end
+        end
+        Safe(Unfade, bf.CloseButton, 0)
+        Safe(Unfade, bf.MaximizeMinimizeFrame, 0)
+        -- Blizzard pins both to the top-right of the MAP; on Forever the quest log hangs outside it, so they sat in
+        -- the middle of the window on top of each other. They go to the window's own top-right corner, side by side:
+        -- the X (flat Cys X) rightmost, the size button (and anything another add-on put in it) just left of it.
         if bf.CloseButton then Safe(SkinClose, bf.CloseButton, panel) end
         local mm = bf.MaximizeMinimizeFrame
-        if mm then
+        if mm and bf.CloseButton then
+            Safe(function()
+                mm:ClearAllPoints()
+                mm:SetPoint("RIGHT", bf.CloseButton, "LEFT", -2, 0)
+            end)
             Safe(SkinArrow, mm.MaximizeButton, "+")
             Safe(SkinArrow, mm.MinimizeButton, "-")
         end

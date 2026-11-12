@@ -36,6 +36,9 @@ local CHANNEL_LABEL = {
 
 local function Format(db, target, spell, mine)
     local out = db.message or DEFAULTS.message
+    if not spell then -- WoW Forever often keeps the enemy's spell to itself in combat: leave it out of the line
+        out = out:gsub("%%t's %%s", "%%t"):gsub("%%s", "their cast")
+    end
     out = out:gsub("%%([tsm])", function(c)
         if c == "t" then return target or "?" end
         if c == "s" then return spell or "?" end
@@ -77,10 +80,66 @@ local function OnInterrupt(db)
     Deliver(db, Format(db, destName, extraName, spellName))
 end
 
+-- WoW Forever: no combat log for addons. When one of your interrupt spells goes off and, a moment later, your
+-- target's (or focus's) cast is cut short, that was you. Names are read only when the game allows it.
+-- Kick, Pummel, Shield Bash, Earth Shock, Counterspell, Silence, Spell Lock (pet), Feral Charge (bear)
+local INTERRUPTS = { 1766, 6552, 72, 8042, 2139, 15487, 19244, 16979 }
+local interruptNames
+local function IsInterrupt(spellID)
+    if not interruptNames then
+        interruptNames = {}
+        for _, id in ipairs(INTERRUPTS) do
+            local ok, name = pcall(C_Spell.GetSpellName, id)
+            if ok and type(name) == "string" then interruptNames[name] = true end
+        end
+    end
+    local Secret = CysUICompat.Secret
+    if Secret(spellID) or type(spellID) ~= "number" then return nil end
+    local ok, name = pcall(C_Spell.GetSpellName, spellID)
+    if ok and type(name) == "string" and not Secret(name) and interruptNames[name] then return name end
+    return nil
+end
+local function PlainName(unit)
+    local ok, name = pcall(UnitName, unit)
+    if ok and type(name) == "string" and not CysUICompat.Secret(name) then return name end
+    return nil
+end
+local pending -- { at, mine, names = { target = , focus = } }
+local function EnableForever()
+    local mine = CreateFrame("Frame")
+    pcall(mine.RegisterUnitEvent, mine, "UNIT_SPELLCAST_SUCCEEDED", "player", "pet")
+    mine:SetScript("OnEvent", function(_, _, _, _, spellID)
+        local name = IsInterrupt(spellID)
+        if not name then return end
+        pending = { at = GetTime(), mine = name, names = { target = PlainName("target"), focus = PlainName("focus") } }
+    end)
+    for _, unit in ipairs({ "target", "focus" }) do
+        local f = CreateFrame("Frame")
+        pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_INTERRUPTED", unit)
+        pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_CHANNEL_STOP", unit)
+        f:SetScript("OnEvent", function(_, _, _, _, spellID)
+            local p = pending
+            if not p or GetTime() - p.at > 0.6 then return end
+            pending = nil
+            local now = GetTime()
+            if now - lastSent < 0.5 then return end
+            lastSent = now
+            local spell
+            if not CysUICompat.Secret(spellID) and type(spellID) == "number" then
+                local ok, n = pcall(C_Spell.GetSpellName, spellID)
+                if ok and type(n) == "string" and not CysUICompat.Secret(n) then spell = n end
+            end
+            local who = PlainName(unit) or p.names[unit] or "the target"
+            Deliver(DB(), Format(DB(), who, spell, p.mine))
+        end)
+    end
+end
+
 local frame
 local function Enable()
     if frame then return end
     frame = CreateFrame("Frame")
+    if CUI.isForever then EnableForever() return end
     frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
     frame:SetScript("OnEvent", function() OnInterrupt(DB()) end)
 end
@@ -89,7 +148,7 @@ CUI:RegisterModule({
     key = "interrupt",
     name = "Interrupt Announcer",
     addon = "CysUI",
-    forever = false, -- reads the combat log, which addons can't see on WoW Forever
+    -- WoW Forever has no combat log for addons: there it watches your own interrupt spells instead (see above)
     desc = "Says when you interrupt an enemy cast (to your party or raid, or just to you). Works for every class.",
     onEnable = Enable,
     open = function() CUI:OpenConfig("Interrupts") end,
@@ -156,6 +215,7 @@ CUI:RegisterPage("Interrupts", function(page)
 
     W.Notes(page, 4, -264, width, "", {
         "It only reports your own interrupts, not other players'.",
+        "WoW Forever: it works from your target or focus, and the game sometimes hides which spell you stopped - then the line leaves the spell out.",
         "Turn the whole thing off under Modules (needs a /reload).",
     })
 end)

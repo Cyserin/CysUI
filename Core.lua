@@ -302,7 +302,7 @@ end
 -- class (optional, a class token like "SHAMAN"): the page is listed under Class > that class.
 -- Pages for modules that never run on WoW Forever (they read the combat log) are left out there.
 local FOREVER_HIDDEN_PAGES = {
-    ["Interrupts"] = true, ["Taunt Alert"] = true, ["Tremor Alert"] = true,
+    ["Taunt Alert"] = true, ["Tremor Alert"] = true,
     ["Combat Log"] = true, ["Combat Numbers"] = true,
     ["Skill Tracker"] = true, -- the old skill list it reads is gone on Forever
 }
@@ -405,6 +405,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
             if def.body and def.loadedEnabled and CUI:ClassAllowed(def) then
                 local req = def.requires and CUI.modules[def.requires]
                 if not def.requires or (req and req.ran) then
+                    if CysUIDB.perf and CUI.Perf then pcall(setfenv, def.body, CUI.Perf.Env(key)) end -- measuring mode
                     local ok, err = pcall(def.body, ADDON, CUI)
                     def.ran = ok
                     if not ok then CUI:Print("|cFFFF4040" .. key .. " failed to load:|r " .. tostring(err)) end
@@ -413,9 +414,14 @@ events:SetScript("OnEvent", function(_, event, arg1)
         end
     elseif event == "PLAYER_LOGIN" then
         if CUI.W and CUI.W.ApplyBorderStyle then CUI.W.ApplyBorderStyle() end -- the class is known by now
+        if CysUIDB.perf and CUI.Perf then
+            C_Timer.After(2, function() CUI.Perf.WrapPublic() end)
+            C_Timer.After(5, function() CUI:Print("Measuring mode is on (type /cui cpu to see the slow parts, /cui cpu off to end it).") end)
+        end
         for _, key in ipairs(CUI.order) do
             local def = CUI.modules[key]
             if def.onEnable and def.loadedEnabled and not (def.forever == false and CUI.isForever) then
+                if CysUIDB.perf and CUI.Perf then pcall(setfenv, def.onEnable, CUI.Perf.Env(key)) end -- measuring mode
                 local ok, err = pcall(def.onEnable)
                 if not ok then CUI:Print("|cFFFF4040" .. key .. " failed to start:|r " .. tostring(err)) end
             end
@@ -449,6 +455,56 @@ SlashCmdList["CYSUI"] = function(msg)
                 CUI:Print("Mouse is on: " .. table.concat(chain, "  <  ") .. "  [" .. tostring(f.GetFrameStrata and f:GetFrameStrata()) .. " " .. tostring(f.GetFrameLevel and f:GetFrameLevel()) .. "]")
             end
         end)
+    elseif msg == "cpu on" then
+        CysUIDB.perf = true
+        CUI:Print("Measuring mode will start after a /reload. Play where the stutter happens, then type /cui cpu.")
+    elseif msg == "cpu off" then
+        CysUIDB.perf = nil
+        CUI:Print("Measuring mode ends after a /reload.")
+    elseif msg == "cpu reset" then
+        if CUI.Perf then CUI.Perf.Reset() end
+        CUI:Print("Measurements cleared.")
+    elseif msg == "cpu" then
+        if CysUIDB.perf and CUI.Perf then CUI.Perf.Report() end
+        -- which add-ons cost the most time per frame (the game's own add-on profiler, WoW Forever)
+        local P, M = C_AddOnProfiler, Enum and Enum.AddOnProfilerMetric
+        if not (P and P.GetTopKAddOnsForMetric and M) then
+            CUI:Print("This client has no add-on profiler.")
+            return
+        end
+        if P.IsEnabled and not P.IsEnabled() then CUI:Print("The game's add-on profiler is switched off, so there is nothing to show.") return end
+        local function Top(metric, label, fmt)
+            local ok, list = pcall(P.GetTopKAddOnsForMetric, metric, 6)
+            if not ok or type(list) ~= "table" or #list == 0 then return end
+            local parts = {}
+            for _, r in ipairs(list) do
+                if r.metricValue and r.metricValue > 0 then
+                    local name = r.addOnName == "CysUI" and "|cFFFFD100CysUI|r" or r.addOnName
+                    parts[#parts + 1] = name .. " " .. string.format(fmt, r.metricValue)
+                end
+            end
+            if #parts > 0 then CUI:Print("|cFFFFD100" .. label .. ":|r " .. table.concat(parts, ",  ")) end
+        end
+        local function Mine(metric) local ok, v = pcall(P.GetAddOnMetric, "CysUI", metric); return ok and v or 0 end
+        CUI:Print(string.format("CysUI: %.2f ms per frame now, %.2f ms on average this session, %d frames over 10 ms, %d over 50 ms.",
+            Mine(M.RecentAverageTime), Mine(M.SessionAverageTime), Mine(M.CountTimeOver10Ms), Mine(M.CountTimeOver50Ms)))
+        Top(M.RecentAverageTime, "Busiest right now (ms per frame)", "%.2f")
+        Top(M.CountTimeOver10Ms, "Most frames over 10 ms (stutters)", "%d")
+        Top(M.PeakTime, "Biggest single spike (ms)", "%.0f")
+        if not CysUIDB.perf then CUI:Print("To see which part of CysUI it is: /cui cpu on, then /reload.") end
+    elseif msg == "offers" then
+        -- what the game will tell an addon about quest givers on this map (Forever's world map draws quest lines only)
+        local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+        local ok, lines = pcall(C_QuestLine and C_QuestLine.GetAvailableQuestLines, map)
+        local okF, forced = pcall(C_QuestLine and C_QuestLine.GetForceVisibleQuests, map)
+        CUI:Print(string.format("Map %s: %d quest-line offers, %d always-shown quests.", tostring(map),
+            ok and type(lines) == "table" and #lines or -1, okF and type(forced) == "table" and #forced or -1))
+        if ok and type(lines) == "table" then
+            for i = 1, math.min(5, #lines) do
+                local q = lines[i]
+                CUI:Print(string.format("  %s (%.1f, %.1f)", tostring(q.questName), (q.x or 0) * 100, (q.y or 0) * 100))
+            end
+        end
     elseif msg == "welcome" or msg == "tour" then
         if CUI.ShowWelcome then CUI:ShowWelcome() end
     elseif msg == "layout" or msg == "move" or msg == "unlock" then
@@ -467,9 +523,22 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.13",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.14",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.14", date = "2026-11-12",
+              added = {
+                  "Interrupt announcer now works on WoW Forever too. Forever has no combat log for addons, so it watches your own interrupt spells (Kick, Pummel, Shield Bash, Earth Shock, Counterspell, Silence, Spell Lock, Feral Charge) and your target or focus having its cast cut short a moment later. When the game keeps the enemy spell hidden, the line leaves it out (Interrupted Defias Pillager!).",
+                  "Damage Meter: report the top 5 of a window to raid, party, guild, say or just yourself from the window menu (after the fight; the game locks the numbers during it).",
+                  "New command /cui cpu: how much time CysUI and your other add-ons take per frame, which ones cause the most stutters (frames over 10 ms) and the biggest single spikes, from the game's own add-on profiler.",
+                  "Measuring mode for stutters: /cui cpu on, then /reload. While it is on, every part of Cys's UI is timed, and /cui cpu lists which parts take the most time and which cause frames over 10 ms. /cui cpu off (and /reload) ends it; /cui cpu reset starts the count again.",
+              },
+              fixed = {
+                  "World map (Forever): the close button and the size button are back in their own spot (the X had been moved on top of the size button).",
+                  "Friends: the window no longer stays where it was moved aside to. It still opens beside Blizzard's windows (character, spellbook, map...), and goes back to its own spot once they close.",
+                  "Battle.net pop-ups (friend online / offline) now show above the chat tabs instead of off the left edge of the screen.",
+              },
+            },
             { version = "0.58.13", date = "2026-11-11",
               added = {
                   "Cys's Quest Tracker (Forever): your tracked quests in the Cys look, grouped under a gold header for each zone with the zone you are in at the top. Click a zone header to fold it, or the QUESTS header to fold the list. A Zone button (and a setting) shows only the quests for the zone you are in. Objective counts sit on the right, colored by how far along you are; a finished quest says Ready to turn in and plays a sound. Quest items get a button beside their quest. Click a quest to open it in the quest log, Shift-click to stop tracking, right-click to focus or share it. It can fade in combat or while the mouse is away and hide in raids. It replaces the game's tracker while on. Turn it on under Modules; settings on the Quest Tracker page, move it in Layout mode.",
