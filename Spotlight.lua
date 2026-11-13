@@ -14,12 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.19",
+    version = "0.58.20",
     items = {
-        { title = "Known recipes at vendors", page = "Vendor",
-          icon = "Interface\\Icons\\INV_Scroll_03",
-          text = "Recipes and plans you already know are dimmed on the vendor with a green Known tag, so the new ones stand out.",
-          where = "Any vendor. Switch on Loot & Items > Vendor." },
+        { title = "Update pop-up", page = "General",
+          icon = "Interface\\Icons\\INV_Misc_Gift_02",
+          text = "When someone in your guild or group runs a newer Cys's UI, a pop-up tells you which version is out and how to update.",
+          where = "Shows by itself. Switch on the General page." },
     },
 }
 

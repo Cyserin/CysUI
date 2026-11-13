@@ -523,9 +523,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.19",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.20",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.20", date = "2026-11-12",
+              added = {
+                  "Update pop-up: when a guildmate or group member runs a newer Cys's UI, a pop-up says which version is out and how to update (CurseForge app, Wago app or the download link to copy). Once per new version, never in a fight. Switch on the General page.",
+              },
+            },
             { version = "0.58.19", date = "2026-11-12",
               added = {
                   "Vendor: recipes, plans and other items you already know are dimmed on the vendor window with a green Known tag, so the ones you can still learn stand out. Switch on the Vendor page.",

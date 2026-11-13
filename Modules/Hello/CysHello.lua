@@ -178,6 +178,7 @@ local function Seen(key, version, sender)
     local first = not db.seen[key]
     db.seen[key] = { v = version, t = Now() }
     if Hello.UpdateMarks then pcall(Hello.UpdateMarks) end
+    if CUI.UpdateHeard then pcall(CUI.UpdateHeard, version) end
     if db.chatNote and not noted[key] and (first or UnitInParty(Ambiguate(sender, "none")) or
         UnitInRaid(Ambiguate(sender, "none"))) then
         noted[key] = true
