@@ -14,12 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.20",
+    version = "0.58.21",
     items = {
-        { title = "Update pop-up", page = "General",
-          icon = "Interface\\Icons\\INV_Misc_Gift_02",
-          text = "When someone in your guild or group runs a newer Cys's UI, a pop-up tells you which version is out and how to update.",
-          where = "Shows by itself. Switch on the General page." },
+        { title = "World markers wheel", page = "Marker Wheel", module = "markwheel",
+          icon = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6",
+          text = "A second Marker Wheel key for world markers: pick one from the ring, then click the ground where it goes.",
+          where = "Set the World markers key on the Marker Wheel page." },
     },
 }
 

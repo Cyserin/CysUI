@@ -18,7 +18,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Info bar** *(layout)*: combat timer, guild and friends online, durability, bag slots, gold, FPS and latency, clock. Can be split across a main bar and a bar under the minimap.
 - **Micro menu** *(layout)*: a text menu for Character, Spells, Talents, Quests, Social, Guild, Bags, Menu.
 - **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
-- **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). Works in combat.
+- **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). A second key does the same for world markers: pick one, then click the ground where it goes (Clear all removes them). Works in combat.
 - **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too.
 - **Your Characters**: a minimap button (or `/cuichars`) opens a window with three tabs: rested XP of all your characters (worked out while they are logged out) and when each will be full; gold on every character with the total; and the currencies each character holds.
 - **Cys's UI Users**: other players in your group or guild who run Cys's UI get a Cys's UI line (with their version) on their tooltip and a small Cys mark on your target, focus and party frames. Hidden addon messages, version only, never in combat; optional chat note when one joins your group. `/cuiusers`.
