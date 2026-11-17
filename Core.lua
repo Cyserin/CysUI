@@ -543,6 +543,7 @@ if CysChangelog then
                   "Nameplates: new Friendly NPC plates choice - Game setting, Always off or Always on. Off or on is set again after zoning and whenever another addon flips it.",
                   "Guild invites: the game lets only you send them, never an addon. Invite in the Guild Recruiter and Guild invite in the right-click menu now open a small box with /ginvite and the name, ready to copy: Ctrl+C, then Enter, Ctrl+V, Enter.",
                   "Guild Recruiter: key presses take steps again, not only mouse clicks (a key could stay counted as held down).",
+                  "Nameplates: Automatic threat colors now see a Protection Warrior or Paladin build on WoW Forever (its talent trees count points differently), and a group role only counts while you are in a group.",
               },
             },
             { version = "0.58.23", date = "2026-11-17",

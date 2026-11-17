@@ -122,11 +122,47 @@ end
 
 -- Warriors and Paladins whose most talent points are in Protection
 local PROT_TAB = { WARRIOR = 3, PALADIN = 2 }
+-- the Protection tree's skill line (Warrior 257, Paladin 267), so the tree is found whatever order it comes in
+local PROT_SKILL = { WARRIOR = 257, PALADIN = 267 }
+-- WoW Forever: talents are trait trees, and the old per-tab count reads 0 there. Points per tree the way the
+-- game's own talent window gets them: the tree's groups (Arms / Fury / Protection ...) and each group's spent points.
+-- Returns { [tabIndex] = points } with the trees in their display order, plus the Protection tab index, or nil.
+local function TraitTreePoints()
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits and C_Traits.GetConfigInfo
+            and C_Traits.GetGroupDisplayInfoByTreeID and C_Traits.GetGroupCurrencyInfo) then return nil end
+    local configID = C_ClassTalents.GetActiveConfigID()
+    if not configID then return nil end
+    local config = C_Traits.GetConfigInfo(configID)
+    local treeID = config and config.treeIDs and config.treeIDs[1]
+    if not treeID then return nil end
+    local groups = C_Traits.GetGroupDisplayInfoByTreeID(treeID)
+    if type(groups) ~= "table" or #groups == 0 then return nil end
+    table.sort(groups, function(a, b) return (a.orderIndex or 0) < (b.orderIndex or 0) end)
+    local ids = {}
+    for i, g in ipairs(groups) do ids[i] = g.groupID end
+    local spentBy = {}
+    for _, info in ipairs(C_Traits.GetGroupCurrencyInfo(configID, ids) or {}) do
+        local c = info.currencyInfos and info.currencyInfos[1]
+        spentBy[info.traitNodeGroupID] = c and tonumber(c.spent) or 0
+    end
+    local points, protTab = {}, nil
+    for i, g in ipairs(groups) do
+        points[i] = spentBy[g.groupID] or 0
+        if g.skillLineID == PROT_SKILL[playerClass] then protTab = i end
+    end
+    return points, protTab
+end
 local function ProtectionBuild()
     local tab = PROT_TAB[playerClass]
     if not tab then return false end
-    local prot, best = TalentPoints(tab), 0
-    for i = 1, 3 do if i ~= tab then best = max(best, TalentPoints(i)) end end
+    local ok, points, protTab = pcall(TraitTreePoints)
+    if not ok or not points then
+        -- Classic Era: the old talent tabs
+        points = { TalentPoints(1), TalentPoints(2), TalentPoints(3) }
+    end
+    tab = protTab or tab
+    local prot, best = points[tab] or 0, 0
+    for i, p in pairs(points) do if i ~= tab then best = max(best, p) end end
     return prot > 0 and prot > best
 end
 
@@ -140,7 +176,8 @@ end
 
 local function DetectRole()
     -- 1. the role you picked for your group (Group Finder / right-click a party member > Set Role)
-    local r = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
+    -- (only in a group: solo, WoW Forever can hand back a role you never picked)
+    local r = IsInGroup() and UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
     if r == "TANK" then return "tank", "your group role is Tank" end
     if r == "DAMAGER" or r == "HEALER" then return "dps", "your group role is " .. (r == "HEALER" and "Healer" or "Damage") end
     -- 2. no role picked (always the case while solo): read it from what you are doing
@@ -158,7 +195,8 @@ end
 do
     local ev = CreateFrame("Frame")
     for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "UPDATE_SHAPESHIFT_FORM", "PLAYER_EQUIPMENT_CHANGED", "CHARACTER_POINTS_CHANGED",
-                         "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ACTIVE_TALENT_GROUP_CHANGED", "UNIT_INVENTORY_CHANGED" }) do
+                         "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ACTIVE_TALENT_GROUP_CHANGED", "UNIT_INVENTORY_CHANGED",
+                         "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE" }) do
         pcall(ev.RegisterEvent, ev, e)
     end
     pcall(ev.RegisterUnitEvent, ev, "UNIT_AURA", "player")
