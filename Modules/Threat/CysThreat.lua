@@ -56,6 +56,10 @@ local function IsTank()
     local role = DB().role
     if role == "tank" then return true end
     if role == "dps" then return false end
+    -- Automatic: the same role the nameplates work out (group role in a group; solo: Protection talents,
+    -- Bear Form or Rockbiter Weapon)
+    local NP = CUI.Nameplates
+    if NP and NP.autoRole then return NP.autoRole == "tank" end
     if UnitGroupRolesAssigned then
         return UnitGroupRolesAssigned("player") == "TANK"
     end
@@ -490,7 +494,7 @@ CUI:RegisterPage("Threat Bar", function(page)
     test:SetPoint("TOPLEFT", 4, y)
     test:SetScript("OnClick", Example)
     W.Notes(page, 4, y - 40, width, "", {
-        "Automatic uses your group role (set it in a dungeon group) and counts you as a damage dealer if none is set; pick Tank here if you always tank.",
+        "Automatic uses your group role while you are in a group. Solo (or with no role set) it counts you as a tank with most talent points in Protection (Warrior, Paladin), in Bear Form, or with Rockbiter Weapon on (Shaman), the same as the nameplates.",
         "Damage dealer: green is safe, yellow is getting close, red means the mob is on you. Tank: green means you hold it, red means you are about to lose it.",
         "The percent is how close you are to pulling: 100% means the mob comes for you (the tank shows 100%). Melee pull at 110% of the tank's threat, ranged at 130%; the game works that out for you.",
         "The group list shows only in a group while someone has threat on your target. Your own line is always on it, marked in gold.",
