@@ -59,6 +59,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Swing Timer** (WoW Forever): your auto attack as a thin movable bar that fills from swing to swing, with lines for an off hand and a ranged weapon; can match the main cooldown bar's width. Turns orange and names it while Heroic Strike / Cleave / Maul / Raptor Strike is queued.
 - **Quest Starter pop-up** *(layout)*: when an item that starts a quest is in your bags, a small box shows it; click it to open the quest (works in combat).
 - **Crate Tracker**: lists the crates in your bags that ask to be filled, what each needs and how many you carry (green / yellow / red). `/cuicrates`.
+- **Flight Timer** *(layout)*: on a flight path, start and destination names, a line that fills as you get closer and the time left. Routes are timed on your first flight and count down after that.
 - **Vehicle Exit** *(layout)* (WoW Forever): a Leave button for vehicles and flight paths that you place yourself.
 - **Damage Meter** (WoW Forever): our own meter window in the Cys look, fed by the game's built-in damage meter (damage, healing, damage taken, absorbs, interrupts, dispels; current, overall or an earlier fight; spell list on hover out of combat). No combat log reading.
 - **Frame Combat Text** (WoW Forever): the last hit as one still number in the middle of the player and target health bars (damage, heals, Miss / Dodge / Parry / Block), with an up / down setting.

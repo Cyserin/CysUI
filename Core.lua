@@ -534,6 +534,7 @@ if CysChangelog then
                   "Bags: drag a category in the sidebar up or down to change the order. The sections in the window follow the same order.",
                   "Cooldown Manager: add any spell to your bars by its ID (racials and other spells the game's list leaves out). Click + on a bar and use the Spell ID box at the bottom. Right-click it in that list to forget it.",
                   "Gear picker: using a sharpening stone, weightstone, armor kit or enchant shows a small box at the mouse with the pieces you are wearing that it fits. Click one to use it there. Switch on the Automation page.",
+                  "Flight Timer: on a flight path, a bar shows where you left from, where you are going, a line that fills as you get closer and the time left. A route is timed the first time you fly it and counts down from then on. Move it in Layout mode.",
                   "Bags: sub-categories. In the category box (+ New category, or right-click one of yours) use Inside to put it under another category, for example Consumables > Buff Food, then drop items on it.",
               },
               improved = {
