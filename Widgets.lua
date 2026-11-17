@@ -265,21 +265,52 @@ end
 --------------------------------------------------------------------------------
 -- Checkbox: get() -> boolean, set(boolean)
 --------------------------------------------------------------------------------
+-- Drawn as a toggle switch: a rounded track (dark when off, gold when on) with a knob that slides across.
+-- Rows light up under the mouse, and the label is dimmed while the switch is off so the ones in use stand out.
+local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
+local TRACK_W, TRACK_H, KNOB = 28, 14, 10
+local OFF_TRACK = { 0.24, 0.24, 0.24 }
+local OFF_KNOB = { 0.62, 0.62, 0.62 }
+local OFF_LABEL = { 0.74, 0.74, 0.74 }
+local function Pill(parent, layer, sub, w, h)
+    local p = {}
+    p.l = parent:CreateTexture(nil, layer, nil, sub); p.l:SetTexture(CIRCLE)
+    p.l:SetSize(h, h); p.l:SetPoint("LEFT", 0, 0)
+    p.r = parent:CreateTexture(nil, layer, nil, sub); p.r:SetTexture(CIRCLE)
+    p.r:SetSize(h, h); p.r:SetPoint("RIGHT", 0, 0)
+    p.m = parent:CreateTexture(nil, layer, nil, sub); p.m:SetTexture("Interface\\Buttons\\WHITE8X8")
+    p.m:SetPoint("TOPLEFT", h / 2, 0); p.m:SetPoint("BOTTOMRIGHT", -h / 2, 0)
+    function p:Color(r, g, b, a) self.l:SetVertexColor(r, g, b, a or 1); self.r:SetVertexColor(r, g, b, a or 1); self.m:SetVertexColor(r, g, b, a or 1) end
+    return p
+end
+
 function W.Checkbox(parent, label, get, set)
     local c = CreateFrame("Button", nil, parent)
     c:SetHeight(20)
 
+    -- hover band behind the whole row
+    c.hl = c:CreateTexture(nil, "BACKGROUND")
+    c.hl:SetColorTexture(1, 1, 1, 0.045)
+    c.hl:SetPoint("TOPLEFT", -6, 2)
+    c.hl:SetPoint("BOTTOMRIGHT", 8, -2)
+    c.hl:Hide()
+
     local box = CreateFrame("Frame", nil, c)
-    box:SetSize(16, 16)
+    box:SetSize(TRACK_W, TRACK_H)
     box:SetPoint("LEFT", 0, 0)
-    W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
-    c.boxEdges = W.Border(box, 1, T.border, "BORDER")
-    c.check = W.Texture(box, "ARTWORK", T.glow)
-    c.check:SetPoint("TOPLEFT", 4, -4)
-    c.check:SetPoint("BOTTOMRIGHT", -4, 4)
+    c.track = Pill(box, "BORDER", 0, TRACK_W, TRACK_H)
+    c.knob = box:CreateTexture(nil, "ARTWORK")
+    c.knob:SetTexture(CIRCLE)
+    c.knob:SetSize(KNOB, KNOB)
+    c.knobX = 2
+    c.knob:SetPoint("LEFT", c.knobX, 0)
+    -- kept for older code that reaches for these (no longer drawn)
+    c.check = box:CreateTexture(nil, "ARTWORK")
+    c.check:Hide()
+    c.boxEdges = {}
 
     c.label = W.Text(c, 12, T.text)
-    c.label:SetPoint("LEFT", box, "RIGHT", 8, 0)
+    c.label:SetPoint("LEFT", box, "RIGHT", 10, 0)
     c.label:SetText(label)
     -- a label too long for the settings page wraps onto a second line instead of running off the edge
     local labelW = c.label:GetStringWidth()
@@ -290,12 +321,39 @@ function W.Checkbox(parent, label, get, set)
         c.label:SetWordWrap(true)
         if c.label.SetMaxLines then c.label:SetMaxLines(2) end
     end
-    c:SetWidth(24 + max(labelW, 40))
+    c:SetWidth(TRACK_W + 10 + max(labelW, 40))
 
-    function c:Refresh()
+    local function Slide(self, elapsed)
+        local diff = self.knobTo - self.knobX
+        if math.abs(diff) < 0.5 then
+            self.knobX = self.knobTo
+            self:SetScript("OnUpdate", nil)
+        else
+            self.knobX = self.knobX + diff * math.min(1, elapsed * 18)
+        end
+        self.knob:SetPoint("LEFT", self.knobX, 0)
+    end
+    function c:Paint()
+        local on = self.on
+        local tc = on and T.brand or OFF_TRACK
+        self.track:Color(tc[1], tc[2], tc[3], 1)
+        local kc = on and T.dark or OFF_KNOB
+        self.knob:SetVertexColor(kc[1], kc[2], kc[3], 1)
+        local lc = self.hot and T.accent or (on and T.text or OFF_LABEL)
+        self.label:SetTextColor(lc[1], lc[2], lc[3])
+    end
+    function c:Refresh(animate)
         local on = get() and true or false
-        self.check:SetShown(on)
-        W.SetBorder(self.boxEdges, on and T.glow or T.border)
+        self.on = on
+        self.knobTo = on and (TRACK_W - KNOB - 2) or 2
+        if animate and self:IsVisible() then
+            self:SetScript("OnUpdate", Slide)
+        else
+            self.knobX = self.knobTo
+            self.knob:SetPoint("LEFT", self.knobX, 0)
+            self:SetScript("OnUpdate", nil)
+        end
+        self:Paint()
     end
     function c:SetActive(on)
         if on then self:Enable() else self:Disable() end
@@ -303,11 +361,11 @@ function W.Checkbox(parent, label, get, set)
     end
     c:SetScript("OnClick", function(self)
         set(not get())
-        self:Refresh()
+        self:Refresh(true)
         if self.onChange then self.onChange(self) end
     end)
-    c:SetScript("OnEnter", function(self) self.label:SetTextColor(T.accent[1], T.accent[2], T.accent[3]) end)
-    c:SetScript("OnLeave", function(self) self.label:SetTextColor(T.text[1], T.text[2], T.text[3]) end)
+    c:SetScript("OnEnter", function(self) self.hot = true; self.hl:Show(); self:Paint() end)
+    c:SetScript("OnLeave", function(self) self.hot = false; self.hl:Hide(); self:Paint() end)
     c:Refresh()
     return c
 end

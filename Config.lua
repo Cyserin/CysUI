@@ -18,17 +18,64 @@ local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a
 
 -- sidebar grouping: { heading (nil = none), { page titles in order } }
 local GROUPS = {
-    { nil,               { "General", "New", "Modules", "Conflicts" } },
-    { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Guild Recruiter", "Cys's UI Users", "Durability", "Automation", "Flight Timer" } },
-    { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meter", "Details Skin", "Swing Timer", "Combat Numbers", "Threat Bar", "Marker Wheel", "Weapon Swap", "Click-Casting", "Vehicle Exit" } },
-    { "Loot & Items",    { "Vendor", "Consumables", "Loot", "Roll Tracker", "Upgrade", "Quest Starter", "Crate Tracker" } },
-    { "Tracking",        { "Quest Tracker", "Kill Tracker", "XP Bar", "Characters", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
+    { nil,                { "General", "New", "Modules", "Conflicts" } },
+    { "Interface",        { "Automation", "UI Scale", "Skins", "Tooltip", "Minimap", "Minimap Button", "Info Bar", "Micro Menu",
+                            "Chat", "Friends", "Guild Recruiter", "Cys's UI Users" } },
+    { "Frames & Combat",  { "Unit Frames", "Raid Frames", "Cast Bar", "PlayerAuras", "Nameplates", "Action Bars", "Click-Casting",
+                            "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log",
+                            "Swing Timer", "Threat Bar", "Taunt Alert", "Missing Buffs", "Raid Debuffs",
+                            "Marker Wheel", "Weapon Swap", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
+    { "Items & Leveling", { "Vendor", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Upgrade",
+                            "Quest Tracker", "XP Bar", "Kill Tracker", "Skill Tracker", "Characters" } },
 }
+
+-- Related pages share one sidebar entry and show as tabs along the top of the page (first tab = the
+-- sidebar entry). A group whose pages aren't all loaded keeps the ones that are; one page left = no tabs.
+local MERGED = {
+    { "Look",           { "UI Scale", "Skins", "Tooltip" } },
+    { "Minimap & Bars", { "Minimap", "Minimap Button", "Info Bar", "Micro Menu" } },
+    { "Social",         { "Chat", "Friends", "Guild Recruiter", "Cys's UI Users" } },
+    { "Unit Frames",    { "Unit Frames", "Raid Frames", "Cast Bar", "PlayerAuras" } },
+    { "Damage Meter",   { "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log" } },
+    { "Combat Helpers", { "Swing Timer", "Threat Bar", "Taunt Alert", "Missing Buffs", "Raid Debuffs" } },
+    { "Handy Extras",   { "Marker Wheel", "Weapon Swap", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
+    { "Vendor & Bags",  { "Vendor", "Consumables", "Durability" } },
+    { "Loot",           { "Loot", "Roll Tracker", "Crate Tracker" } },
+    { "Leveling",       { "Quest Tracker", "XP Bar", "Kill Tracker", "Skill Tracker", "Characters" } },
+}
+local TAB_NAMES = { PlayerAuras = "Player Auras", ["Cys's UI Users"] = "Cys's UI Users" }
+local TAB_H = 30
+
 
 -- Class pages live under CLASS: a General page (works for every class), then a heading for your own class
 -- (in its class color) with that class's pages under it. Only your own class is listed.
 local CLASS_GENERAL = { "Level-Up Spells", "Spell Ranks", "Talent Planner", "Heal Advisor" }
 local LABELS = {} -- sidebar text when it differs from the page title
+local tabGroup = {} -- page index -> { name, pages = { indices } } for pages shown as tabs
+local function BuildTabGroups()
+    wipe(tabGroup)
+    local byT = {}
+    for i, p in ipairs(CUI.pages) do byT[p.title] = i end
+    for _, m in ipairs(MERGED) do
+        local list = {}
+        for _, t in ipairs(m[2]) do if byT[t] then list[#list + 1] = byT[t] end end
+        if #list > 1 then
+            local g = { name = m[1], pages = list }
+            for _, i in ipairs(list) do tabGroup[i] = g end
+            LABELS[CUI.pages[list[1]].title] = m[1]
+        end
+    end
+end
+local function TabName(i) local t = CUI.pages[i].title; return TAB_NAMES[t] or t end
+-- a sidebar entry is new while its page, or any tab under it, hasn't been opened yet
+local function AnyNew(i)
+    if not (CUI.IsNewPage) then return false end
+    local g = tabGroup[i]
+    for _, pi in ipairs(g and g.pages or { i }) do
+        if CUI:IsNewPage(CUI.pages[pi].title) then return true end
+    end
+    return false
+end
 -- Classic still uses the old pink for Shamans; the game's newer clients use blue, so we do too.
 local CLASSES = {
     { "DRUID", "Druid", 1.00, 0.49, 0.04 },     { "HUNTER", "Hunter", 0.67, 0.83, 0.45 },
@@ -469,12 +516,13 @@ local function RefreshHeadTags()
     for _, h in ipairs(headTags) do
         local any = false
         for _, i in ipairs(h.pages) do
-            if CUI.IsNewPage and CUI:IsNewPage(CUI.pages[i].title) then any = true break end
+            if AnyNew(i) then any = true break end
         end
         h.tag:SetShown(any)
     end
 end
 
+local CreateTab -- defined after SelectPage (its click selects a page)
 local function SelectPage(index)
     current = index
     for i, f in pairs(pageFrames) do f:Hide() end
@@ -482,30 +530,94 @@ local function SelectPage(index)
     window.content:SetHeight(max(VIEW_H, page.contentHeight or 0))
     window.scroll:SetVerticalScroll(0)
     page:Show()
-    for i, b in ipairs(pageButtons) do
-        local selected = (i == index)
+    local g = tabGroup[index]
+    for i, b in pairs(pageButtons) do
+        local selected = (i == index) or (g ~= nil and g.pages[1] == i)
         b.accent:SetShown(selected)
         if selected then b.bg:Show(); if b.hover then b.hover:Hide() end else b.bg:Hide() end
         local c = selected and T.accent or (b.baseColor or T.text)
         b.label:SetTextColor(c[1], c[2], c[3])
         if selected and b.newTag then
-            b.newTag:Hide()
-            if CUI.MarkPageSeen then CUI:MarkPageSeen(CUI.pages[i].title) end
+            if CUI.MarkPageSeen then CUI:MarkPageSeen(CUI.pages[index].title) end
+            b.newTag:SetShown(AnyNew(i))
             RefreshHeadTags()
         end
     end
     local def = CUI.pages[index]
+    -- tabs along the top for merged pages; the page area moves down under them
+    local bar = window.tabBar
+    if bar then
+        local n = 0
+        if g then
+            local size, padX = 12, 24
+            local total = 0
+            for _, pi in ipairs(g.pages) do total = total + #TabName(pi) * 7 + padX + 2 end
+            if total > CONTENT_W then size, padX = 11, 14 end
+            for k, pi in ipairs(g.pages) do
+                n = k
+                local tb = bar.btns[k]
+                if not tb then tb = CreateTab(bar); bar.btns[k] = tb end
+                tb.index = pi
+                tb.label:SetFont(STANDARD_TEXT_FONT, size, "")
+                tb.label:SetText(TabName(pi))
+                tb:SetWidth(tb.label:GetStringWidth() + padX)
+                tb:ClearAllPoints()
+                if k == 1 then tb:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 1)
+                else tb:SetPoint("BOTTOMLEFT", bar.btns[k - 1], "BOTTOMRIGHT", 2, 0) end
+                tb.sel = (pi == index)
+                local c = tb.sel and T.accent or T.text
+                tb.label:SetTextColor(c[1], c[2], c[3])
+                tb.bg:SetShown(tb.sel)
+                tb.under:SetShown(tb.sel)
+                tb.newTag:SetShown(not tb.sel and CUI.IsNewPage and CUI:IsNewPage(CUI.pages[pi].title) or false)
+                tb:Show()
+            end
+        end
+        for k = n + 1, #bar.btns do bar.btns[k]:Hide() end
+        bar:SetShown(g ~= nil)
+        local top = -PAD - (g and (TAB_H + 8) or 0)
+        window.scroll:ClearAllPoints()
+        window.scroll:SetPoint("TOPLEFT", window.sidebar, "TOPRIGHT", PAD, top)
+        window.scroll:SetPoint("BOTTOMRIGHT", window.footer, "TOPRIGHT", -PAD, PAD)
+    end
     if window.where then
-        local b = pageButtons[index]
-        local name = LABELS[def.title] or def.title
+        local b = pageButtons[g and g.pages[1] or index]
         local sec = b and b.section
+        local name = g and (g.name .. "  >  " .. TabName(index)) or (LABELS[def.title] or def.title)
         window.where:SetText(sec and ("|cFF9A9A9A" .. sec .. "  >|r  |cFFFFD100" .. name .. "|r") or ("|cFFFFD100" .. name .. "|r"))
     end
     if def.onShow then def.onShow(page) end
     UpdateFooter()
 end
 
+CreateTab = function(bar)
+    local tb = CreateFrame("Button", nil, bar)
+    tb:SetHeight(TAB_H - 4)
+    tb.bg = W.Texture(tb, "BACKGROUND", T.selected)
+    tb.bg:SetAllPoints()
+    tb.hover = W.Texture(tb, "BACKGROUND", T.hover, 1)
+    tb.hover:SetAllPoints()
+    tb.hover:Hide()
+    tb.under = W.Texture(tb, "ARTWORK", T.accent)
+    tb.under:SetPoint("BOTTOMLEFT"); tb.under:SetPoint("BOTTOMRIGHT"); tb.under:SetHeight(2)
+    tb.label = W.Text(tb, 12, T.text, "CENTER")
+    tb.label:SetPoint("CENTER", 0, 1)
+    tb.newTag = W.Text(tb, 8, T.green)
+    tb.newTag:SetFont(STANDARD_TEXT_FONT, 8, "OUTLINE")
+    tb.newTag:SetPoint("TOPRIGHT", -2, -1)
+    tb.newTag:SetText("NEW")
+    tb:SetScript("OnEnter", function(s) if not s.sel then s.hover:Show() end end)
+    tb:SetScript("OnLeave", function(s) s.hover:Hide() end)
+    tb:SetScript("OnClick", function(s)
+        s.hover:Hide()
+        SelectPage(s.index)
+        if window.searchHits and window.ShowHit then window.ShowHit(s.index) end
+    end)
+    return tb
+end
+
 local function CreateWindow()
+    BuildTabGroups()
     local f = CreateFrame("Frame", "CysUIConfigFrame", UIParent)
     window = f
     f:SetSize(WIDTH, HEIGHT)
@@ -634,7 +746,12 @@ local function CreateWindow()
     local function Collect(titles)
         local list = {}
         for _, title in ipairs(titles) do
-            if byTitle[title] then list[#list + 1] = byTitle[title]; placed[byTitle[title]] = true end
+            local i = byTitle[title]
+            if i then
+                placed[i] = true
+                local g = tabGroup[i]
+                if not g or g.pages[1] == i then list[#list + 1] = i end
+            end
         end
         return list
     end
@@ -674,7 +791,7 @@ local function CreateWindow()
             color = { r = c[3], g = c[4], b = c[5] }, empty = #list == 0 }
     end
     local other = {}
-    for i in ipairs(CUI.pages) do if not placed[i] then other[#other + 1] = i end end
+    for i in ipairs(CUI.pages) do if not placed[i] and not tabGroup[i] then other[#other + 1] = i end end
     AtoZ(other)
     if #other > 0 then sections[#sections + 1] = { name = "Other", key = "Other", level = 1, pages = other } end
 
@@ -730,7 +847,7 @@ local function CreateWindow()
             b.label = W.Text(b, 12, b.baseColor)
             b.label:SetPoint("LEFT", section.level == 2 and 36 or 14, 0)
             b.label:SetText(LABELS[CUI.pages[i].title] or CUI.pages[i].title)
-            if CUI.IsNewPage and CUI:IsNewPage(CUI.pages[i].title) then
+            if AnyNew(i) then
                 -- a small gold NEW tag until the page is opened once (Spotlight.lua)
                 b.newTag = W.Text(b, 9, T.accent)
                 b.newTag:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
@@ -744,8 +861,15 @@ local function CreateWindow()
             b:SetScript("OnLeave", function(s) s.hover:Hide() end)
             b.section = section.level == 2 and ("Class  >  " .. section.name) or section.name
             b:SetScript("OnClick", function()
-                SelectPage(i)
-                if f.searchHits and f.ShowHit then f.ShowHit(i) end
+                -- while searching, a merged entry opens its first matching tab
+                local target = i
+                if f.searchHits and tabGroup[i] and not f.searchHits[i] then
+                    for _, pi in ipairs(tabGroup[i].pages) do
+                        if f.searchHits[pi] then target = pi break end
+                    end
+                end
+                SelectPage(target)
+                if f.searchHits and f.ShowHit then f.ShowHit(target) end
             end)
             pageButtons[i] = b
             entries[#entries + 1] = { page = b, index = i, level = section.level, hasHead = section.name ~= nil }
@@ -759,7 +883,9 @@ local function CreateWindow()
             for _, e in ipairs(entries) do
                 if e.head then
                     e.head:Hide()
-                elseif f.searchHits[e.index] then
+                elseif f.searchHits[e.index] or (tabGroup[e.index] and (function()
+                    for _, pi in ipairs(tabGroup[e.index].pages) do if f.searchHits[pi] then return true end end
+                end)()) then
                     e.page:ClearAllPoints()
                     e.page:SetPoint("TOPLEFT", 0, y); e.page:SetPoint("TOPRIGHT", 0, y)
                     e.page:Show()
@@ -820,7 +946,7 @@ local function CreateWindow()
         index = {}
         for i, def in ipairs(CUI.pages) do
             local page = EnsurePage(i)
-            local list = { { text = ((LABELS[def.title] or def.title) .. " " .. def.title):lower() } }
+            local list = { { text = ((LABELS[def.title] or def.title) .. " " .. def.title .. " " .. (tabGroup[i] and tabGroup[i].name or "")):lower() } }
             local function Walk(fr, depth)
                 if depth > 8 then return end
                 local okR, regions = pcall(function() return { fr:GetRegions() } end)
@@ -914,7 +1040,7 @@ local function CreateWindow()
         local hits, first, count = {}, nil, 0
         local function Scan(term)
             for i in ipairs(CUI.pages) do
-                if pageButtons[i] and Matches(i, term) then
+                if (pageButtons[i] or tabGroup[i]) and Matches(i, term) then
                     hits[i] = true
                     count = count + 1
                     first = first or i
@@ -982,6 +1108,16 @@ local function CreateWindow()
     scroll:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", -PAD, PAD)
     scroll:EnableMouseWheel(true)
     f.scroll = scroll
+    f.sidebar, f.footer = sidebar, footer
+    local tabBar = CreateFrame("Frame", nil, f)
+    tabBar:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", PAD, -PAD + 4)
+    tabBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -HEADER_H - PAD + 4)
+    tabBar:SetHeight(TAB_H)
+    local tline = W.Texture(tabBar, "BORDER", T.line)
+    tline:SetPoint("BOTTOMLEFT"); tline:SetPoint("BOTTOMRIGHT"); tline:SetHeight(1)
+    tabBar.btns = {}
+    tabBar:Hide()
+    f.tabBar = tabBar
     f.content = CreateFrame("Frame", nil, scroll)
     f.content:SetSize(CONTENT_W, VIEW_H)
     scroll:SetScrollChild(f.content)
