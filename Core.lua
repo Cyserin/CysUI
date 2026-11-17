@@ -528,6 +528,7 @@ if CysChangelog then
         entries = {
             { version = "0.58.23", date = "2026-11-17",
               added = {
+                  "Guild Recruiter: searches /who for players without a guild in your level range and whispers them your message, one step per key press or click while you play. Nobody is whispered twice within the days you pick. Players who answer show in a small window where you can invite them. Optional welcome for new members in guild chat. Guild Recruiter page, or /cuirecruit.",
                   "Click-Casting: click Cys's unit frames (player, target, focus, pet, party, raid) with a mouse button plus Shift, Ctrl or Alt to cast a spell or macro on that unit. Spells cast your highest rank, or the exact rank you pick. Bindings work on friendly units; on an enemy frame clicks target as usual. Target Unit Frame and Open Context Menu are listed too, so you can move them to another click and use plain left or right for a heal. Open it with the Click-casting button beside the spellbook (drag spells straight in), on the Click-Casting page, or with /cuiclick.",
                   "Cooldown Manager: spells you added by ID show the gold time line while your buff or debuff from them runs. Switch on the Cooldown Manager page.",
               },

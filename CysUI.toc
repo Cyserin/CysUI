@@ -88,4 +88,5 @@ Modules\QuestStart\CysQuestStart.lua
 Modules\Crates\CysCrates.lua
 Modules\Flight\CysFlight.lua
 Modules\ClickCast\CysClickCast.lua
+Modules\Recruit\CysRecruit.lua
 Modules\Quests\CysQuests.lua

@@ -19,7 +19,7 @@ local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a
 -- sidebar grouping: { heading (nil = none), { page titles in order } }
 local GROUPS = {
     { nil,               { "General", "New", "Modules", "Conflicts" } },
-    { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Cys's UI Users", "Durability", "Automation", "Flight Timer" } },
+    { "Interface",       { "UI Scale", "Chat", "Info Bar", "Micro Menu", "Minimap", "Minimap Button", "Tooltip", "Skins", "Friends", "Guild Recruiter", "Cys's UI Users", "Durability", "Automation", "Flight Timer" } },
     { "Frames & Combat", { "Unit Frames", "Raid Frames", "Cast Bar", "Nameplates", "Action Bars", "PlayerAuras", "Damage Meter", "Details Skin", "Swing Timer", "Combat Numbers", "Threat Bar", "Marker Wheel", "Weapon Swap", "Click-Casting", "Vehicle Exit" } },
     { "Loot & Items",    { "Vendor", "Consumables", "Loot", "Roll Tracker", "Upgrade", "Quest Starter", "Crate Tracker" } },
     { "Tracking",        { "Quest Tracker", "Kill Tracker", "XP Bar", "Characters", "Skill Tracker", "Raid Debuffs", "Combat Log", "Taunt Alert", "Missing Buffs" } },
@@ -282,7 +282,7 @@ end
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel", "weaponswap", "clickcast", "vehicleexit" } },
-    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "characters", "micromenu", "tooltip", "skins", "friends", "hello", "scale", "durability", "automation", "questlist", "flight" } },
+    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "characters", "micromenu", "tooltip", "skins", "friends", "recruit", "hello", "scale", "durability", "automation", "questlist", "flight" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade", "queststart", "crates" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "talentplan", "healadvisor", "warrior", "shoutremind" } },
 }

@@ -16,6 +16,10 @@ local T = W.T
 local SPOTLIGHT = {
     version = "0.58.23",
     items = {
+        { title = "Guild Recruiter", page = "Guild Recruiter", module = "recruit",
+          icon = "Interface\\Icons\\INV_Misc_Note_02",
+          text = "Finds players without a guild with /who and whispers them your message while you play. The ones who answer show in a small window: click Invite.",
+          where = "Guild Recruiter page (Interface), or /cuirecruit." },
         { title = "Click-Casting", page = "Click-Casting", module = "clickcast",
           icon = "Interface\\Icons\\Spell_Nature_HealingWaveGreater",
           text = "Click a unit frame with Shift, Ctrl or Alt and a mouse button to cast a spell or macro on that unit. Drop spells on the page, then click their gold button with the click you want.",
