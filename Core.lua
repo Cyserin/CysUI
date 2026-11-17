@@ -538,6 +538,8 @@ if CysChangelog then
                   "Settings: every checkbox is now a toggle switch (gold when on) with a soft row highlight under the mouse; switches that are off have dimmer text so the ones in use stand out.",
               },
               fixed = {
+                  "Nameplates: crates, boxes, ore and herb nodes no longer get a health bar (WoW Forever gives clickable objects a plate of their own).",
+                  "Nameplates: new Friendly NPC plates choice - Game setting, Always off or Always on. Off or on is set again after zoning and whenever another addon flips it.",
                   "Guild invites: the game lets only you send them, never an addon. Invite in the Guild Recruiter and Guild invite in the right-click menu now open a small box with /ginvite and the name, ready to copy: Ctrl+C, then Enter, Ctrl+V, Enter.",
                   "Guild Recruiter: key presses take steps again, not only mouse clicks (a key could stay counted as held down).",
               },

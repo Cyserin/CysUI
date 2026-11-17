@@ -757,9 +757,53 @@ function NP.UpdateQuestMarks()
     for _, p in pairs(NP.plates) do if p.unit then UpdateQuestMark(p) end end
 end
 
+-- WoW Forever gives crates, boxes, ore and herb nodes (and other things you can click) a plate of their own when
+-- soft targeting is on. Those aren't creatures: no plate of ours for them, so no health bar that isn't theirs.
+local function NotACreature(unit)
+    if UnitIsGameObject then
+        local ok, v = pcall(UnitIsGameObject, unit)
+        if ok and not Secret(v) and v then return true end
+    end
+    if UnitNameplateShowsWidgetsOnly then
+        local ok, v = pcall(UnitNameplateShowsWidgetsOnly, unit)
+        if ok and not Secret(v) and v then return true end
+    end
+    if not UnitIsPlayer(unit) then
+        local ok, mx = pcall(UnitHealthMax, unit)
+        if ok and type(mx) == "number" and not Secret(mx) and mx <= 0 then return true end
+    end
+    return false
+end
+
+-- Friendly NPC plates: "game" leaves the game's setting alone; "off" / "on" keep it that way, because other
+-- addons (and some game changes) can flip it. Only written out of combat; checked again after zoning.
+local NPC_CVARS = { "nameplateShowFriendlyNPCs", "nameplateShowFriendlyNpcs" }
+function NP.ApplyFriendlyNPC()
+    local want = DB().friendlyNPCs
+    if want ~= "off" and want ~= "on" then return end
+    if InCombatLockdown() then NP.npcPending = true return end
+    NP.npcPending = false
+    local v = want == "on" and "1" or "0"
+    for _, cv in ipairs(NPC_CVARS) do
+        local cur = GetCVar and GetCVar(cv)
+        if cur ~= nil and cur ~= v then pcall(SetCVar, cv, v) end
+    end
+end
+
 function NP:Add(unit)
     local base = C_NamePlate.GetNamePlateForUnit(unit)
     if not base then return end
+    if NotACreature(unit) then
+        local old = self.plates[base]
+        if old then
+            old.unit = nil
+            old:UnregisterAllEvents()
+            old.cast:Hide()
+            old.cast:SetScript("OnUpdate", nil)
+            old:Hide()
+        end
+        return
+    end
     SilenceBlizzard(base)
     local p = self.plates[base]
     if not p then
@@ -798,6 +842,7 @@ function NP:Remove(unit)
 end
 
 function NP:ApplyAll()
+    NP.ApplyFriendlyNPC()
     for _, p in pairs(self.plates) do
         self:ApplySize(p)
         if p.unit then self:Update(p) end
@@ -825,6 +870,19 @@ function NP.Enable()
         else
             for _, p in pairs(NP.plates) do if p.unit then NP:Update(p) end end
         end
+    end)
+    -- friendly NPC plates: set again after zoning, after combat, and when something else changes the setting
+    local npc = CreateFrame("Frame")
+    for _, ev in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "CVAR_UPDATE" }) do
+        pcall(npc.RegisterEvent, npc, ev)
+    end
+    local npcQueued
+    npc:SetScript("OnEvent", function(_, event, name)
+        if event == "PLAYER_REGEN_ENABLED" and not NP.npcPending then return end
+        if event == "CVAR_UPDATE" and not (type(name) == "string" and name:lower() == "nameplateshowfriendlynpcs") then return end
+        if npcQueued then return end
+        npcQueued = true
+        C_Timer.After(1.5, function() npcQueued = nil; NP.ApplyFriendlyNPC() end) -- after other addons had their go
     end)
     -- quest log changes: ask again which mobs are still needed (many changes in one moment count as one)
     local q = CreateFrame("Frame")
@@ -985,11 +1043,13 @@ CUI:RegisterPage("Nameplates", function(page)
     local hrow = Choices(box, "Health text on the bar", "healthMode",
         { { "percent", "Percent" }, { "value", "Value" }, { "both", "Both" }, { "none", "None" } }, "percent")
     local nrow = Choices(hrow, "Name and level above the bar", "nameStyle",
-        { { "split", "Name | Level" }, { "center", "Centred" } }, "split")
+        { { "split", "Name | Level" }, { "center", "Centered" } }, "split")
+    local frow = Choices(nrow, "Friendly NPC plates", "friendlyNPCs",
+        { { "game", "Game setting" }, { "off", "Always off" }, { "on", "Always on" } }, "game")
 
     local w = W.Stepper(page, "Plate width", function() return db.width end,
         function(v) db.width = v; NP:ApplyAll() end, 60, 220, 4)
-    w:SetPoint("TOPLEFT", nrow, "BOTTOMLEFT", 0, -16)
+    w:SetPoint("TOPLEFT", frow, "BOTTOMLEFT", 0, -16)
     local h = W.Stepper(page, "Plate height", function() return db.height end,
         function(v) db.height = v; NP:ApplyAll() end, 4, 24, 1)
     h:SetPoint("TOPLEFT", w, "BOTTOMLEFT", 0, -6)
