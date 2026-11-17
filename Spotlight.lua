@@ -28,6 +28,10 @@ local SPOTLIGHT = {
           icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
           text = "Hide the windows per instance type, keys to show / hide and reset, grey bars out of combat, a combat timer, and spell tooltips in a pinned breakdown.",
           where = "Damage Meter page." },
+        { title = "Group threat + pull warning", page = "Threat Bar", module = "threat",
+          icon = "Interface\\Icons\\Ability_Warrior_Challange",
+          text = "Everyone's threat on your target in one small list, and a warning before you pull the mob off the tank.",
+          where = "Threat Bar page (Combat Helpers)." },
     },
 }
 
