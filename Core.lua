@@ -527,8 +527,12 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.24", date = "2026-11-17",
+              improved = {
+                  "Guild Recruiter: right-click Guild on the info bar to open its window (or type /cuirecruit).",
+              },
               fixed = {
-                  "Guild invites: the game lets only you send them, never an addon. Invite in the Guild Recruiter and Guild invite in the right-click menu now put /ginvite and the name in your chat box: press Enter to send it.",
+                  "Guild invites: the game lets only you send them, never an addon. Invite in the Guild Recruiter and Guild invite in the right-click menu now open a small box with /ginvite and the name, ready to copy: Ctrl+C, then Enter, Ctrl+V, Enter.",
+                  "Guild Recruiter: key presses take steps again, not only mouse clicks (a key could stay counted as held down).",
               },
             },
             { version = "0.58.23", date = "2026-11-17",

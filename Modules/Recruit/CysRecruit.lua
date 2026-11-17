@@ -4,7 +4,7 @@
 -- Searches /who for players without a guild in your level range and whispers them your message, one step per
 -- key press or click (the game only allows /who from a real key press or click). Nobody is whispered twice
 -- within the days you pick. Players who answer show in a small box: interested ones in gold, questions in white.
--- Invites are never sent by themselves: Invite puts /ginvite Name in your chat box, you press Enter.
+-- Invites are never sent by themselves: Invite shows /ginvite Name to copy into chat (the game allows no other way).
 -- Optional: welcome new members in guild chat (one welcome per new member when several guildies run Cys's UI).
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
@@ -291,19 +291,31 @@ function R.Step()
     end
 end
 
-local held = {}
+local held, lastKey = {}, {}
 local function EnsureListeners()
     if kb then return true end
     if InCombatLockdown() then return false end
-    kb = CreateFrame("Frame", "CysRecruitKeys", UIParent)
+    kb = CreateFrame("Frame", "CysRecruitKeys")
+    kb:SetFrameStrata("TOOLTIP") -- above other addons' keyboard frames
     kb:EnableKeyboard(true)
     kb:SetPropagateKeyboardInput(true) -- never swallow the player's keys
+    -- a held key repeats; only its first press counts. Key-up doesn't always arrive, so a key also counts
+    -- as released when the game says it is up, or when it comes again after a short pause.
     kb:SetScript("OnKeyDown", function(_, key)
-        if held[key] then return end -- a held key repeats; only the first press counts
+        local now = GetTime()
+        local prev = lastKey[key]
+        lastKey[key] = now
+        if held[key] and prev and now - prev < 0.6 then return end
         held[key] = true
         R.Step()
     end)
     kb:SetScript("OnKeyUp", function(_, key) held[key] = nil end)
+    kb:SetScript("OnUpdate", function()
+        for k in pairs(held) do
+            local ok, down = pcall(IsKeyDown, k)
+            if not ok or not down then held[k] = nil end
+        end
+    end)
     kb:SetScript("OnHide", function() wipe(held) end)
     kb:Hide()
     WorldFrame:HookScript("OnMouseDown", function() if kb:IsShown() then R.Step() end end)
@@ -380,7 +392,7 @@ local function OnWhisper(text, sender)
     if kind == "yes" or e.kind ~= "yes" then e.kind = kind end
     session.replies = session.replies + 1
     if db.chatNote and kind == "yes" then
-        Print(NameLink(name) .. " wants to join. Click Invite in the Guild Recruiter, then press Enter.")
+        Print(NameLink(name) .. " wants to join. Click Invite in the Guild Recruiter.")
     end
     PlaySound(SOUNDKIT and SOUNDKIT.TELL_MESSAGE or 3081)
     R.closed = false
@@ -411,7 +423,8 @@ local JOINED = Pattern(ERR_GUILD_JOIN_S)
 local DECLINED = Pattern(ERR_GUILD_DECLINE_S)
 local pendingInvite = {} -- [lower name] = GetTime()
 
--- The game sends guild invites only from its own code: Invite puts /ginvite Name in your chat box (press Enter).
+-- The game sends guild invites only from its own code (even a chat box opened by an addon is blocked):
+-- Invite shows /ginvite Name in a small box to copy and paste into chat.
 function R.Invite(name)
     if not (CanGuildInvite and CanGuildInvite()) then Print("Your guild rank can't invite."); return end
     if CUI.GuildInviteChat then CUI.GuildInviteChat(name)
@@ -510,7 +523,7 @@ local function MakeRow(i)
         GameTooltip:AddLine(s.entry.name, 1, 0.82, 0)
         GameTooltip:AddLine(s.entry.text or "", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Invite puts /ginvite and their name in your chat box: press Enter to send it. x takes them off the list.", 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine("Invite shows /ginvite and their name to copy: Ctrl+C, Enter, Ctrl+V, Enter. x takes them off the list.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function(s) s.hl:Hide(); GameTooltip:Hide() end)
@@ -795,7 +808,7 @@ CUI:RegisterPage("Guild Recruiter", function(page)
     W.Notes(page, 4, y - 104, width, "", {
         { "How it runs", "Press Start, then play as usual. The game only allows /who from a real key press or click, so each key press or click on the game world takes one step: a /who search or one whisper. Your keys still work as normal. It pauses in combat, battlegrounds and arenas." },
         { "Who is whispered", "Players without a guild in your level range, never the same player twice within the days above. Ranges with more than 50 players are searched again one class at a time." },
-        { "Invites", "The game only lets you invite yourself, never an addon. Players who answer show in the window; Invite puts /ginvite and their name in your chat box, so you just press Enter (your guild rank must be allowed to invite)." },
+        { "Invites", "The game only lets you invite yourself, never an addon. Players who answer show in the window; Invite shows /ginvite and their name in a small box: Ctrl+C, then Enter, Ctrl+V, Enter (your guild rank must be allowed to invite)." },
         { "Welcome", "Sent on your next key press or click after someone joins. When several guildies run Cys's UI, only one of them welcomes each new member." },
         "/cuirecruit opens the window; /cuirecruit start, stop or next. A key press with the chat box open doesn't count.",
     })

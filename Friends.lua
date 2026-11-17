@@ -1297,13 +1297,13 @@ end
 
 --------------------------------------------------------------------------------
 -- "Guild invite" in the right-click menu of other players (unit frames, chat names, party and raid).
--- Only shown to players who are allowed to invite. It puts /ginvite Name in your chat box: press Enter to send.
+-- Only shown to players who are allowed to invite. It opens a small box with /ginvite Name to copy into chat.
 --------------------------------------------------------------------------------
 do
-    -- Forever lets only the game's own code send guild invites (C_GuildInfo.Invite is Blizzard-only), so we put
-    -- "/ginvite Name" in your chat box and you press Enter. If the game blocks that too, a box to copy it from opens.
+    -- Forever lets only the game's own code send guild invites (C_GuildInfo.Invite is Blizzard-only). Even a chat
+    -- box opened by addon code is blocked, so we show "/ginvite Name" in a box of our own to copy and paste.
     local W, T = CysUI.W, CysUI.W.T
-    local copy, lastText, lastAt
+    local copy
     local function ShowCopy(text)
         if not copy then
             copy = CreateFrame("Frame", "CysGInviteCopy", UIParent)
@@ -1345,22 +1345,8 @@ do
     end
     function CysUI.GuildInviteChat(name)
         if type(name) ~= "string" or name == "" then return end
-        local text = "/ginvite " .. name
-        if not CysUI.ginviteCopy then
-            local open = (ChatFrameUtil and ChatFrameUtil.OpenChat) or ChatFrame_OpenChat
-            if open and pcall(open, text) then lastText, lastAt = text, GetTime(); return end
-        end
-        ShowCopy(text)
+        ShowCopy("/ginvite " .. name)
     end
-    local watch = CreateFrame("Frame")
-    watch:RegisterEvent("ADDON_ACTION_FORBIDDEN")
-    watch:SetScript("OnEvent", function(_, _, addon, fn)
-        if addon ~= "CysUI" or type(fn) ~= "string" or not fn:find("Invite") then return end
-        if lastAt and GetTime() - lastAt < 120 then
-            CysUI.ginviteCopy = true -- the chat box route was blocked too: use the copy box from now on (this session)
-            ShowCopy(lastText)
-        end
-    end)
 end
 
 do

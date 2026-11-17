@@ -88,8 +88,16 @@ DT.guild = {
             end
         end
         if shown == 0 then tip:AddLine("Nobody else is online.", 0.7, 0.7, 0.7) end
+        if CysUI.Recruit then
+            tip:AddLine(" ")
+            tip:AddLine("Right-click: Guild Recruiter", 0.6, 0.6, 0.6)
+        end
     end,
-    click = function()
+    click = function(button)
+        if button == "RightButton" then
+            if CysUI.Recruit then CysUI.Recruit.Toggle() end
+            return
+        end
         if ToggleGuildFrame then ToggleGuildFrame() elseif ToggleFriendsFrame then ToggleFriendsFrame(3) end
     end,
 }
@@ -314,9 +322,10 @@ local function GetButton(key)
         end
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    b:SetScript("OnClick", function()
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:SetScript("OnClick", function(_, button)
         local dt = DT[key]
-        if dt.click then pcall(dt.click) end
+        if dt.click then pcall(dt.click, button) end
     end)
     buttons[key] = b
     return b
