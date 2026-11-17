@@ -531,6 +531,8 @@ if CysChangelog then
                   "Guild invite: right-click a player who has no guild (unit frames, chat names, party and raid) and pick Guild invite. Only shows if your rank can invite. Switch on the Friends page.",
                   "Ping: the game's ping key now works on Cys's unit frames (player, target, party and the rest).",
                   "Settings window: the scroll bar on the right can be dragged with the mouse, or click along it to jump.",
+                  "Bags: drag a category in the sidebar up or down to change the order. The sections in the window follow the same order.",
+                  "Bags: sub-categories. In the category box (+ New category, or right-click one of yours) use Inside to put it under another category, for example Consumables > Buff Food, then drop items on it.",
               },
               improved = {
                   "Info bar: clicking Friends opens Cys's Friends window (the game's own if that module is off).",

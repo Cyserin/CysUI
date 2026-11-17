@@ -234,6 +234,64 @@ local function InsertBefore(t, beforeKey, row)
     for i, r in ipairs(t) do if r.key == beforeKey then tinsert(t, i, row); return end end
     tinsert(t, row)
 end
+-- Sub-categories: one of your own categories can sit inside another category (c.parent = that category's key),
+-- like the saved sets under Armory Sets. Order: CysBagsDB.order = every sidebar key below All Slots, top to
+-- bottom, written when you drag a row; a sub-category always stays right under its parent.
+local SUB_PARENT, famCounts = {}, {} -- [key] = parent key; [parent key] = items in its sub-categories
+local NO_PARENT = { ALL = true, SLOTS = true, RECENT = true, SETS = true, REAGENT = true, PINNED = true }
+local FIXED_ROW = { ALL = true, SLOTS = true }
+local function Fam(key) return (counts[key] or 0) + (famCounts[key] or 0) end
+local function SideLabel(key)
+    for _, r in ipairs(SIDEBAR) do if r.key == key then return r.label end end
+    return CATEGORY_TITLE[key] or key
+end
+local function ApplyOrder()
+    local saved = CysBagsDB and CysBagsDB.order
+    local byKey, old = {}, {}
+    for i, r in ipairs(SIDEBAR) do byKey[r.key] = r; old[i] = r end
+    for key, p in pairs(SUB_PARENT) do
+        if not byKey[p] or SUB_PARENT[p] then SUB_PARENT[key] = nil; if byKey[key] then byKey[key].sub = nil end end
+    end
+    local out, placed = {}, {}
+    local function Put(r) if r and not placed[r.key] then placed[r.key] = true; out[#out + 1] = r end end
+    for _, r in ipairs(old) do if FIXED_ROW[r.key] then Put(r) end end
+    if type(saved) == "table" then
+        for _, key in ipairs(saved) do Put(byKey[key]) end
+        -- rows the saved order does not know yet (a new category): in front of the row they sat in front of
+        for i = #old, 1, -1 do
+            local r = old[i]
+            if not placed[r.key] then
+                local at, nxt = #out + 1, old[i + 1]
+                if nxt then for j, o in ipairs(out) do if o == nxt then at = j break end end end
+                placed[r.key] = true
+                tinsert(out, at, r)
+            end
+        end
+    else
+        for _, r in ipairs(old) do Put(r) end
+    end
+    -- sub-categories right under their parent, in the order they have among themselves
+    local final = {}
+    for _, r in ipairs(out) do
+        if not SUB_PARENT[r.key] then
+            final[#final + 1] = r
+            for _, c in ipairs(out) do
+                if SUB_PARENT[c.key] == r.key then final[#final + 1] = c end
+            end
+        end
+    end
+    wipe(SIDEBAR)
+    for i, r in ipairs(final) do SIDEBAR[i] = r end
+    local pos = {}
+    for i, r in ipairs(SIDEBAR) do pos[r.key] = i end
+    table.sort(SECTIONS, function(a, b) return (pos[a.key] or 999) < (pos[b.key] or 999) end)
+end
+local function SaveOrder()
+    local o = {}
+    for _, r in ipairs(SIDEBAR) do if not FIXED_ROW[r.key] then o[#o + 1] = r.key end end
+    CysBagsDB.order = o
+end
+
 local function ApplyCustom(c)
     if CATEGORY_TITLE[c.key] then -- already listed: rename / new icon
         for _, r in ipairs(SIDEBAR) do if r.key == c.key then r.label = c.name end end
@@ -246,14 +304,31 @@ local function ApplyCustom(c)
     CATEGORY_TITLE[c.key] = c.name
     SIDEBAR_ICONS[c.key] = c.icon
     lists[c.key] = lists[c.key] or {}
+    -- inside another category? Only a top-level one that exists; otherwise it stands on its own
+    local p = c.parent
+    if p and (p == c.key or NO_PARENT[p] or not CATEGORY_TITLE[p] or SUB_PARENT[p]) then p = nil end
+    SUB_PARENT[c.key] = p
+    for _, r in ipairs(SIDEBAR) do if r.key == c.key then r.sub = p end end
+    ApplyOrder()
 end
 local function RemoveCustom(key)
     for i = #SIDEBAR, 1, -1 do if SIDEBAR[i].key == key then table.remove(SIDEBAR, i) end end
     for i = #SECTIONS, 1, -1 do if SECTIONS[i].key == key then table.remove(SECTIONS, i) end end
     VALID_CATEGORY[key], CATEGORY_TITLE[key], SIDEBAR_ICONS[key] = nil, nil, nil
     lists[key] = nil
+    -- its sub-categories stand on their own again
+    SUB_PARENT[key] = nil
+    for k, p in pairs(SUB_PARENT) do if p == key then SUB_PARENT[k] = nil end end
+    for _, r in ipairs(SIDEBAR) do if r.sub == key then r.sub = nil end end
     local list = CysBagsDB and CysBagsDB.custom
-    if list then for i = #list, 1, -1 do if list[i].key == key then table.remove(list, i) end end end
+    if list then
+        for i = #list, 1, -1 do
+            if list[i].parent == key then list[i].parent = nil end
+            if list[i].key == key then table.remove(list, i) end
+        end
+    end
+    ApplyOrder()
+    if CysBagsDB and CysBagsDB.order then SaveOrder() end
     local o = CysBagsDB and CysBagsDB.overrides
     if o then for id, k in pairs(o) do if k == key then o[id] = nil end end end -- its items go back to sorting themselves
 end
@@ -753,13 +828,16 @@ function CysBags:Collect()
 
     counts.ALL = n
     counts.SLOTS = bagFilter and (GetNumSlots(bagFilter) or 0) or total
+    -- a category's sidebar number includes its sub-categories
+    wipe(famCounts)
+    for key, p in pairs(SUB_PARENT) do famCounts[p] = (famCounts[p] or 0) + (counts[key] or 0) end
     self.used, self.total, self.free = used, total, total - used
 
     -- First open after login: if the remembered category is empty now, start on All Items instead
     if self.restoredFilter then
         self.restoredFilter = nil
         local f = self.filter
-        if f ~= "ALL" and f ~= "SLOTS" and (counts[f] or 0) == 0 then self.filter = "ALL" end
+        if f ~= "ALL" and f ~= "SLOTS" and Fam(f) == 0 then self.filter = "ALL" end
     end
 end
 
@@ -910,11 +988,6 @@ function CysBags:Layout()
         y = ceil(i / COLS) * STEP + extra - SLOT_GAP + SECTION_GAP
     end
 
-    -- 1. When viewing "ALL", show a single consolidated "Armory Sets" category
-    if filter == "ALL" then
-        RenderSection("SETS", CATEGORY_TITLE["SETS"] or "Armory Sets")
-    end
-
     -- 2. When specifically clicking the "SETS" sidebar tab, split them into individual set sub-headers
     if filter == "SETS" then
         local sortedSets = {}
@@ -939,9 +1012,15 @@ function CysBags:Layout()
     end
 
     -- 3. Render standard non-set categories
+    -- (in All Items the Armory Sets show as one block, at the place the sidebar order gives them; a category
+    -- picked in the sidebar also shows its sub-categories, each under "Category: Sub-category")
     for _, sec in ipairs(SECTIONS) do
-        if sec.key ~= "SETS" and (filter == "ALL" or filter == sec.key) then
-            RenderSection(sec.key, sec.title)
+        if sec.key == "SETS" then
+            if filter == "ALL" then RenderSection("SETS", CATEGORY_TITLE["SETS"] or "Armory Sets") end
+        elseif filter == "ALL" or filter == sec.key or SUB_PARENT[sec.key] == filter then
+            local title, p = sec.title, SUB_PARENT[sec.key]
+            if p and filter ~= sec.key then title = SideLabel(p) .. ": " .. title end
+            RenderSection(sec.key, title)
         end
     end
 
@@ -1076,9 +1155,9 @@ function CysBags:UpdateSidebar()
     local usedSets = {}
     local y = 8
     for _, sb in ipairs(sidebarButtons) do
-        local cnt = counts[sb.key] or 0
+        local cnt = Fam(sb.key)
         local keep = sb.key == "ALL" or sb.key == "SLOTS" or sb.key == self.filter or cnt > 0
-            or sb.key == "PINNED" or sb.custom
+            or sb.key == "PINNED" or sb.custom or famCounts[sb.key] ~= nil
             or (sb.key == "SETS" and self.filter and self.filter:find("^SET_"))
         if hideEmpty and not keep then
             sb:Hide()
@@ -1127,7 +1206,18 @@ function CysBags:UpdateSidebar()
         -- Check if this sidebar button is selected OR if it's the Armory Sets tab and a dynamic set is filtered
         local selected = (sb.key == self.filter) or (sb.key == "SETS" and self.filter and self.filter:find("^SET_"))
         
-        local n = counts[sb.key] or 0
+        local n = Fam(sb.key)
+        sb:SetAlpha(self.dragRow == sb and 0.4 or 1)
+        -- a sub-category sits a step to the right with a smaller icon
+        local indent = (sb.sub and not slim) and 14 or 0
+        if sb.icon then
+            sb.icon:ClearAllPoints()
+            sb.icon:SetPoint("LEFT", 10 + indent, 0)
+            sb.icon:SetSize(indent > 0 and 13 or 16, indent > 0 and 13 or 16)
+        end
+        sb.label:ClearAllPoints()
+        sb.label:SetPoint("LEFT", indent > 0 and 43 or 32, 0)
+        sb.label:SetWidth(SIDEBAR_W - (indent > 0 and 43 or 32) - 36)
         sb.accent:SetShown(selected)
         if selected then
             sb.bg:SetColorTexture(unpack(C.selected)); sb.bg:Show()
@@ -2099,6 +2189,13 @@ function CysBags:CreateFrames()
             if CursorHasItem() then CysBags:AssignCursorItem(s.key) else CysBags:SetFilter(s.key) end
         end)
         b:SetScript("OnReceiveDrag", function(s) CysBags:AssignCursorItem(s.key) end)
+        -- drag a row up or down to reorder the categories (a sub-category moves among its own group)
+        b:RegisterForDrag("LeftButton")
+        b:SetScript("OnDragStart", function(s)
+            if CursorHasItem() or FIXED_ROW[s.key] then return end
+            CysBags:StartRowDrag(s)
+        end)
+        b:SetScript("OnDragStop", function() CysBags:StopRowDrag(true) end)
         return b
     end
     local rowByKey = {}
@@ -2110,6 +2207,7 @@ function CysBags:CreateFrames()
             local b = rowByKey[cat.key]
             if not b then b = MakeRow(cat); rowByKey[cat.key] = b end
             b.custom = cat.custom
+            b.sub = cat.sub
             b.label:SetText(cat.label)
             b.icon:SetTexture(SIDEBAR_ICONS[cat.key] or "Interface\\Icons\\INV_Misc_Bag_08")
             sidebarButtons[#sidebarButtons + 1] = b
@@ -2131,11 +2229,94 @@ function CysBags:CreateFrames()
         GameTooltip:SetText("New category", 1, 1, 1)
         GameTooltip:AddLine("Pick a name and an icon, then drop items on it.", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Right-click one of your categories to change or delete it.", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Drag a category up or down to change the order.", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
     nb:SetScript("OnLeave", function(s) s.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
     nb:SetScript("OnClick", function() CysBags:EditCategory(nil) end)
     self.newCatBtn = nb
+
+    -- dragging a sidebar row: a gold line shows where it will land
+    local dropLine = SolidTexture(sidebar, "OVERLAY", C.accent)
+    dropLine:SetHeight(2)
+    dropLine:Hide()
+    local dragWatch = CreateFrame("Frame", nil, sidebar)
+    dragWatch:Hide()
+    -- where the dragged row would land: in front of a row of its own group, or after the group's last row
+    -- returns: the row it lands in front of (nil = at the end), the height of the line on screen, anything to do
+    local function DropTarget(row)
+        local _, cy = GetCursorPosition()
+        cy = cy / sidebar:GetEffectiveScale()
+        local last
+        for _, sb in ipairs(sidebarButtons) do
+            if sb ~= row and sb:IsShown() and not FIXED_ROW[sb.key] and sb.sub == row.sub then
+                local top, bottom = sb:GetTop(), sb:GetBottom()
+                if top and bottom then
+                    if cy > (top + bottom) / 2 then return sb, top, true end
+                    last = sb
+                end
+            end
+        end
+        if not last then return nil, nil, false end
+        local y = last:GetBottom()
+        if not row.sub and nb:IsShown() and nb:GetTop() then y = nb:GetTop() + 2 end
+        return nil, y, true
+    end
+    dragWatch:SetScript("OnUpdate", function()
+        local row = CysBags.dragRow
+        if not row or not IsMouseButtonDown("LeftButton") then CysBags:StopRowDrag(false) return end
+        local _, y, ok = DropTarget(row)
+        local base = sidebar:GetBottom()
+        if ok and y and base then
+            dropLine:ClearAllPoints()
+            dropLine:SetPoint("TOPLEFT", sidebar, "BOTTOMLEFT", row.sub and 20 or 4, y - base + 1)
+            dropLine:SetPoint("TOPRIGHT", sidebar, "BOTTOMRIGHT", -5, y - base + 1)
+            dropLine:Show()
+        else
+            dropLine:Hide()
+        end
+    end)
+    function CysBags:StartRowDrag(row)
+        self.dragRow = row
+        GameTooltip:Hide()
+        dragWatch:Show()
+        self:UpdateSidebar()
+    end
+    function CysBags:StopRowDrag(apply)
+        local row = self.dragRow
+        if not row then return end
+        self.dragRow = nil
+        dragWatch:Hide()
+        dropLine:Hide()
+        if apply then
+            local before, _, ok = DropTarget(row)
+            if ok then
+                -- take the row out (with its sub-categories) and put it back at the new spot
+                local moving, rest = {}, {}
+                for _, r in ipairs(SIDEBAR) do
+                    if r.key == row.key or r.sub == row.key then moving[#moving + 1] = r else rest[#rest + 1] = r end
+                end
+                local at
+                if before then
+                    for i, r in ipairs(rest) do if r.key == before.key then at = i break end end
+                elseif row.sub then
+                    for i, r in ipairs(rest) do if r.sub == row.sub or r.key == row.sub then at = i + 1 end end
+                else
+                    at = #rest + 1
+                end
+                if at then
+                    for i, r in ipairs(moving) do tinsert(rest, at + i - 1, r) end
+                    wipe(SIDEBAR)
+                    for i, r in ipairs(rest) do SIDEBAR[i] = r end
+                    SaveOrder()
+                    ApplyOrder()
+                end
+            end
+        end
+        self:SyncSidebarRows()
+        self.dirty = true
+        if frame:IsShown() then self:Refresh() end
+    end
 
     ---------------------------------------------------------------- main panel
     scroll = CreateFrame("ScrollFrame", nil, frame)
@@ -2421,7 +2602,7 @@ function CysBags:EditCategory(key)
     local ed = self.editor
     if not ed then
         ed = CreateFrame("Frame", "CysBagsCategoryEditor", UIParent)
-        ed:SetSize(290, 268)
+        ed:SetSize(290, 278)
         ed:SetFrameStrata("DIALOG")
         ed:SetToplevel(true)
         ed:EnableMouse(true)
@@ -2480,6 +2661,43 @@ function CysBags:EditCategory(key)
             b:SetScript("OnLeave", function(s) SetBorderColor(s.edges, C.line[1], C.line[2], C.line[3], 1) end)
             return b
         end
+        -- sub-category: pick the category this one sits inside (click steps through them)
+        local inLab = CreateText(ed, 11, C.accent)
+        inLab:SetPoint("TOPLEFT", 12, -203)
+        inLab:SetText("Inside")
+        ed.parentBtn = Btn("", 210)
+        ed.parentBtn:SetPoint("TOPLEFT", 60, -198)
+        ed.parentBtn.text:SetTextColor(1, 1, 1)
+        ed.parentBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        function ed:ParentChoices()
+            local out = { false }
+            for _, p in pairs(SUB_PARENT) do
+                if self.key and p == self.key then return out end -- it has sub-categories itself: stays top-level
+            end
+            for _, r in ipairs(SIDEBAR) do
+                if not NO_PARENT[r.key] and not r.sub and r.key ~= self.key then out[#out + 1] = r.key end
+            end
+            return out
+        end
+        function ed:PaintParent()
+            self.parentBtn.text:SetText(self.parent and SideLabel(self.parent) or "Nothing (its own category)")
+        end
+        ed.parentBtn:SetScript("OnClick", function(_, button)
+            local list = ed:ParentChoices()
+            local at = 1
+            for i, k in ipairs(list) do if k and k == ed.parent then at = i end end
+            at = ((at - 1 + (button == "RightButton" and -1 or 1)) % #list) + 1
+            ed.parent = list[at] or nil
+            ed:PaintParent()
+        end)
+        ed.parentBtn:HookScript("OnEnter", function(s)
+            GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Sub-category", 1, 1, 1)
+            GameTooltip:AddLine("Click to step through the categories this one can sit inside (right-click steps back).", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine("A category that has sub-categories of its own stays where it is.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        ed.parentBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
         ed.save = Btn("Create", 80)
         ed.save:SetPoint("BOTTOMRIGHT", -12, 12)
         ed.cancel = Btn("Cancel", 70)
@@ -2510,7 +2728,9 @@ function CysBags:EditCategory(key)
                 list[#list + 1] = c
             end
             c.name, c.icon = name, ed.icon or CUSTOM_ICONS[1]
+            c.parent = ed.parent or nil
             ApplyCustom(c)
+            if CysBagsDB.order then SaveOrder() end
             ed:Hide()
             CysBags:SyncSidebarRows()
             CysBags.dirty = true
@@ -2532,6 +2752,8 @@ function CysBags:EditCategory(key)
     ed.delete.text:SetText("Delete")
     ed.delete:SetShown(c and true or false)
     ed.box:SetText(c and c.name or "")
+    ed.parent = c and SUB_PARENT[c.key] or nil
+    ed:PaintParent()
     ed:PaintIcons()
     ed:ClearAllPoints()
     if frame and frame:IsShown() then ed:SetPoint("TOPRIGHT", frame, "TOPLEFT", -8, 0) else ed:SetPoint("CENTER") end
@@ -2562,7 +2784,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
         CysBagsDB = CysBagsDB or {}
         CysBagsDB.overrides = CysBagsDB.overrides or {}
         CysBagsDB.custom = CysBagsDB.custom or {}
-        for _, c in ipairs(CysBagsDB.custom) do ApplyCustom(c) end
+        for _, c in ipairs(CysBagsDB.custom) do if not c.parent then ApplyCustom(c) end end
+        for _, c in ipairs(CysBagsDB.custom) do if c.parent then ApplyCustom(c) end end
+        ApplyOrder()
         local lastFilter = CysBagsDB.filter
         if lastFilter == "SLOTS" or VALID_CATEGORY[lastFilter] then
             CysBags.filter = lastFilter
