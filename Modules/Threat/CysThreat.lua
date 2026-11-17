@@ -6,8 +6,9 @@
 --   * Tank: the colors flip - red when you are about to lose it, green when you hold it.
 -- Group threat list: everyone in your group (or raid) on your target's threat list, highest first, in class
 --   colors. Your own line is always shown. Only while you are in a group and fighting.
--- Pull warning: a big note in the middle of the screen (and a sound) when your threat passes a set percent of
+-- Pull warning: a note in the Alerts box (or big red text) and a sound when your threat passes a set percent of
 --   what it takes to pull your target off the tank. Skipped for tanks unless you want it.
+-- Target threat: your threat percent beside the target frame while you are in a group.
 --
 -- WoW Forever: the game hides ("secret") threat numbers on bosses during an encounter. A secret number can
 -- still fill a bar and show as text, so the list keeps working there, but it can't be sorted (it stays in
@@ -37,6 +38,8 @@ local DEFAULTS = {
     warnPct = 90,
     warnSound = true,
     warnTank = false,   -- warn tanks too
+    warnStyle = "alerts", -- alerts (the Alerts box, when that module is on) / big
+    targetPct = true,   -- my threat percent beside the target frame
 }
 
 local function DB()
@@ -120,6 +123,12 @@ local function BuildWarn()
 end
 
 local function ShowWarn(pct)
+    local db = DB()
+    if db.warnStyle == "alerts" and CUI.Alert then
+        local msg = pct and string.format("Pull warning - %d%% threat", floor(pct + 0.5)) or "Pull warning - more threat than the tank"
+        CUI.Alert(msg, "Interface\\Icons\\Ability_Rogue_Feint", 1, 0.3, 0.2, db.warnSound)
+        return
+    end
     BuildWarn()
     if pct then
         warnText:SetFormattedText("Pull warning - %d%% threat", floor(pct + 0.5))
@@ -377,9 +386,56 @@ local function UpdateBar(pct, status, tanking)
     frame:Show()
 end
 
+--------------------------------------------------------------------------------
+-- Threat percent beside the target frame
+--------------------------------------------------------------------------------
+local tpFrame, tpText
+
+local function BuildTargetPct()
+    if tpFrame then return true end
+    local tf = _G.CysUITargetFrame or _G.TargetFrame
+    if not tf then return false end
+    tpFrame = CreateFrame("Frame", "CysThreatTargetPct", tf) -- hides with the target frame
+    tpFrame:SetSize(50, 16)
+    tpFrame:SetPoint("LEFT", tf, "RIGHT", 6, 0)
+    tpText = tpFrame:CreateFontString(nil, "OVERLAY")
+    tpText:SetFont(STANDARD_TEXT_FONT, 13, "OUTLINE")
+    tpText:SetPoint("LEFT")
+    tpFrame:Hide()
+    return true
+end
+
+local function UpdateTargetPct(pct, status, tanking)
+    if not BuildTargetPct() then return end
+    local db = DB()
+    if sample then
+        pct, status, tanking = sample.pct, sample.status, sample.status >= 3
+    elseif not db.targetPct or not IsInGroup() or status == nil or (status == 0 and not (pct and pct > 0)) then
+        tpFrame:Hide() return
+    end
+    if pct then
+        tpText:SetFormattedText("%d%%", floor(max(0, min(100, pct)) + 0.5))
+    else
+        -- bosses: the number is locked, but the game can still print it
+        local _, _, raw = UnitDetailedThreatSituation("player", "target")
+        if Secret(raw) then tpText:SetFormattedText("%.0f%%", raw) else tpFrame:Hide() return end
+    end
+    local r, g, b = 1, 1, 1
+    if IsTank() then
+        if tanking then r, g, b = 0.3, 0.85, 0.35 else r, g, b = 1, 0.35, 0.25 end
+    elseif GetThreatStatusColor then
+        local ok, cr, cg, cb = pcall(GetThreatStatusColor, status)
+        if ok and cr then r, g, b = cr, cg, cb end
+        if status == 0 then r, g, b = 0.85, 0.85, 0.85 end
+    end
+    tpText:SetTextColor(r, g, b)
+    tpFrame:Show()
+end
+
 local function Update()
     local pct, status, tanking = Read()
     UpdateBar(pct, status, tanking)
+    UpdateTargetPct(pct, status, tanking)
     UpdateList()
     if not sample then CheckWarn(pct, status, tanking) end
 end
@@ -473,6 +529,7 @@ CUI:RegisterPage("Threat Bar", function(page)
     Check("Hide the bar when my target has no threat on me", "hideIdle")
     Check("Only show it when I am in a group", "onlyGroup")
     Check("Show the percent number", "showNumber")
+    Check("My threat % beside the target frame (in a group)", "targetPct")
 
     Sub("Group threat list")
     Check("Show the group threat list", "list")
@@ -486,6 +543,9 @@ CUI:RegisterPage("Threat Bar", function(page)
     Check("Warn me before I pull my target off the tank", "warn")
     Check("Play a sound with the warning", "warnSound")
     Check("Warn me while I am the tank too", "warnTank")
+    W.Dropdown(page, 260, { { "alerts", "Show it in: the Alerts box" }, { "big", "Show it in: big red text" } },
+        function() return db.warnStyle end, function(v) db.warnStyle = v end):SetPoint("TOPLEFT", 4, y)
+    y = y - 36
     W.Stepper(page, "Warn at", function() return db.warnPct end, function(v) db.warnPct = v end, 50, 100, 5, "%")
         :SetPoint("TOPLEFT", 4, y)
     y = y - 40
@@ -498,6 +558,8 @@ CUI:RegisterPage("Threat Bar", function(page)
         "Damage dealer: green is safe, yellow is getting close, red means the mob is on you. Tank: green means you hold it, red means you are about to lose it.",
         "The percent is how close you are to pulling: 100% means the mob comes for you (the tank shows 100%). Melee pull at 110% of the tank's threat, ranged at 130%; the game works that out for you.",
         "The group list shows only in a group while someone has threat on your target. Your own line is always on it, marked in gold.",
+        "The pull warning uses the Alerts box when the Alerts module is on; otherwise it shows as big red text you can move in /cui layout.",
+        "The percent beside the target frame is white when safe, then yellow, orange and red as you get close to pulling. For tanks it is green while you hold the mob.",
         "WoW Forever hides threat numbers on bosses during a fight. The list still shows everyone's bar but in group order (tanks first), and the pull warning fires when the game says you have more threat than the tank.",
         "Some Classic clients only report a four-step status instead of a percent. Then the bar shows Safe, Gaining, Close or Tanking.",
     })

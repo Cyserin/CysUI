@@ -3,8 +3,9 @@
 --
 -- A quest list of our own in place of the game's tracker: a gold header per zone (the zone you are in comes
 -- first), each with its own collapse, and a "this zone only" switch so the list stays short. Objective
--- counts sit on the right and are colored by progress; a sound plays when a quest's objectives are done.
--- Quest items get a button beside their quest. It can fade in combat or while the mouse is away, and hide
+-- counts sit on the right and are colored by progress; a sound plays when a quest's objectives are done
+-- (and a softer one per finished objective). Grey quests can be hidden, finished objectives can be told to
+-- your party, and right-click offers a Wowhead link. Quest items get a button beside their quest. It can fade in combat or while the mouse is away, and hide
 -- in raids.
 --
 -- It reads the game's own watch list, so tracking a quest anywhere (quest log, map) shows it here, and
@@ -16,7 +17,7 @@
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "questlist", name = "Cys's Quest Tracker", foreverOnly = true, defaultOff = true,
-    desc = "WoW Forever: your tracked quests grouped by zone (the zone you are in first), with a This zone only switch, counts colored by progress, a sound when a quest is done, quest item buttons, and fading. Replaces the game's tracker while on.",
+    desc = "WoW Forever: your tracked quests grouped by zone (the zone you are in first), with a This zone only switch, counts colored by progress, sounds when an objective or quest is done, hide grey quests, party progress notes, quest item buttons, and fading. Replaces the game's tracker while on.",
     open = function() CysUI:OpenConfig("Quest Tracker") end,
     body = function()
 local CUI = CysUI
@@ -29,7 +30,8 @@ CysUIDB.questlist = CysUIDB.questlist or {}
 local db = CysUIDB.questlist
 local DEFAULTS = { width = 250, maxHeight = 480, zoneOnly = false, group = true, alsoZone = false, level = true,
     sound = true, hideDone = false, fade = "none", fadePct = 35, hideRaid = false, hideGame = true,
-    titleSize = 12, lineSize = 11, items = true, bg = true, allCollapsed = false }
+    titleSize = 12, lineSize = 11, items = true, bg = true, allCollapsed = false,
+    soundObj = true, hideGrey = false, announce = false }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 db.collapsed = db.collapsed or {} -- [zone name] = true
 db.zones = db.zones or {}         -- [questID] = zone name, remembered for quests under collapsed log headers
@@ -337,6 +339,29 @@ local function TitleColor(level, done, watched)
     return r, g, b
 end
 
+-- grey = too low to give much XP: the game's own check first, else the level gap
+local function IsGrey(q)
+    if C_QuestLog.IsQuestTrivial then
+        local ok, t = pcall(C_QuestLog.IsQuestTrivial, q.id)
+        if ok and not Secret(t) and type(t) == "boolean" then return t end
+    end
+    if not (q.level and q.level > 0) then return false end
+    local range = GetQuestGreenRange and GetQuestGreenRange() or 8
+    return UnitLevel("player") - q.level > range
+end
+
+-- a line in party chat (never in a raid, never while the game blocks addon chat)
+local function SayParty(msg)
+    if not IsInGroup() or IsInRaid() then return end
+    local RA = C_RestrictedActions
+    if RA and RA.IsAddOnRestrictionActive and Enum and Enum.AddOnRestrictionType and Enum.AddOnRestrictionType.Chat then
+        local ok, on = pcall(RA.IsAddOnRestrictionActive, Enum.AddOnRestrictionType.Chat)
+        if ok and not Secret(on) and on then return end
+    end
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+    if send then pcall(send, msg, "PARTY") end
+end
+
 --------------------------------------------------------------------------------
 -- Clicks
 --------------------------------------------------------------------------------
@@ -387,6 +412,9 @@ OnQuestClick = function(row, button)
         local okP, push = pcall(C_QuestLog.IsPushableQuest, id)
         if okP and push and IsInGroup() then
             root:CreateButton("Share with party", function() Share(id) end)
+        end
+        if CUI.ShowCopyBox then
+            root:CreateButton("Copy Wowhead link", function() CUI:ShowCopyBox("https://www.wowhead.com/classic/quest=" .. id) end)
         end
     end)
 end
@@ -456,6 +484,7 @@ local function Collect()
         local inHere = here[Lower(q.zone)] or false
         if isWatched then total = total + 1 end
         local want = isWatched or (db.alsoZone and inHere)
+        if want and db.hideGrey and IsGrey(q) and C_SuperTrack.GetSuperTrackedQuestID() ~= q.id then want = false end
         if want and db.zoneOnly and not inHere then
             want = false
             elsewhere = elsewhere + 1
@@ -481,11 +510,27 @@ local function Collect()
     return groups, total, elsewhere, #quests
 end
 
+local objWas = {} -- [questID] = { [objective] = count }, to spot an objective that just finished
+
 local function Sounds(groups)
     for _, g in ipairs(groups) do
         for _, q in ipairs(g.quests) do
-            if q.done and not wasDone[q.id] and primed and db.sound then
-                PlaySound(SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE or 878)
+            local prev, now, objDone = objWas[q.id], {}, false
+            for i, o in ipairs(q.objs) do
+                local have = type(o.numFulfilled) == "number" and o.numFulfilled or (o.finished and 1 or 0)
+                now[i] = have
+                if primed and prev and prev[i] and have > prev[i] and o.finished then
+                    objDone = true
+                    if db.announce and not q.done and o.text then SayParty(o.text .. " (" .. (q.title or "") .. ")") end
+                end
+            end
+            objWas[q.id] = now
+            if objDone and not q.done and primed and db.soundObj then
+                PlaySound(SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_SELECT or 877)
+            end
+            if q.done and not wasDone[q.id] and primed then
+                if db.sound then PlaySound(SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE or 878) end
+                if db.announce and prev then SayParty((q.title or "Quest") .. " - ready to turn in") end
             end
             wasDone[q.id] = q.done or nil
         end
@@ -919,6 +964,9 @@ CUI:RegisterPage("Quest Tracker", function(page)
     Check("Show the quest level before the name", "level")
     Check("Hide objectives that are done", "hideDone")
     Check("Play a sound when a quest is ready to turn in", "sound")
+    Check("Play a softer sound when an objective is done", "soundObj")
+    Check("Hide grey quests (too low to give much XP)", "hideGrey")
+    Check("Tell my party when an objective or quest is done", "announce")
     Check("Quest item buttons beside their quest", "items")
     Check("Dark background with the border color", "bg")
     Check("Hide in raids", "hideRaid")
@@ -933,7 +981,9 @@ CUI:RegisterPage("Quest Tracker", function(page)
     y = y - 6
 
     local note = W.Notes(page, 4, y, width, "", {
-        { "Click", "a quest to open it in the quest log; Shift-click stops tracking it; right-click to focus, share or untrack." },
+        { "Click", "a quest to open it in the quest log; Shift-click stops tracking it; right-click to focus, share, untrack or copy its Wowhead link." },
+        { "Grey quests", "stay listed while you focus one." },
+        { "Party notes", "go to party chat only (never a raid), when an objective finishes or the quest is ready." },
         { "Zone headers", "collapse when clicked; click the QUESTS header to fold the whole list." },
         { "In combat", "numbers keep updating; a quest added or removed mid-fight shows when the fight ends." },
         "It reads the game's own tracked quests, so tracking from the quest log or map shows up here.",

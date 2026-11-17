@@ -30,7 +30,7 @@ local SPOTLIGHT = {
           where = "Damage Meter page." },
         { title = "Group threat + pull warning", page = "Threat Bar", module = "threat",
           icon = "Interface\\Icons\\Ability_Warrior_Challange",
-          text = "Everyone's threat on your target in one small list, and a warning before you pull the mob off the tank.",
+          text = "Everyone's threat on your target in one small list, your threat percent beside the target frame, and a warning before you pull the mob off the tank.",
           where = "Threat Bar page (Combat Helpers)." },
     },
 }
