@@ -27,7 +27,7 @@ local T = W.T
 
 CysUIDB.ranks = CysUIDB.ranks or {}
 local db = CysUIDB.ranks
-if db.open == nil then db.open = true end
+if db.auto == nil then db.auto = false end -- open the window by itself with the spellbook (off: just the button)
 db.tab = db.tab or "train"
 if db.tab == "weapons" then db.tab = "where" end -- Weapons is part of Trainers now
 db.trainer = db.trainer or {}
@@ -918,7 +918,7 @@ local function Attach()
     local book = host and host.SpellBookFrame
     if not (book and book.HookScript) then return end
     hooked = true
-    book:HookScript("OnShow", function() bookUp = true; Sync() end)
+    book:HookScript("OnShow", function() bookUp = true; db.open = db.auto and true or false; Sync() end)
     book:HookScript("OnHide", function() bookUp = false; Sync() end)
     local ok, vis = pcall(function() return book:IsVisible() and true or false end)
     bookUp = ok and vis or false
@@ -998,7 +998,7 @@ SlashCmdList["CYSRANKS"] = function(msg)
     end
     db.open = not db.open
     Sync()
-    CUI:Print("Spell Ranks " .. (db.open and "on: it opens beside the spellbook." or "off. The Spell ranks button beside the spellbook brings it back."))
+    CUI:Print("Spell Ranks " .. (db.open and "window open (shows with the spellbook)." or "window closed. The Spell ranks button beside the spellbook opens it."))
 end
 
 --------------------------------------------------------------------------------
@@ -1015,14 +1015,15 @@ CUI:RegisterPage("Spell Ranks", function(page)
     intro:SetSpacing(3)
     intro:SetText("A window beside the spellbook: what you can train now and what it costs, what comes at later levels, which spells are behind their best rank, and your weapon skills.")
 
-    local c = W.Checkbox(page, "Show the Spell Ranks window beside the spellbook",
-        function() return db.open end, function(on) db.open = on; Sync() end)
+    local c = W.Checkbox(page, "Open the window by itself with the spellbook",
+        function() return db.auto end, function(on) db.auto = on end)
     c:SetPoint("TOPLEFT", 4, -92)
 
     W.Notes(page, 4, -130, width, "", {
         "Levels and prices are read from your class trainer. Open it once and the whole list fills in; it is read again on every visit.",
         "Point at a spell for every rank, the level it comes at and its price.",
         "The Trainers tab lists the cities that train your class, where in the city, and who. Weapon masters are at the bottom of the Weapons tab.",
+        "Off by default: the spellbook shows a Spell ranks button that opens the window for that visit.",
         { "/cuiranks", "open or close the window; /cuiranks check prints what was read" },
     })
 end)

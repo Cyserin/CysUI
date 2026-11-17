@@ -25,7 +25,8 @@ CysUIDB.cooldowns = CysUIDB.cooldowns or {}
 local db = CysUIDB.cooldowns
 local DEFAULTS = { look = true, bars = true, timerBig = 18, timerSmall = 12, stacks = 12, gap = 2, shade = true,
     own = false, grey = true, gcd = false, tips = false, carry = false, pack = true, range = true,
-    stance = false, stanceAll = false, stanceSize = 32, auraTime = true, auraSize = 12, auraStyle = "auto" }
+    stance = false, stanceAll = false, stanceSize = 32, auraTime = true, auraSize = 12, auraStyle = "auto",
+    extraAura = true }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
@@ -435,6 +436,14 @@ end
 -- effects: helpful ones on you, harmful ones on your target. We never read a value from it.
 --------------------------------------------------------------------------------
 local auraHosts = {} -- [base spell] = { frame, size, bar, containers }
+-- Classic ranks are separate spells: the effect on a unit carries the rank you cast, which may not be the one the
+-- game lists (Demoralizing Shout rank 1 vs the rank you know). Add your highest known rank of the same name.
+local function AddRanks(ids, id)
+    local ok, name = pcall(C_Spell.GetSpellName, id)
+    if not ok or type(name) ~= "string" or Secret(name) then return end
+    local ok2, info = pcall(C_Spell.GetSpellInfo, name)
+    if ok2 and type(info) == "table" and type(info.spellID) == "number" and not Secret(info.spellID) then ids[info.spellID] = true end
+end
 local function AuraIDs(info, base, spell)
     local ids, n = {}, 0
     if type(info.linkedSpellIDs) == "table" then
@@ -442,9 +451,10 @@ local function AuraIDs(info, base, spell)
             if type(id) == "number" and not Secret(id) then ids[id] = true; n = n + 1 end
         end
     end
-    if n == 0 and info.hasAura == false and info.selfAura == false then return nil end -- the game says: no effect to time
+    -- (the game's "no effect" flag is not trusted: Demoralizing Shout carries it. An empty slot costs nothing.)
     ids[base] = true
     ids[spell] = true
+    AddRanks(ids, base)
     local units
     if info.selfAura == true then units = { "player" } elseif info.selfAura == false then units = { "target" } else units = { "player", "target" } end
     return { ids = ids, units = units }
@@ -660,7 +670,8 @@ local function Compose()
                 local ok, c = pcall(C_Spell.GetSpellCharges, id)
                 if ok and type(c) == "table" and type(c.maxCharges) == "number" and not Secret(c.maxCharges) and c.maxCharges > 1 then charges = true end
             end
-            local e = { base = id, spell = id, charges = charges, known = known, extra = true }
+            local e = { base = id, spell = id, charges = charges, known = known, extra = true,
+                aura = db.extraAura and AuraIDs({}, id, id) or nil } -- your own buff or your debuff on the target
             universe[id] = e
             if known then avail[id] = e end
         end
@@ -1787,6 +1798,9 @@ CUI:RegisterPage("Cooldown Manager", function(page)
     OwnCheck("Show the global cooldown sweep", "gcd")
     OwnCheck("Tooltips on hover", "tips")
     OwnCheck("Buff and debuff time on the icon (gold number and line)", "auraTime")
+    W.Checkbox(body, "Also on spells you added by ID", function() return db.extraAura end,
+        function(on) db.extraAura = on; Compose(); LayoutOwn() end):SetPoint("TOPLEFT", 24, y)
+    y = y - 26
     local styleLab = W.Text(body, 12, T.text)
     styleLab:SetPoint("TOPLEFT", 24, y - 4)
     styleLab:SetText("Where the time goes")

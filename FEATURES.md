@@ -20,6 +20,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
 - **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). A second key does the same for world markers: pick one, then click the ground where it goes (Clear all removes them). Works in combat.
 - **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too. Saved per character.
+- **Click-Casting** (WoW Forever): mouse button + Shift / Ctrl / Alt on Cys's unit frames casts a spell or macro on that unit (or targets it). Highest or exact rank, friendly units only, cast on press or release. Opens in a panel beside the spellbook (or /cuiclick). Saved per character.
 - **Your Characters**: a minimap button (or `/cuichars`) opens a window with three tabs: rested XP of all your characters (worked out while they are logged out) and when each will be full; gold on every character with the total; and the currencies each character holds.
 - **Cys's UI Users**: other players in your group or guild who run Cys's UI get a Cys's UI line (with their version) on their tooltip and a small Cys mark on your target, focus and party frames. Hidden addon messages, version only, never in combat; optional chat note when one joins your group. `/cuiusers`.
 - **UI scale**: pixel-perfect scale for your resolution.

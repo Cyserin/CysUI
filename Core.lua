@@ -523,9 +523,21 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.22",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.23",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.23", date = "2026-11-17",
+              added = {
+                  "Click-Casting: click Cys's unit frames (player, target, focus, pet, party, raid) with a mouse button plus Shift, Ctrl or Alt to cast a spell or macro on that unit. Spells cast your highest rank, or the exact rank you pick. Bindings work on friendly units; on an enemy frame clicks target as usual. Target Unit Frame and Open Context Menu are listed too, so you can move them to another click and use plain left or right for a heal. Open it with the Click-casting button beside the spellbook (drag spells straight in), on the Click-Casting page, or with /cuiclick.",
+                  "Cooldown Manager: spells you added by ID show the gold time line while your buff or debuff from them runs. Switch on the Cooldown Manager page.",
+              },
+              improved = {
+                  "Spell Ranks: starts closed when you open the spellbook, with just its button. Click it to open the window for that visit, or switch on Open the window by itself on the Spell Ranks page.",
+              },
+              fixed = {
+                  "Cooldown Manager: Demoralizing Shout (and other spells whose effect has a different rank than the one the game lists) now shows its debuff time on the icon.",
+              },
+            },
             { version = "0.58.22", date = "2026-11-16",
               added = {
                   "Guild invite: right-click a player who has no guild (unit frames, chat names, party and raid) and pick Guild invite. Only shows if your rank can invite. Switch on the Friends page.",
