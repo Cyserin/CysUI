@@ -11,8 +11,8 @@ local T = W.T
 local format = string.format
 local max = math.max
 
-local WIDTH, HEIGHT = 700, 560
-local SIDEBAR_W, HEADER_H, FOOTER_H, PAD = 170, 34, 40, 16
+local WIDTH, HEIGHT = 760, 600
+local SIDEBAR_W, HEADER_H, FOOTER_H, PAD = 180, 60, 36, 16
 local CONTENT_W = WIDTH - SIDEBAR_W - PAD * 2 - 2
 local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a page
 
@@ -135,7 +135,7 @@ end
 CUI:RegisterPage("General", function(page)
     local title = W.Text(page, 18, T.accent)
     title:SetPoint("TOPLEFT", 0, -4)
-    title:SetText("Cys's UI")
+    title:SetText("Welcome, " .. (UnitName("player") or "friend"))
     local ver = W.Text(page, 11, T.desc)
     ver:SetPoint("LEFT", title, "RIGHT", 8, -2)
     ver:SetText("v" .. CUI:GetVersion("CysUI")
@@ -485,7 +485,7 @@ local function SelectPage(index)
     for i, b in ipairs(pageButtons) do
         local selected = (i == index)
         b.accent:SetShown(selected)
-        if selected then b.bg:Show() else b.bg:Hide() end
+        if selected then b.bg:Show(); if b.hover then b.hover:Hide() end else b.bg:Hide() end
         local c = selected and T.accent or (b.baseColor or T.text)
         b.label:SetTextColor(c[1], c[2], c[3])
         if selected and b.newTag then
@@ -495,6 +495,12 @@ local function SelectPage(index)
         end
     end
     local def = CUI.pages[index]
+    if window.where then
+        local b = pageButtons[index]
+        local name = LABELS[def.title] or def.title
+        local sec = b and b.section
+        window.where:SetText(sec and ("|cFF9A9A9A" .. sec .. "  >|r  |cFFFFD100" .. name .. "|r") or ("|cFFFFD100" .. name .. "|r"))
+    end
     if def.onShow then def.onShow(page) end
     UpdateFooter()
 end
@@ -521,17 +527,45 @@ local function CreateWindow()
     W.Texture(header, "BACKGROUND", T.header):SetAllPoints()
     local hline = W.Texture(header, "BORDER", T.border)
     hline:SetPoint("BOTTOMLEFT"); hline:SetPoint("BOTTOMRIGHT"); hline:SetHeight(1)
+    -- a brighter gold line under the crest that fades out toward the right
+    local hglow = header:CreateTexture(nil, "BORDER", nil, 2)
+    hglow:SetTexture("Interface\\Buttons\\WHITE8X8")
+    hglow:SetPoint("BOTTOMLEFT", 0, 0); hglow:SetHeight(2); hglow:SetWidth(360)
+    local gl = T.glow
+    if not (CreateColor and pcall(hglow.SetGradient, hglow, "HORIZONTAL",
+        CreateColor(gl[1], gl[2], gl[3], 0.9), CreateColor(gl[1], gl[2], gl[3], 0))) then
+        hglow:Hide()
+    end
     header:EnableMouse(true)
     header:RegisterForDrag("LeftButton")
     header:SetScript("OnDragStart", function() f:StartMoving() end)
     header:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
 
-    local title = W.Text(header, 13, T.accent)
-    title:SetPoint("LEFT", 12, 0)
+    -- brand banner: a soft gold wash from the left, the round Cys crest, a big title and the client / version line
+    local wash = header:CreateTexture(nil, "BACKGROUND", nil, 1)
+    wash:SetTexture("Interface\\Buttons\\WHITE8X8")
+    wash:SetPoint("TOPLEFT"); wash:SetPoint("BOTTOMLEFT"); wash:SetWidth(420)
+    local br = T.brand
+    if not (CreateColor and pcall(wash.SetGradient, wash, "HORIZONTAL",
+        CreateColor(br[1], br[2], br[3], 0.16), CreateColor(br[1], br[2], br[3], 0))) then
+        wash:SetColorTexture(br[1], br[2], br[3], 0.05)
+    end
+    local crest = header:CreateTexture(nil, "ARTWORK")
+    crest:SetTexture("Interface\\AddOns\\CysUI\\Media\\CysLogo")
+    crest:SetSize(50, 50)
+    crest:SetPoint("LEFT", 10, 0)
+    local title = header:CreateFontString(nil, "OVERLAY")
+    if not title:SetFont("Fonts\\MORPHEUS.TTF", 26, "") then title:SetFont(STANDARD_TEXT_FONT, 22, "OUTLINE") end
+    title:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+    title:SetShadowColor(0, 0, 0, 1)
+    title:SetShadowOffset(1, -1)
+    title:SetPoint("TOPLEFT", crest, "TOPRIGHT", 10, -4)
     title:SetText("Cys's UI")
-    local sub = W.Text(header, 11, T.desc)
-    sub:SetPoint("LEFT", title, "RIGHT", 10, 0)
-    sub:SetText("Settings")
+    local sub = W.Text(header, 10, T.brand)
+    sub:SetFont(STANDARD_TEXT_FONT, 10, "")
+    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 1, -3)
+    local flavor = tostring(CUI.flavor or ""):upper():gsub("(%S)", "%1 "):gsub(" +$", "")
+    sub:SetText(flavor .. "    |cFF9A9A9Av" .. CUI:GetVersion("CysUI") .. "|r")
 
     local close = CreateFrame("Button", nil, header)
     close:SetSize(24, 24)
@@ -563,9 +597,9 @@ local function CreateWindow()
     W.Texture(footer, "BACKGROUND", T.header):SetAllPoints()
     local fline = W.Texture(footer, "BORDER", T.border)
     fline:SetPoint("TOPLEFT"); fline:SetPoint("TOPRIGHT"); fline:SetHeight(1)
-    local info = W.Text(footer, 11, T.desc)
-    info:SetPoint("LEFT", 12, 0)
-    info:SetText("Cys's UI v" .. CUI:GetVersion("CysUI"))
+    -- where you are: "Interface  >  Chat" (set by SelectPage)
+    f.where = W.Text(footer, 11, T.desc)
+    f.where:SetPoint("LEFT", 12, 0)
     f.hint = W.Text(footer, 11, T.accent, "RIGHT")
     f.hint:SetPoint("RIGHT", -120, 0)
     f.reload = W.Button(footer, 100, 24, "Reload UI")
@@ -703,6 +737,12 @@ local function CreateWindow()
                 b.newTag:SetPoint("LEFT", b.label, "RIGHT", 6, 0)
                 b.newTag:SetText("NEW")
             end
+            b.hover = W.Texture(b, "BACKGROUND", T.hover, 1)
+            b.hover:SetAllPoints()
+            b.hover:Hide()
+            b:SetScript("OnEnter", function(s) if current ~= i then s.hover:Show() end end)
+            b:SetScript("OnLeave", function(s) s.hover:Hide() end)
+            b.section = section.level == 2 and ("Class  >  " .. section.name) or section.name
             b:SetScript("OnClick", function()
                 SelectPage(i)
                 if f.searchHits and f.ShowHit then f.ShowHit(i) end
@@ -754,7 +794,7 @@ local function CreateWindow()
                         y = y - 24
                     end
                 end
-                h.sign:SetText(h.empty and "" or (fold[e.key] and "[+]" or "[-]"))
+                h.sign:SetText(h.empty and "" or (fold[e.key] and "+" or "-"))
             else
                 local hide = (e.level == 1 and e.hasHead and topFolded) or (e.level == 2 and (topFolded or subFolded))
                 local b = e.page

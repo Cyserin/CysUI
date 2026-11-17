@@ -529,6 +529,7 @@ if CysChangelog then
             { version = "0.58.24", date = "2026-11-17",
               improved = {
                   "Guild Recruiter: right-click Guild on the info bar to open its window (or type /cuirecruit).",
+                  "Settings window: a bigger, cleaner look with the Cys crest and a large title banner, a breadcrumb at the bottom showing where you are, and hover highlights in the page list.",
               },
               fixed = {
                   "Guild invites: the game lets only you send them, never an addon. Invite in the Guild Recruiter and Guild invite in the right-click menu now open a small box with /ginvite and the name, ready to copy: Ctrl+C, then Enter, Ctrl+V, Enter.",
