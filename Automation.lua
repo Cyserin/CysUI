@@ -44,6 +44,7 @@ local DEFAULTS = {
     autoResurrect = false,   -- accept a resurrection, unless the caster is still in a fight
     skipCinematics = false,  -- skip in-game cinematics (hold Shift to watch)
     hideErrors = false,      -- hide the red error spam ("Not enough rage", "Out of range"...)
+    gearTarget = true,       -- open the character window when a sharpening stone / armor kit / enchant wants a piece of your gear
 }
 
 local function DB()
@@ -593,6 +594,97 @@ function CUI.ApplyErrorFilter()
 end
 
 --------------------------------------------------------------------------------
+-- Using a sharpening stone, weightstone, armor kit or an enchant on your own gear: a small box at the mouse
+-- lists the pieces you are wearing that it can go on; click one to use it there. The box goes away when the
+-- item has been used or cancelled. Out of combat only. (Opening the game's character window from addon code
+-- is not an option on WoW Forever: it then runs tainted and errors on the player's locked health.)
+local gearActive, gearQueued = false, false
+local gearPick, gearButtons = nil, {}
+local function GearSlots()
+    local out = {}
+    if not (C_Spell and C_Spell.TargetSpellIsEnchanting and C_Item and C_Item.DoesItemMatchTargetEnchantingSpell and ItemLocation) then return out end
+    local ok, yes = pcall(function() return C_Spell.TargetSpellIsEnchanting() == true end)
+    if not (ok and yes) then return out end
+    for slot = 1, 19 do
+        if GetInventoryItemID("player", slot) then
+            local ok2, match = pcall(function()
+                return C_Item.DoesItemMatchTargetEnchantingSpell(ItemLocation:CreateFromEquipmentSlot(slot)) == true
+            end)
+            if ok2 and match then out[#out + 1] = slot end
+        end
+    end
+    return out
+end
+local function ShowGearPick(slots)
+    if InCombatLockdown() then return end
+    if not gearPick then
+        gearPick = CreateFrame("Frame", "CysGearPickFrame", UIParent)
+        gearPick:SetFrameStrata("DIALOG")
+        gearPick:SetClampedToScreen(true)
+        W.Texture(gearPick, "BACKGROUND", T.bg):SetAllPoints()
+        W.Border(gearPick, 1, T.border, "BORDER")
+        gearPick.title = W.Text(gearPick, 11, T.accent)
+        gearPick.title:SetPoint("TOPLEFT", 8, -6)
+        gearPick.title:SetText("Use it on")
+        -- its buttons are secure: put it away before a fight locks it on screen
+        gearPick:RegisterEvent("PLAYER_REGEN_DISABLED")
+        gearPick:SetScript("OnEvent", function(self) self:Hide(); gearActive = false end)
+    end
+    for _, b in pairs(gearButtons) do b:Hide() end
+    local size, gap = 36, 4
+    for i, slot in ipairs(slots) do
+        local b = gearButtons[slot]
+        if not b then
+            b = CreateFrame("Button", "CysGearPickSlot" .. slot, gearPick, "SecureActionButtonTemplate")
+            b:SetSize(size, size)
+            b:RegisterForClicks("AnyUp")
+            b:SetAttribute("useOnKeyDown", false)
+            b:SetAttribute("type", "macro")
+            b:SetAttribute("macrotext", "/use " .. slot) -- with an item waiting for its target, this uses it on that slot
+            b.tex = b:CreateTexture(nil, "ARTWORK")
+            b.tex:SetAllPoints()
+            b.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            b.edges = W.Border(b, 1, T.line, "OVERLAY")
+            b:SetScript("OnEnter", function(self)
+                W.SetBorder(self.edges, T.border)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetInventoryItem("player", slot)
+                GameTooltip:Show()
+            end)
+            b:SetScript("OnLeave", function(self) W.SetBorder(self.edges, T.line); GameTooltip:Hide() end)
+            gearButtons[slot] = b
+        end
+        b.tex:SetTexture(GetInventoryItemTexture("player", slot))
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", 8 + (i - 1) * (size + gap), -22)
+        b:Show()
+    end
+    gearPick:SetSize(math.max(16 + #slots * (size + gap) - gap, 90), 22 + size + 8)
+    local cx, cy = GetCursorPosition()
+    local s = UIParent:GetEffectiveScale()
+    gearPick:ClearAllPoints()
+    gearPick:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / s + 18, cy / s + 18)
+    gearPick:Show()
+end
+local function OnGearTarget()
+    gearQueued = false
+    local slots = DB().gearTarget and GearSlots() or {}
+    local want = #slots > 0
+    if want == gearActive then return end
+    gearActive = want
+    if InCombatLockdown() then return end
+    if want then
+        ShowGearPick(slots)
+    elseif gearPick then
+        gearPick:Hide()
+    end
+end
+local function QueueGearTarget()
+    if gearQueued then return end
+    gearQueued = true
+    C_Timer.After(0, function() pcall(OnGearTarget); gearQueued = false end) -- after the game's own handling
+end
+
 local frame
 local function Enable()
     if frame then return end
@@ -605,7 +697,8 @@ local function Enable()
                          "MERCHANT_SHOW", "MERCHANT_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "MAIL_SHOW",
                          "MAIL_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "PARTY_INVITE_REQUEST",
                          "BAG_UPDATE_DELAYED", "LOOT_CLOSED", "QUEST_LOG_UPDATE", "TRAINER_SHOW", "TRAINER_CLOSED",
-                         "RESURRECT_REQUEST", "CINEMATIC_START" }) do
+                         "RESURRECT_REQUEST", "CINEMATIC_START", "UPDATE_SPELL_TARGET_ITEM_CONTEXT",
+                         "CURRENT_SPELL_CAST_CHANGED" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
     if StaticPopup_Show then
@@ -617,7 +710,9 @@ local function Enable()
     end
     pcall(CUI.ApplyErrorFilter)
     frame:SetScript("OnEvent", function(_, event, arg1)
-        if event == "RESURRECT_REQUEST" then
+        if event == "UPDATE_SPELL_TARGET_ITEM_CONTEXT" or event == "CURRENT_SPELL_CAST_CHANGED" then
+            QueueGearTarget()
+        elseif event == "RESURRECT_REQUEST" then
             pcall(OnResurrect, arg1)
         elseif event == "CINEMATIC_START" then
             OnCinematic()
@@ -722,6 +817,9 @@ CUI:RegisterPage("Automation", function(page)
     y = y - 28
     Check("Accept resurrections (not while the caster is still fighting)", "autoResurrect")
     Check("Skip cinematics (hold Shift when one starts to watch it)", "skipCinematics")
+    if CysUICompat and CysUICompat.isForever then
+        Check("Gear picker for weapon stones, armor kits and enchants", "gearTarget")
+    end
     Check("Hide red error messages (bag full and similar still show)", "hideErrors"):HookScript("OnClick", function() pcall(CUI.ApplyErrorFilter) end)
 
     local chLabel = W.Text(page, 12, T.accent)
@@ -742,6 +840,7 @@ CUI:RegisterPage("Automation", function(page)
         { "Fast loot", "follows the game's auto-loot setting and the auto-loot key." },
         { "Resurrections", "are accepted a moment after the offer, unless the caster is still in combat; then the normal pop-up stays." },
         { "Bags height", "with grow to fit on, the bags grow with your items up to the tallest height, then scroll. Dragging the corner grip sets your own height instead." },
+        { "Gear picker", "using a sharpening stone, weightstone, armor kit or enchant shows a small box at the mouse with the pieces you are wearing that it fits; click one. Not in combat." },
         { "Red errors", "hides messages like Not enough rage and Out of range. Bags full, quest log full and not enough money still show." },
         { "Level check", "works while your group is listed in Looking For Group (using the listed dungeon) and inside the dungeon. It shows when someone joins; close it with the X and move it in layout mode." },
     })

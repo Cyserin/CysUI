@@ -95,6 +95,7 @@ Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, sk
 
 ## Added in 0.57.0
 - **Consumables**: self-updating Food, Drink, HP Potion, MP Potion, Bandage and Healthstone macros (conjured first), plus a per-character restock list bought at vendors, the best food and water for your level kept at so many stacks, and a gold floor.
+- **Gear picker** (WoW Forever, on by default): using a sharpening stone, weightstone, armor kit or enchant shows a small box at the mouse with the pieces you are wearing that it fits; click one to use it there. Any spell can go on your Cooldown bars by its ID.
 - **Automation** (all off until ticked): fast loot, auto quests (Shift to pause), auto release in battlegrounds, Ding message, decline duels and guild charters, combat cursor ring, party quest-complete announce, group level check (LFG listing and inside dungeons), accept resurrections (not while the caster fights), skip cinematics (Shift to watch), hide red error spam.
 - **Durability**: a small movable warning box in place of Blizzard's armor figure.
 - **Minimap tracking menu**: right-click the minimap.

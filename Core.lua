@@ -532,6 +532,8 @@ if CysChangelog then
                   "Ping: the game's ping key now works on Cys's unit frames (player, target, party and the rest).",
                   "Settings window: the scroll bar on the right can be dragged with the mouse, or click along it to jump.",
                   "Bags: drag a category in the sidebar up or down to change the order. The sections in the window follow the same order.",
+                  "Cooldown Manager: add any spell to your bars by its ID (racials and other spells the game's list leaves out). Click + on a bar and use the Spell ID box at the bottom. Right-click it in that list to forget it.",
+                  "Gear picker: using a sharpening stone, weightstone, armor kit or enchant shows a small box at the mouse with the pieces you are wearing that it fits. Click one to use it there. Switch on the Automation page.",
                   "Bags: sub-categories. In the category box (+ New category, or right-click one of yours) use Inside to put it under another category, for example Consumables > Buff Food, then drop items on it.",
               },
               improved = {

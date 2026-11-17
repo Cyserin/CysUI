@@ -237,6 +237,7 @@ local ownBars = {}
 local ownActive = false
 local SaveOrder, Unplaced
 local AddSpell, Waiting, DropWaiting
+local AddExtra, DropExtra
 local NewBar, DeleteBar, LayoutOwn
 local AttachAuras, RefreshTargetAuras
 
@@ -642,6 +643,28 @@ local function Compose()
             end
         end
     end
+    -- spells you added yourself by ID (racials, talents and anything else the game's list leaves out)
+    for _, id in ipairs(mine.extra or {}) do
+        if type(id) == "number" and not universe[id] then
+            local known = true
+            if IsPlayerSpell then
+                local ok, k = pcall(IsPlayerSpell, id)
+                if ok and not Secret(k) and k == false then known = false end
+            end
+            if not known and IsSpellKnownOrOverridesKnown then
+                local ok, k = pcall(IsSpellKnownOrOverridesKnown, id)
+                if ok and not Secret(k) and k then known = true end
+            end
+            local charges = false
+            if C_Spell.GetSpellCharges then
+                local ok, c = pcall(C_Spell.GetSpellCharges, id)
+                if ok and type(c) == "table" and type(c.maxCharges) == "number" and not Secret(c.maxCharges) and c.maxCharges > 1 then charges = true end
+            end
+            local e = { base = id, spell = id, charges = charges, known = known, extra = true }
+            universe[id] = e
+            if known then avail[id] = e end
+        end
+    end
     for _, bar in ipairs(ownBars) do
         for _, e in ipairs(bar.game) do e.known = true; avail[e.base] = e; universe[e.base] = e end
     end
@@ -730,6 +753,34 @@ function AddSpell(bar, e)
         mine[key] = mine[key] or {}
         table.insert(mine[key], e.base)
     end
+end
+
+-- a spell of your own choosing, by its ID: remembered per class (layout[CLASS].extra) and from then on offered
+-- like the spells the game tracks. Returns the entry, or nil and why not.
+function AddExtra(id)
+    if type(id) ~= "number" or id <= 0 then return nil, "type a spell ID (a number) first." end
+    local name = C_Spell.GetSpellName(id)
+    if not name then return nil, "there is no spell with ID " .. id .. "." end
+    if not universe[id] then
+        mine.extra = mine.extra or {}
+        mine.extra[#mine.extra + 1] = id
+        Compose()
+    end
+    return universe[id]
+end
+-- forget a spell added by ID (it also leaves any bar it was on)
+function DropExtra(id)
+    for i = #(mine.extra or {}), 1, -1 do
+        if mine.extra[i] == id then table.remove(mine.extra, i) end
+    end
+    for _, bar in ipairs(ownBars) do
+        local ids = mine[bar.def.key]
+        for i = #(ids or {}), 1, -1 do
+            if ids[i] == id then table.remove(ids, i) end
+        end
+    end
+    if mine.seen then mine.seen[id] = nil end
+    Compose()
 end
 
 local syncQueued, updateQueued
@@ -1249,6 +1300,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         for _, r in ipairs(menu.rows) do r:Hide() end
         for _, b in ipairs(menu.toggles) do b:Hide() end
         for _, b in ipairs(menu.cells or {}) do b:Hide() end
+        if menu.idRow then menu.idRow.box:ClearFocus(); menu.idRow:Hide() end
         menu.note:Hide()
     end
 
@@ -1328,6 +1380,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             if not e then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(C_Spell.GetSpellName(e.spell) or "Spell", 1, 1, 1)
+            if e.extra then GameTooltip:AddLine("Added by ID " .. e.base .. ". Right-click to forget it.", 0.8, 0.8, 0.8) end
             if e.known then
                 GameTooltip:AddLine("Click to add it to this bar.", T.accent[1], T.accent[2], T.accent[3])
             else
@@ -1363,8 +1416,14 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             b.tex:SetTexture(C_Spell.GetSpellTexture(e.spell))
             b.tex:SetDesaturated(not e.known)
             b.tex:SetAlpha(e.known and 1 or 0.55)
-            b:SetScript("OnClick", function()
-                AddSpell(bar, e)
+            b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            b:SetScript("OnClick", function(_, button)
+                if button == "RightButton" then
+                    if not e.extra then return end
+                    DropExtra(e.base) -- a spell you added by ID: forget it again
+                else
+                    AddSpell(bar, e)
+                end
                 GameTooltip:Hide()
                 CloseMenu()
                 LayoutOwn()
@@ -1372,7 +1431,62 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             end)
             b:Show()
         end
-        my = my - math.ceil(#free / COLS) * 33
+        my = my - math.ceil(#free / COLS) * 33 - 6
+        -- any other spell, by its ID
+        local row = menu.idRow
+        if not row then
+            row = CreateFrame("Frame", nil, menu)
+            row:SetSize(200, 42)
+            row.label = W.Text(row, 11, T.accent)
+            row.label:SetPoint("TOPLEFT", 0, 0)
+            row.label:SetText("Another spell, by its ID")
+            row.box = CreateFrame("EditBox", nil, row)
+            row.box:SetSize(122, 20)
+            row.box:SetPoint("TOPLEFT", 0, -18)
+            row.box:SetAutoFocus(false)
+            row.box:SetNumeric(true)
+            row.box:SetMaxLetters(7)
+            row.box:SetFont(STANDARD_TEXT_FONT, 12, "")
+            row.box:SetTextColor(1, 1, 1)
+            row.box:SetTextInsets(5, 5, 0, 0)
+            W.Texture(row.box, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
+            W.Border(row.box, 1, T.line, "BORDER")
+            row.add = W.Button(row, 70, 20, "Add")
+            row.add:SetPoint("LEFT", row.box, "RIGHT", 6, 0)
+            row.box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            row.box:SetScript("OnEnterPressed", function() row.add:Click() end)
+            row.box:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Add a spell by its ID", 1, 1, 1)
+                GameTooltip:AddLine("For spells the game's list leaves out, such as racials. The ID is the number at the end of the spell's Wowhead address.", T.accent[1], T.accent[2], T.accent[3], true)
+                GameTooltip:AddLine("With spell ranks, each rank has its own ID: use the rank you cast.", 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end)
+            row.box:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            menu.idRow = row
+        end
+        row.box:SetText("")
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 8, my)
+        row.add:SetScript("OnClick", function()
+            local e, why = AddExtra(tonumber(row.box:GetText() or ""))
+            if not e then CUI:Print("Cooldown Manager: " .. why) return end
+            local placed = false
+            for _, def in ipairs(OWN) do
+                for _, id in ipairs(mine[def.key] or {}) do if id == e.base then placed = true end end
+            end
+            if placed then
+                CUI:Print("Cooldown Manager: " .. (C_Spell.GetSpellName(e.spell) or "that spell") .. " is already on one of your bars.")
+            else
+                AddSpell(bar, e)
+            end
+            GameTooltip:Hide()
+            CloseMenu()
+            LayoutOwn()
+            Refresh()
+        end)
+        row:Show()
+        my = my - 42
         ShowMenu(anchor, -my + 8)
     end
 
@@ -1557,7 +1671,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             Place(-(yy - editorTop) + 34)
             return
         end
-        edHint:SetText("Drag an icon to move it. Click an icon for its options. Click + to add any spell the game can track. Greyed = not learned yet. New bar makes another bar of your own.")
+        edHint:SetText("Drag an icon to move it. Click an icon for its options. Click + to add a spell the game can track, or any spell by its ID. Greyed = not learned yet. New bar makes another bar of your own.")
         yy = yy - 38
         for _, bar in ipairs(ownBars) do
             local s = Strip(bar)
