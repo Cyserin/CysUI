@@ -28,6 +28,7 @@ local function DB()
     if d.collapsed == nil then d.collapsed = {} end
     if d.takeKey == nil then d.takeKey = true end
     if d.groupByGame == nil then d.groupByGame = true end
+    if d.guildInviteMenu == nil then d.guildInviteMenu = true end
     return d
 end
 
@@ -1294,6 +1295,47 @@ function F.Enable()
     F.ApplyWho()
 end
 
+--------------------------------------------------------------------------------
+-- "Guild invite" in the right-click menu of other players (unit frames, chat names, party and raid).
+-- Only shown to players who are allowed to invite; the invite itself goes out on your click.
+--------------------------------------------------------------------------------
+do
+    local Secret = (CysUICompat and CysUICompat.Secret) or function() return false end
+    local function AddGuildInvite(_, root, ctx)
+        if type(ctx) ~= "table" or DB().guildInviteMenu == false then return end
+        if not (IsInGuild and IsInGuild() and CanGuildInvite and CanGuildInvite()) then return end
+        local name, server, unit = ctx.name, ctx.server, ctx.unit
+        if type(name) ~= "string" or Secret(name) or name == "" then return end
+        if type(server) ~= "string" or Secret(server) then server = nil end
+        if unit then
+            local isPlayer, me, theirs, mine = UnitIsPlayer(unit), UnitIsUnit(unit, "player"), UnitFactionGroup(unit), UnitFactionGroup("player")
+            if Secret(isPlayer) or Secret(me) or Secret(theirs) then return end
+            if not isPlayer or me or theirs ~= mine then return end
+            local guild = GetGuildInfo(unit)
+            if Secret(guild) or guild then return end -- already in a guild
+        elseif name == UnitName("player") and not server then
+            return
+        end
+        local full = name
+        if server and server ~= "" and server ~= (GetNormalizedRealmName and GetNormalizedRealmName() or "") then
+            full = name .. "-" .. server
+        end
+        root:CreateDivider()
+        root:CreateButton("Guild invite", function()
+            if C_GuildInfo and C_GuildInfo.Invite then C_GuildInfo.Invite(full) elseif GuildInvite then GuildInvite(full) end
+        end)
+    end
+    local hook = CreateFrame("Frame")
+    hook:RegisterEvent("PLAYER_LOGIN")
+    hook:SetScript("OnEvent", function(self)
+        self:UnregisterAllEvents()
+        if not (Menu and Menu.ModifyMenu) then return end
+        for _, tag in ipairs({ "MENU_UNIT_PLAYER", "MENU_UNIT_FRIEND", "MENU_UNIT_PARTY", "MENU_UNIT_RAID_PLAYER" }) do
+            Menu.ModifyMenu(tag, function(owner, root, ctx) pcall(AddGuildInvite, owner, root, ctx) end)
+        end
+    end)
+end
+
 SLASH_CYSFRIENDS1 = "/cfriends"
 SLASH_CYSFRIENDS2 = "/cysfriends"
 SlashCmdList["CYSFRIENDS"] = function()
@@ -1320,7 +1362,12 @@ CUI:RegisterPage("Friends", function(page)
         function() return DB().groupByGame end,
         function(on) DB().groupByGame = on; F.Rebuild() end)
     gb:SetPoint("TOPLEFT", 4, -62)
-    local note = W.Notes(page, 4, -94, width, "", {
+    local gi = W.Checkbox(page, "Add Guild invite to the right-click menu of players",
+        function() return DB().guildInviteMenu ~= false end,
+        function(on) DB().guildInviteMenu = on end)
+    gi:SetPoint("TOPLEFT", 4, -90)
+    local note = W.Notes(page, 4, -122, width, "", {
+            "Guild invite shows on players who are not in a guild, and only if your rank can invite.",
             { "/cfriends", "opens the window any time; drag its title to move it, the corner grip to resize it." },
             "Click a name to select, double-click to whisper, right-click for more.",
             "The Who tab searches players (name, level range, class or zone) when you press Enter.",

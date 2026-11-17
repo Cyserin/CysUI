@@ -19,11 +19,11 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Micro menu** *(layout)*: a text menu for Character, Spells, Talents, Quests, Social, Guild, Bags, Menu.
 - **XP bar** *(layout)*: slim gold-edged bar with a rested overlay and a detailed tooltip.
 - **Marker Wheel**: hold a key of your choice and a ring of the raid markers opens at your mouse; point at one and let go to mark your target (or the unit under your mouse). A second key does the same for world markers: pick one, then click the ground where it goes (Clear all removes them). Works in combat.
-- **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too.
+- **Weapon Swap**: two weapon sets (main and off hand) and one key that swaps between them, in combat too. Saved per character.
 - **Your Characters**: a minimap button (or `/cuichars`) opens a window with three tabs: rested XP of all your characters (worked out while they are logged out) and when each will be full; gold on every character with the total; and the currencies each character holds.
 - **Cys's UI Users**: other players in your group or guild who run Cys's UI get a Cys's UI line (with their version) on their tooltip and a small Cys mark on your target, focus and party frames. Hidden addon messages, version only, never in combat; optional chat note when one joins your group. `/cuiusers`.
 - **UI scale**: pixel-perfect scale for your resolution.
-- **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`.
+- **Friends window** *(layout)*: game and Battle.net friends grouped by what they're playing, Who, Guild and Ignore, search, whisper and invite. `/cfriends`. Adds **Guild invite** to the right-click menu of players without a guild (for ranks that can invite).
 - **Layout mode**: drag and resize everything, snap to a grid, reset one or all.
 
 ## Cys's modules

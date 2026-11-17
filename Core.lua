@@ -523,9 +523,24 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.21",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.22",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.22", date = "2026-11-16",
+              added = {
+                  "Guild invite: right-click a player who has no guild (unit frames, chat names, party and raid) and pick Guild invite. Only shows if your rank can invite. Switch on the Friends page.",
+                  "Ping: the game's ping key now works on Cys's unit frames (player, target, party and the rest).",
+                  "Settings window: the scroll bar on the right can be dragged with the mouse, or click along it to jump.",
+              },
+              improved = {
+                  "Info bar: clicking Friends opens Cys's Friends window (the game's own if that module is off).",
+                  "Weapon Swap: sets, key and box are now saved per character. A character keeps the old shared sets only if it carries those weapons.",
+              },
+              fixed = {
+                  "Unit Frames: on a fresh login the player and target frames could sit on top of the cooldown bars until the first fight ended. They now move as soon as the bars appear, and once more just before combat locks them.",
+                  "Bags: long category names no longer run over the bag slots; they are cut short with dots.",
+              },
+            },
             { version = "0.58.21", date = "2026-11-12",
               added = {
                   "Marker Wheel: a second key for world markers (on the ground). Hold it, point at a marker and let go, then click the ground where it goes. Clear all removes every world marker. Set the key on the Marker Wheel page.",

@@ -19,9 +19,36 @@ local MH, OH = 16, 17
 local MH_TYPES = { INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true }
 local OH_TYPES = { INVTYPE_WEAPON = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true }
 
+-- Saved per character (each one has its own weapons). The sets used to be shared by the whole account: a
+-- character takes those over once, and only if it actually carries one of the weapons.
 local function DB()
-    CysUIDB.weaponswap = CysUIDB.weaponswap or {}
-    local db = CysUIDB.weaponswap
+    CysUICharDB = CysUICharDB or {}
+    local db = CysUICharDB.weaponswap
+    if type(db) ~= "table" then
+        db = { a = {}, b = {} }
+        local old = CysUIDB and CysUIDB.weaponswap
+        if type(old) == "table" then
+            db.key, db.box = old.key, old.box
+            local count = (C_Item and C_Item.GetItemCount) or GetItemCount
+            local mine = false
+            for _, set in ipairs({ old.a or {}, old.b or {} }) do
+                for _, id in ipairs({ set.mh or 0, set.oh or 0 }) do
+                    if id ~= 0 then
+                        local ok, n = pcall(count, id)
+                        if (ok and type(n) == "number" and n > 0) or GetInventoryItemID("player", 16) == id
+                            or GetInventoryItemID("player", 17) == id then
+                            mine = true
+                        end
+                    end
+                end
+            end
+            if mine then
+                db.a = { mh = old.a and old.a.mh, oh = old.a and old.a.oh }
+                db.b = { mh = old.b and old.b.mh, oh = old.b and old.b.oh }
+            end
+        end
+        CysUICharDB.weaponswap = db
+    end
     db.a = db.a or {}
     db.b = db.b or {}
     return db

@@ -14,12 +14,16 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.21",
+    version = "0.58.22",
     items = {
-        { title = "World markers wheel", page = "Marker Wheel", module = "markwheel",
-          icon = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6",
-          text = "A second Marker Wheel key for world markers: pick one from the ring, then click the ground where it goes.",
-          where = "Set the World markers key on the Marker Wheel page." },
+        { title = "Guild invite in the right-click menu", page = "Friends",
+          icon = "Interface\\Icons\\INV_Misc_GroupNeedMore",
+          text = "Right-click a player who has no guild and pick Guild invite. It only shows if your rank can invite.",
+          where = "Switch on the Friends page." },
+        { title = "Ping on unit frames", page = "Unit Frames",
+          icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
+          text = "The game's ping key now works on Cys's player, target and party frames.",
+          where = "Uses the game's own Ping key (Options > Keybindings > Ping System)." },
     },
 }
 

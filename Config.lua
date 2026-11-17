@@ -950,15 +950,75 @@ local function CreateWindow()
     thumb:Hide()
     local function UpdateThumb()
         local range = scroll:GetVerticalScrollRange()
-        if not range or range <= 0 then thumb:Hide() return end
+        if not range or range <= 0 then
+            thumb:Hide()
+            if f.scrollGrab and not f.scrollGrab.dragging then f.scrollGrab:Hide() end
+            return
+        end
         local viewH = scroll:GetHeight()
         local thumbH = max(24, viewH * viewH / (viewH + range))
         local y = (scroll:GetVerticalScroll() / range) * (viewH - thumbH)
         thumb:ClearAllPoints()
-        thumb:SetSize(3, thumbH)
+        thumb:SetSize(f.scrollGrab and (f.scrollGrab.hot and 5 or 3) or 3, thumbH)
         thumb:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 6, -y)
         thumb:Show()
+        if f.scrollGrab then f.scrollGrab:Show() end
     end
+
+    -- the scroll bar can be dragged: grab the thumb, or click anywhere along its track to jump there
+    local grab = CreateFrame("Frame", nil, f)
+    grab:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 1, 0)
+    grab:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 1, 0)
+    grab:SetWidth(PAD - 2)
+    grab:SetFrameLevel(scroll:GetFrameLevel() + 5)
+    grab:EnableMouse(true)
+    grab:Hide()
+    f.scrollGrab = grab
+    local function ThumbHeight(range)
+        local viewH = scroll:GetHeight()
+        return max(24, viewH * viewH / (viewH + range)), viewH
+    end
+    local function DragTo()
+        local range = scroll:GetVerticalScrollRange()
+        local top = scroll:GetTop()
+        if not (range and range > 0 and top) then return end
+        local thumbH, viewH = ThumbHeight(range)
+        local _, cy = GetCursorPosition()
+        cy = cy / scroll:GetEffectiveScale()
+        local frac = (top - cy - (grab.offset or thumbH / 2)) / max(1, viewH - thumbH)
+        scroll:SetVerticalScroll(max(0, math.min(1, frac)) * range)
+    end
+    local function Paint()
+        thumb:SetAlpha((grab.hot or grab.dragging) and 0.95 or 0.5)
+        UpdateThumb()
+    end
+    grab:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        local range = scroll:GetVerticalScrollRange()
+        local top = scroll:GetTop()
+        if not (range and range > 0 and top) then return end
+        local thumbH, viewH = ThumbHeight(range)
+        local _, cy = GetCursorPosition()
+        cy = cy / scroll:GetEffectiveScale()
+        local off = top - (scroll:GetVerticalScroll() / range) * (viewH - thumbH) - cy
+        self.offset = (off >= 0 and off <= thumbH) and off or thumbH / 2 -- on the thumb: keep the grip point
+        self.dragging = true
+        self:SetScript("OnUpdate", DragTo)
+        DragTo()
+        Paint()
+    end)
+    local function Drop(self)
+        self.dragging = nil
+        self:SetScript("OnUpdate", nil)
+        Paint()
+    end
+    grab:SetScript("OnMouseUp", Drop)
+    grab:SetScript("OnHide", function(self) self.hot = nil; Drop(self) end)
+    grab:SetScript("OnEnter", function(self) self.hot = true; Paint() end)
+    grab:SetScript("OnLeave", function(self) self.hot = nil; Paint() end)
+    grab:SetScript("OnMouseWheel", function(_, delta)
+        scroll:SetVerticalScroll(max(0, math.min(scroll:GetVerticalScroll() - delta * 40, scroll:GetVerticalScrollRange())))
+    end)
     scroll:SetScript("OnMouseWheel", function(s, delta)
         s:SetVerticalScroll(max(0, math.min(s:GetVerticalScroll() - delta * 40, s:GetVerticalScrollRange())))
     end)

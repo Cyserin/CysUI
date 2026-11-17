@@ -718,6 +718,11 @@ local function CreateUnitFrame(def)
     -- Blizzard's own unit menu (Self / Party / Target...)
     f:SetAttribute("*type2", (CysUICompat and CysUICompat.isForever) and "togglemenu" or "menu")
     f:RegisterForClicks("AnyUp", "AnyDown")
+    -- the game's ping key works on these frames (pings the unit the frame shows)
+    if PingableType_UnitFrameMixin and Mixin then
+        Mixin(f, PingableType_UnitFrameMixin)
+        f:SetAttribute("ping-receiver", true)
+    end
     f.noHealthText = def.noHealthText
     f.isParty = def.party
     f.small = def.fontSize ~= nil -- target of target, pet, party
@@ -1287,7 +1292,9 @@ local function AttachStance()
 end
 UF.AttachStance = AttachStance
 
+local WatchBars
 local function QueueKeepClear()
+    if WatchBars then WatchBars() end -- bars built since the last look (the Cooldown Manager can load late)
     if clearQueued then return end
     clearQueued = true
     C_Timer.After(0, UF.KeepClear)
@@ -1295,7 +1302,7 @@ end
 UF.QueueKeepClear = QueueKeepClear
 
 local watchedBars = {}
-local function WatchBars()
+function WatchBars()
     for _, name in ipairs(CLEAR_BARS) do
         local bar = _G[name]
         if bar and not watchedBars[bar] then
@@ -1310,11 +1317,18 @@ end
 local clearWatch = CreateFrame("Frame")
 clearWatch:RegisterEvent("PLAYER_ENTERING_WORLD")
 clearWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+clearWatch:RegisterEvent("PLAYER_REGEN_DISABLED")
 local clearHooked = false
 clearWatch:SetScript("OnEvent", function(_, event)
     if not next(UF.frames) then return end -- unit frames off
     if event == "PLAYER_REGEN_ENABLED" then
         if clearPending then QueueKeepClear() end
+        return
+    end
+    if event == "PLAYER_REGEN_DISABLED" then
+        -- last moment the frames can still be moved: settle them now, not after the fight
+        WatchBars()
+        if not InCombatLockdown() then pcall(UF.KeepClear) end
         return
     end
     if not clearHooked then
@@ -1333,7 +1347,7 @@ clearWatch:SetScript("OnEvent", function(_, event)
         end
     end
     -- Cys's Cooldown bars are built a little after login
-    for _, t in ipairs({ 0.5, 2, 5 }) do
+    for _, t in ipairs({ 0.5, 2, 5, 10, 20 }) do
         C_Timer.After(t, function() WatchBars(); QueueKeepClear() end)
     end
 end)

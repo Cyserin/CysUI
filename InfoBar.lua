@@ -134,7 +134,14 @@ DT.friends = {
         end
         if shown == 0 then tip:AddLine("Nobody is online.", 0.7, 0.7, 0.7) end
     end,
-    click = function() if ToggleFriendsFrame then ToggleFriendsFrame(1) end end,
+    click = function()
+        -- Cys's Friends window when that module is on, else the game's
+        if _G.CysFriendsFrame and CUI.Friends and CUI.Friends.Toggle then
+            CUI.Friends:Toggle()
+        elseif ToggleFriendsFrame then
+            ToggleFriendsFrame(1)
+        end
+    end,
 }
 
 -- Durability -----------------------------------------------------------------

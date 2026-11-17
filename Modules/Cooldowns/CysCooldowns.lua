@@ -417,6 +417,9 @@ end
 
 function LayoutOwn()
     for _, bar in ipairs(ownBars) do LayoutBar(bar) end
+    -- the player / target frames keep clear of these bars: have them look again (they wait out a fight themselves)
+    local uf = CUI.UnitFrames
+    if uf and uf.QueueKeepClear and uf.frames and next(uf.frames) then uf.QueueKeepClear() end
 end
 
 --------------------------------------------------------------------------------
