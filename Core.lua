@@ -523,9 +523,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.23",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.24",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.24", date = "2026-11-17",
+              fixed = {
+                  "Guild invites: the game lets only you send them, never an addon. Invite in the Guild Recruiter and Guild invite in the right-click menu now put /ginvite and the name in your chat box: press Enter to send it.",
+              },
+            },
             { version = "0.58.23", date = "2026-11-17",
               added = {
                   "Guild Recruiter: searches /who for players without a guild in your level range and whispers them your message, one step per key press or click while you play. Nobody is whispered twice within the days you pick. Players who answer show in a small window where you can invite them. Optional welcome for new members in guild chat. Guild Recruiter page, or /cuirecruit.",

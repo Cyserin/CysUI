@@ -1297,8 +1297,72 @@ end
 
 --------------------------------------------------------------------------------
 -- "Guild invite" in the right-click menu of other players (unit frames, chat names, party and raid).
--- Only shown to players who are allowed to invite; the invite itself goes out on your click.
+-- Only shown to players who are allowed to invite. It puts /ginvite Name in your chat box: press Enter to send.
 --------------------------------------------------------------------------------
+do
+    -- Forever lets only the game's own code send guild invites (C_GuildInfo.Invite is Blizzard-only), so we put
+    -- "/ginvite Name" in your chat box and you press Enter. If the game blocks that too, a box to copy it from opens.
+    local W, T = CysUI.W, CysUI.W.T
+    local copy, lastText, lastAt
+    local function ShowCopy(text)
+        if not copy then
+            copy = CreateFrame("Frame", "CysGInviteCopy", UIParent)
+            copy:SetSize(320, 86)
+            copy:SetPoint("CENTER", 0, 120)
+            copy:SetFrameStrata("DIALOG")
+            copy:EnableMouse(true)
+            W.Texture(copy, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.96 }):SetAllPoints()
+            W.Border(copy, 1, T.border, "BORDER")
+            local title = W.Text(copy, 12, T.accent)
+            title:SetPoint("TOPLEFT", 10, -8)
+            title:SetText("Guild invite")
+            local tip = W.Text(copy, 11, T.desc)
+            tip:SetPoint("TOPLEFT", 10, -26)
+            tip:SetText("Ctrl+C, then Enter, Ctrl+V, Enter")
+            local holder = CreateFrame("Frame", nil, copy)
+            holder:SetPoint("BOTTOMLEFT", 10, 10); holder:SetPoint("BOTTOMRIGHT", -10, 10); holder:SetHeight(24)
+            W.Texture(holder, "BACKGROUND", T.field):SetAllPoints()
+            W.Border(holder, 1, T.border, "BORDER")
+            local eb = CreateFrame("EditBox", nil, holder)
+            eb:SetPoint("TOPLEFT", 6, 0); eb:SetPoint("BOTTOMRIGHT", -6, 0)
+            eb:SetFontObject(ChatFontNormal)
+            eb:SetAutoFocus(false)
+            eb:SetScript("OnEscapePressed", function() copy:Hide() end)
+            eb:SetScript("OnEnterPressed", function() copy:Hide() end)
+            eb:SetScript("OnTextChanged", function(s, user) if user then s:SetText(copy.text or ""); s:HighlightText() end end)
+            eb:SetScript("OnKeyUp", function(_, key) if key == "C" and IsControlKeyDown() then copy:Hide() end end)
+            copy.eb = eb
+            local x = CreateFrame("Button", nil, copy)
+            x:SetSize(20, 20); x:SetPoint("TOPRIGHT", -4, -4)
+            x.t = W.Text(x, 13, { 1, 1, 1 }, "CENTER"); x.t:SetPoint("CENTER"); x.t:SetText("X")
+            x:SetScript("OnClick", function() copy:Hide() end)
+        end
+        copy.text = text
+        copy:Show()
+        copy.eb:SetText(text)
+        copy.eb:SetFocus()
+        copy.eb:HighlightText()
+    end
+    function CysUI.GuildInviteChat(name)
+        if type(name) ~= "string" or name == "" then return end
+        local text = "/ginvite " .. name
+        if not CysUI.ginviteCopy then
+            local open = (ChatFrameUtil and ChatFrameUtil.OpenChat) or ChatFrame_OpenChat
+            if open and pcall(open, text) then lastText, lastAt = text, GetTime(); return end
+        end
+        ShowCopy(text)
+    end
+    local watch = CreateFrame("Frame")
+    watch:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+    watch:SetScript("OnEvent", function(_, _, addon, fn)
+        if addon ~= "CysUI" or type(fn) ~= "string" or not fn:find("Invite") then return end
+        if lastAt and GetTime() - lastAt < 120 then
+            CysUI.ginviteCopy = true -- the chat box route was blocked too: use the copy box from now on (this session)
+            ShowCopy(lastText)
+        end
+    end)
+end
+
 do
     local Secret = (CysUICompat and CysUICompat.Secret) or function() return false end
     local function AddGuildInvite(_, root, ctx)
@@ -1321,9 +1385,7 @@ do
             full = name .. "-" .. server
         end
         root:CreateDivider()
-        root:CreateButton("Guild invite", function()
-            if C_GuildInfo and C_GuildInfo.Invite then C_GuildInfo.Invite(full) elseif GuildInvite then GuildInvite(full) end
-        end)
+        root:CreateButton("Guild invite", function() CysUI.GuildInviteChat(full) end)
     end
     local hook = CreateFrame("Frame")
     hook:RegisterEvent("PLAYER_LOGIN")

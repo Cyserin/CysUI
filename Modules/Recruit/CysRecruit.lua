@@ -4,7 +4,7 @@
 -- Searches /who for players without a guild in your level range and whispers them your message, one step per
 -- key press or click (the game only allows /who from a real key press or click). Nobody is whispered twice
 -- within the days you pick. Players who answer show in a small box: interested ones in gold, questions in white.
--- Invites are never sent by themselves: click Invite in the box (or right-click their name in chat).
+-- Invites are never sent by themselves: Invite puts /ginvite Name in your chat box, you press Enter.
 -- Optional: welcome new members in guild chat (one welcome per new member when several guildies run Cys's UI).
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
@@ -380,7 +380,7 @@ local function OnWhisper(text, sender)
     if kind == "yes" or e.kind ~= "yes" then e.kind = kind end
     session.replies = session.replies + 1
     if db.chatNote and kind == "yes" then
-        Print(NameLink(name) .. " wants to join. Click Invite in the Guild Recruiter, or right-click the name here.")
+        Print(NameLink(name) .. " wants to join. Click Invite in the Guild Recruiter, then press Enter.")
     end
     PlaySound(SOUNDKIT and SOUNDKIT.TELL_MESSAGE or 3081)
     R.closed = false
@@ -411,25 +411,11 @@ local JOINED = Pattern(ERR_GUILD_JOIN_S)
 local DECLINED = Pattern(ERR_GUILD_DECLINE_S)
 local pendingInvite = {} -- [lower name] = GetTime()
 
+-- The game sends guild invites only from its own code: Invite puts /ginvite Name in your chat box (press Enter).
 function R.Invite(name)
     if not (CanGuildInvite and CanGuildInvite()) then Print("Your guild rank can't invite."); return end
-    if R.inviteBlocked then
-        Print("Right-click " .. NameLink(name) .. " and pick Guild invite.")
-        return
-    end
-    pendingInvite[Key(name)] = GetTime()
-    local ok = pcall(function()
-        if C_GuildInfo and C_GuildInfo.Invite then C_GuildInfo.Invite(name) else GuildInvite(name) end
-    end)
-    C_Timer.After(2, function()
-        if pendingInvite[Key(name)] then
-            pendingInvite[Key(name)] = nil
-            R.inviteBlocked = true -- the game didn't send it: use the chat name from now on (this session)
-            Print("The game didn't send the invite. Right-click " .. NameLink(name) .. " and pick Guild invite.")
-            if R.Refresh then R.Refresh() end
-        end
-    end)
-    if not ok then R.inviteBlocked = true end
+    if CUI.GuildInviteChat then CUI.GuildInviteChat(name)
+    else Print("Type /ginvite " .. name .. " to invite them.") end
 end
 
 function R.Remove(name)
@@ -524,7 +510,7 @@ local function MakeRow(i)
         GameTooltip:AddLine(s.entry.name, 1, 0.82, 0)
         GameTooltip:AddLine(s.entry.text or "", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Invite sends a guild invite. x takes them off the list.", 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine("Invite puts /ginvite and their name in your chat box: press Enter to send it. x takes them off the list.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function(s) s.hl:Hide(); GameTooltip:Hide() end)
@@ -672,7 +658,6 @@ function R.Refresh(show)
                 r.say:SetText('"' .. (e.text or "") .. '"')
                 r.age:SetText(Ago(e.t))
                 r.inv:SetActive(canInvite and true or false)
-                r.inv:SetLabel(R.inviteBlocked and "Link" or "Invite")
             end
         end
     end
@@ -721,10 +706,7 @@ ev:SetScript("OnEvent", function(_, e, a1, a2, a3, a4)
     elseif e == "PLAYER_GUILD_UPDATE" then
         if R.running and not IsInGuild() then R.Stop("You left your guild") end
     elseif e == "ADDON_ACTION_FORBIDDEN" or e == "ADDON_ACTION_BLOCKED" then
-        if a1 == "CysUI" and type(a2) == "string" and (a2:find("Invite") or a2:find("SendWho")) then
-            if a2:find("Invite") then R.inviteBlocked = true end
-            if R.Refresh then R.Refresh() end
-        end
+        if a1 == "CysUI" and type(a2) == "string" and a2:find("SendWho") then lastNote = "The game refused the search" end
     end
 end)
 
@@ -813,7 +795,7 @@ CUI:RegisterPage("Guild Recruiter", function(page)
     W.Notes(page, 4, y - 104, width, "", {
         { "How it runs", "Press Start, then play as usual. The game only allows /who from a real key press or click, so each key press or click on the game world takes one step: a /who search or one whisper. Your keys still work as normal. It pauses in combat, battlegrounds and arenas." },
         { "Who is whispered", "Players without a guild in your level range, never the same player twice within the days above. Ranges with more than 50 players are searched again one class at a time." },
-        { "Invites", "The game doesn't let addons invite by themselves. Players who answer show in the window; click Invite to send it (your guild rank must be allowed to invite). If the game refuses, right-click their name in chat and pick Guild invite." },
+        { "Invites", "The game only lets you invite yourself, never an addon. Players who answer show in the window; Invite puts /ginvite and their name in your chat box, so you just press Enter (your guild rank must be allowed to invite)." },
         { "Welcome", "Sent on your next key press or click after someone joins. When several guildies run Cys's UI, only one of them welcomes each new member." },
         "/cuirecruit opens the window; /cuirecruit start, stop or next. A key press with the chat box open doesn't count.",
     })
