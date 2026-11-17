@@ -928,13 +928,21 @@ local function BuildOpener()
     opener:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
+-- true while the talents window shows another player's talents (View Talents / inspect)
+local function Inspecting(host)
+    local ok, v = pcall(function() return host.IsInspecting and host:IsInspecting() and true or false end)
+    return ok and v or false
+end
+
 function Sync()
     local host = _G.PlayerSpellsFrame
-    if not (talentsUp and host) then
+    if not (talentsUp and host) or Inspecting(host) then
         if win then win:Hide() end
+        if opener then opener:Hide() end
         return
     end
     BuildOpener()
+    opener:Show()
     if plan.open then
         BuildWindow()
         win:ClearAllPoints()
@@ -967,6 +975,9 @@ local function Attach()
     hooked = true
     tal:HookScript("OnShow", function() talentsUp = true; Sync() end)
     tal:HookScript("OnHide", function() talentsUp = false; Sync() end)
+    -- step aside while the window shows someone else's talents
+    if host.SetInspectUnit then hooksecurefunc(host, "SetInspectUnit", function() Sync() end) end
+    if host.ClearInspectUnit then hooksecurefunc(host, "ClearInspectUnit", function() Sync() end) end
     local ok, vis = pcall(function() return tal:IsVisible() and true or false end)
     talentsUp = ok and vis or false
     Sync()

@@ -530,6 +530,9 @@ if CysChangelog then
               added = {
                   "Cys's Bags: the item level now shows in the top-left corner of gear (in its rarity color), and Bind on Equip gear gets a small gold BoE tag in the bottom-left corner. Both have a switch on the Automation page.",
               },
+              fixed = {
+                  "Talent Planner: View Talents on another player now shows their talents. The planner and its button step aside while the talents window shows someone else.",
+              },
             },
             { version = "0.58.24", date = "2026-11-17",
               added = {
