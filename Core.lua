@@ -523,9 +523,14 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.24",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.25",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.25", date = "2026-11-17",
+              added = {
+                  "Cys's Bags: the item level now shows in the top-left corner of gear (in its rarity color), and Bind on Equip gear gets a small gold BoE tag in the bottom-left corner. Both have a switch on the Automation page.",
+              },
+            },
             { version = "0.58.24", date = "2026-11-17",
               added = {
                   "Alerts: short on-screen notes for unspent talent points (after a level up and at login), potion ready again (by default only in a fight), no pet out or a dead pet (Hunter, Warlock) and group members dying. Each has its own switch. Alerts page (Combat Helpers), test with /cuialerts.",

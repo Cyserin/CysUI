@@ -455,6 +455,17 @@ local function IsBoE(bag, slot)
     end
     return false
 end
+-- Item level for gear you can wear (weapons and armor; not shirts or tabards)
+local GetILvl = (C_Item and C_Item.GetDetailedItemLevelInfo) or GetDetailedItemLevelInfo
+local NO_ILVL = { [""] = true, INVTYPE_NON_EQUIP_IGNORE = true, INVTYPE_BODY = true, INVTYPE_TABARD = true, INVTYPE_BAG = true }
+local function GearLevel(link, itemID)
+    local _, _, _, equipLoc, _, classID = GetItemInfoInstant(itemID)
+    if (classID ~= 2 and classID ~= 4) or not equipLoc or NO_ILVL[equipLoc] then return nil end
+    local lvl = GetILvl and GetILvl(link)
+    if not lvl then lvl = select(4, GetItemInfo(link)) end
+    if lvl and lvl > 1 then return lvl end
+end
+
 local function Categorize(e)
     if e.isQuest or CLASS_CATEGORY[GetItemClass(e.itemID)] == "QUEST" then return "QUEST" end
     if e.quality == 0 then return "JUNK" end
@@ -654,6 +665,20 @@ local function CreateItemButton(bag, slot)
     btn.cysQuality = CreateBorder(btn, 1, C.text, "OVERLAY", 5)
     ShowBorder(btn.cysQuality, false)
 
+    -- item level (top left, rarity color) and BoE (bottom left, gold) on gear
+    local ilvl = btn:CreateFontString(nil, "OVERLAY")
+    ilvl:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+    ilvl:SetPoint("TOPLEFT", 2, -2)
+    ilvl:SetJustifyH("LEFT")
+    btn.cysILvl = ilvl
+    local boe = btn:CreateFontString(nil, "OVERLAY")
+    boe:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+    boe:SetPoint("BOTTOMLEFT", 2, 2)
+    boe:SetTextColor(C.accent[1], C.accent[2], C.accent[3])
+    boe:SetText("BoE")
+    boe:Hide()
+    btn.cysBoE = boe
+
     -- Alt-click: pin the item (or unpin it). The click picks the item up; we file it and put it back.
     btn:HookScript("PreClick", function(b) b.cysHadCursor = CursorHasItem() end)
     btn:HookScript("OnClick", function(b, button)
@@ -703,6 +728,16 @@ local function UpdateButton(btn, e)
     else
         ShowBorder(btn.cysQuality, false)
     end
+
+    if e.ilvl and Opt("bagItemLevel") then
+        local c = (e.quality and e.quality >= 2 and ITEM_QUALITY_COLORS[e.quality]) or nil
+        if c then btn.cysILvl:SetTextColor(c.r, c.g, c.b) else btn.cysILvl:SetTextColor(C.text[1], C.text[2], C.text[3]) end
+        btn.cysILvl:SetText(e.ilvl)
+        btn.cysILvl:Show()
+    else
+        btn.cysILvl:Hide()
+    end
+    btn.cysBoE:SetShown(e.isBoE and Opt("bagBoEText") and true or false)
 
     btn:SetAlpha(MatchesSearch(e, CysBags.search) and 1 or 0.25)
     UpdateButtonCooldown(btn)
@@ -784,6 +819,7 @@ function CysBags:Collect()
                     slotEntries[bag][slot] = e
                     e.highlight = nil -- recomputed by ResolveCategory
                     e.isBoE = IsBoE(bag, slot)
+                    e.ilvl = GearLevel(link, itemID)
                     
                     local category = bag > LAST_NORMAL_BAG and "REAGENT" or ResolveCategory(e)
                     if not lists[category] then lists[category] = {} end

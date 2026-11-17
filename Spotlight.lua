@@ -14,24 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.24",
+    version = "0.58.25",
     items = {
-        { title = "Alerts", page = "Alerts", module = "alerts",
-          icon = "Interface\\Icons\\INV_Misc_Bell_01",
-          text = "Short notes in the middle of the screen: unspent talent points, potion ready again, no pet out, and group members dying. Each has its own switch.",
-          where = "Alerts page (Combat Helpers), or /cuialerts for a test." },
-        { title = "Mana Tick", page = "Mana Tick", module = "manatick",
-          icon = "Interface\\Icons\\Spell_Nature_ManaRegenTotem",
-          text = "A spark on your mana bar for the five-second rule and each regen tick after it. Druids see their mana and shifts left while in a form.",
-          where = "Mana Tick page (Combat Helpers)." },
-        { title = "Damage Meter extras", page = "Damage Meter", module = "meter",
-          icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
-          text = "Hide the windows per instance type, keys to show / hide and reset, grey bars out of combat, a combat timer, and spell tooltips in a pinned breakdown.",
-          where = "Damage Meter page." },
-        { title = "Group threat + pull warning", page = "Threat Bar", module = "threat",
-          icon = "Interface\\Icons\\Ability_Warrior_Challange",
-          text = "Everyone's threat on your target in one small list, your threat percent beside the target frame, and a warning before you pull the mob off the tank.",
-          where = "Threat Bar page (Combat Helpers)." },
+        { title = "Item level and BoE in your bags", page = "Automation",
+          icon = "Interface\\Icons\\INV_Chest_Chain_05",
+          text = "Gear in Cys's Bags shows its item level in the top-left corner (rarity color) and a small gold BoE tag when it is Bind on Equip.",
+          where = "Automation page (switches under Cys's Bags)." },
     },
 }
 
