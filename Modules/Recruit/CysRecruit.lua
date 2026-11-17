@@ -354,7 +354,11 @@ end
 --------------------------------------------------------------------------------
 -- Replies
 --------------------------------------------------------------------------------
-local NEG = { "no", "nah", "nope", "no thanks", "no thank you", "not interested", "already", "stop", "pass", "dont", "don't", "leave me" }
+local NEG = { "no", "nah", "nope", "no thanks", "no thank you", "no ty", "no thx", "nty", "not interested", "not looking",
+    "already", "stop", "pass", "dont", "don't", "leave me", "im good", "i'm good", "im ok", "i'm ok", "im fine", "i'm fine",
+    "im set", "i'm set", "not now", "maybe later", "have a guild", "got a guild", "in a guild", "found a guild", "joined", "decline" }
+-- a yes word next to one of these is not a yes ("appreciate the invite but im not going to play"): listed as a reply to read
+local SOFT = { "not", "but", "sorry", "joining", "later", "maybe", "busy", "solo", "just checking", "thanks though", "ty though" }
 local POS = { "yes", "yeah", "yea", "yep", "yup", "ya", "ye", "y", "sure", "ok", "okay", "k", "invite", "inv", "ginv",
     "join", "interested", "please", "pls", "plz", "why not", "count me in", "im in", "i'm in", "absolutely", "definitely", "send it" }
 local function Has(text, word)
@@ -362,8 +366,9 @@ local function Has(text, word)
 end
 local function Classify(text)
     local t = " " .. text:lower() .. " "
-    if Has(t, "why not") or Has(t, "not sure") then return "yes" end
+    if Has(t, "why not") then return "yes" end
     for _, w in ipairs(NEG) do if Has(t, w) then return "no" end end
+    for _, w in ipairs(SOFT) do if Has(t, w) then return "ask" end end
     for _, w in ipairs(POS) do if Has(t, w) then return "yes" end end
     return "ask"
 end

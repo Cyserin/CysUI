@@ -226,7 +226,8 @@ local function PaintButton(b, hover)
             base[3] + (br[3] - base[3]) * PRIMARY_TINT, 1)
         W.SetBorder(b.edges, hover and T.glow or T.border)
     else
-        b.bg:SetColorTexture(base[1], base[2], base[3], 1)
+        local bg = hover and T.cardHover or base
+        b.bg:SetColorTexture(bg[1], bg[2], bg[3], 1)
         W.SetBorder(b.edges, hover and T.glow or T.line)
     end
     b.label:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
@@ -371,25 +372,46 @@ function W.Checkbox(parent, label, get, set)
 end
 
 --------------------------------------------------------------------------------
--- Stepper: "Label        [-]  20s  [+]"
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
 -- Dropdown: a button showing the current choice; click it to open the list, click a choice to pick it.
 --   options = { { value, "Label" }, ... }   get() -> value   set(value)   prefix = text before the label ("Shows: ")
 --------------------------------------------------------------------------------
 function W.Dropdown(parent, width, options, get, set, prefix)
-    local b = W.Button(parent, width, 22, "")
-    b.arrow = W.Text(b, 10, T.accent, "RIGHT")
+    -- a dark field like a text box: the choice in white on the left, a gold chevron on the right
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(width, 22)
+    b.bg = W.Texture(b, "BACKGROUND", T.field)
+    b.bg:SetAllPoints()
+    b.edges = W.Border(b, 1, T.line, "BORDER")
+    b.label = W.Text(b, 12, T.text, "LEFT")
+    b.label:SetPoint("LEFT", 8, 0)
+    b.label:SetPoint("RIGHT", -22, 0)
+    b.label:SetWordWrap(false)
+    b.arrow = W.Text(b, 11, T.dim, "RIGHT")
     b.arrow:SetPoint("RIGHT", -8, 0)
     b.arrow:SetText("v")
+    function b:Paint()
+        local hot = self.hot or self.open
+        W.SetBorder(self.edges, hot and T.glow or T.line)
+        local ac = hot and T.accent or T.dim
+        self.arrow:SetTextColor(ac[1], ac[2], ac[3])
+        local f = self.hot and T.hover or T.field
+        self.bg:SetColorTexture(f[1], f[2], f[3], 1)
+    end
+    function b:SetLabel(text) self.label:SetText(text) end
+    function b:SetActive(on)
+        if on then self:Enable(); self:SetAlpha(1) else self:Disable(); self:SetAlpha(0.4) end
+    end
+    b:SetScript("OnEnter", function(s) s.hot = true; s:Paint() end)
+    b:SetScript("OnLeave", function(s) s.hot = false; s:Paint() end)
 
+    local ROW = 20
     local list = CreateFrame("Frame", nil, UIParent)
     list:SetFrameStrata("FULLSCREEN_DIALOG")
     list:SetFrameLevel(50)
     list:SetClampedToScreen(true)
-    list:SetSize(width, #options * 22 + 6)
+    list:SetSize(width, #options * ROW + 6)
     list:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
-    W.Texture(list, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
+    W.Texture(list, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.98 }):SetAllPoints()
     W.Border(list, 1, T.border, "BORDER")
     list:Hide()
 
@@ -400,8 +422,8 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     catcher:SetFrameLevel(40)
     catcher:Hide()
     catcher:SetScript("OnClick", function() list:Hide() end)
-    list:SetScript("OnShow", function() catcher:Show() end)
-    list:SetScript("OnHide", function() catcher:Hide() end)
+    list:SetScript("OnShow", function() catcher:Show(); b.open = true; b:Paint() end)
+    list:SetScript("OnHide", function() catcher:Hide(); b.open = false; b:Paint() end)
 
     local function Text(opt)
         return (prefix or "") .. opt[2]
@@ -415,10 +437,32 @@ function W.Dropdown(parent, width, options, get, set, prefix)
         self:SetLabel(shown)
     end
 
+    -- list rows: a soft band under the mouse; the current choice in gold with a bar on its left
     local rows = {}
     for i, o in ipairs(options) do
-        local row = W.Button(list, width - 8, 20, o[2])
-        row:SetPoint("TOPLEFT", 4, -3 - (i - 1) * 22)
+        local row = CreateFrame("Button", nil, list)
+        row:SetSize(width - 8, ROW)
+        row:SetPoint("TOPLEFT", 4, -3 - (i - 1) * ROW)
+        row.hl = row:CreateTexture(nil, "BACKGROUND")
+        row.hl:SetColorTexture(1, 1, 1, 0.06)
+        row.hl:SetAllPoints()
+        row.hl:Hide()
+        row.bar = W.Texture(row, "BORDER", T.brand)
+        row.bar:SetPoint("TOPLEFT", 0, -3); row.bar:SetPoint("BOTTOMLEFT", 0, 3); row.bar:SetWidth(2)
+        row.label = W.Text(row, 12, T.text, "LEFT")
+        row.label:SetPoint("LEFT", 10, 0)
+        row.label:SetPoint("RIGHT", -6, 0)
+        row.label:SetWordWrap(false)
+        row.label:SetText(o[2])
+        function row:Paint()
+            local c = self.current and T.accent or (self.hot and T.desc or T.text)
+            self.label:SetTextColor(c[1], c[2], c[3])
+            self.bar:SetShown(self.current)
+            self.hl:SetShown(self.hot)
+        end
+        function row:SetLabel(text) self.label:SetText(text) end
+        row:SetScript("OnEnter", function(s) s.hot = true; s:Paint() end)
+        row:SetScript("OnLeave", function(s) s.hot = false; s:Paint() end)
         row:SetScript("OnClick", function()
             list:Hide()
             set(o[1])
@@ -430,18 +474,53 @@ function W.Dropdown(parent, width, options, get, set, prefix)
         if list:IsShown() then list:Hide() return end
         local cur = get()
         for i, o in ipairs(options) do
-            rows[i]:SetLabel((o[1] == cur and "|cFFFFD100> |r" or "   ") .. o[2])
+            rows[i].current = o[1] == cur
+            rows[i].hot = false
+            rows[i]:Paint()
         end
         list:Show()
     end)
     b:HookScript("OnHide", function() list:Hide() end)
+    b:Paint()
     b:Refresh()
+    return b
+end
+
+-- Stepper: "Label        ( - )  [ 20s ]  ( + )" - round gold buttons around a dark value pill, the row lights
+-- up under the mouse like a switch row, and a button greys out at its limit.
+local function RoundButton(parent, text, onHover)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(18, 18)
+    b.bg = b:CreateTexture(nil, "BORDER")
+    b.bg:SetTexture(CIRCLE)
+    b.bg:SetAllPoints()
+    b.txt = W.Text(b, 14, T.dark, "CENTER")
+    b.txt:SetFont(STANDARD_TEXT_FONT, 14, "")
+    b.txt:SetPoint("CENTER", 0, text == "-" and 1 or 0)
+    b.txt:SetText(text)
+    function b:Paint()
+        local on = self:IsEnabled()
+        local c = not on and OFF_TRACK or (self.hot and T.glow or T.brand)
+        self.bg:SetVertexColor(c[1], c[2], c[3], 1)
+        local tc = on and T.dark or OFF_KNOB
+        self.txt:SetTextColor(tc[1], tc[2], tc[3])
+    end
+    b:SetScript("OnEnter", function(s) s.hot = true; s:Paint(); onHover() end)
+    b:SetScript("OnLeave", function(s) s.hot = false; s:Paint(); onHover() end)
+    b:SetScript("OnMouseDown", function(s) if s:IsEnabled() then s.txt:SetPoint("CENTER", 0, text == "-" and 0 or -1) end end)
+    b:SetScript("OnMouseUp", function(s) s.txt:SetPoint("CENTER", 0, text == "-" and 1 or 0) end)
     return b
 end
 
 function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(320, 22)
+    f:EnableMouse(true)
+    f.hl = f:CreateTexture(nil, "BACKGROUND")
+    f.hl:SetColorTexture(1, 1, 1, 0.045)
+    f.hl:SetPoint("TOPLEFT", -6, 1)
+    f.hl:SetPoint("BOTTOMRIGHT", 6, -1)
+    f.hl:Hide()
     f.label = W.Text(f, 12, T.text)
     f.label:SetPoint("LEFT", 0, 0)
     f.label:SetText(label)
@@ -449,15 +528,37 @@ function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
     local needW = (f.label:GetStringWidth() or 0) + 124
     if needW > 320 then f:SetWidth(needW) end
 
-    local plus = W.Button(f, 22, 22, "+")
-    plus:SetPoint("RIGHT", 0, 0)
-    f.value = W.Text(f, 12, T.accent, "CENTER")
-    f.value:SetPoint("RIGHT", plus, "LEFT", -6, 0)
-    f.value:SetWidth(54)
-    local minus = W.Button(f, 22, 22, "-")
-    minus:SetPoint("RIGHT", f.value, "LEFT", -6, 0)
+    local function Hot()
+        local hot = f:IsMouseOver()
+        f.hl:SetShown(hot)
+        local c = hot and T.accent or T.text
+        f.label:SetTextColor(c[1], c[2], c[3])
+    end
+    f:SetScript("OnEnter", Hot)
+    f:SetScript("OnLeave", Hot)
 
-    function f:Refresh() self.value:SetText(tostring(get()) .. (suffix or "")) end
+    local plus = RoundButton(f, "+", Hot)
+    plus:SetPoint("RIGHT", 0, 0)
+    local pill = CreateFrame("Frame", nil, f)
+    pill:SetSize(60, 18)
+    pill:SetPoint("RIGHT", plus, "LEFT", -5, 0)
+    Pill(pill, "BORDER", 0, 60, 18):Color(T.field[1], T.field[2], T.field[3], 1)
+    f.value = W.Text(pill, 12, T.accent, "CENTER")
+    f.value:SetPoint("CENTER", 0, 0)
+    f.value:SetWidth(56)
+    local minus = RoundButton(f, "-", Hot)
+    minus:SetPoint("RIGHT", pill, "LEFT", -5, 0)
+    f.minus, f.plus = minus, plus
+
+    function f:Refresh()
+        local v = get()
+        self.value:SetText(tostring(v) .. (suffix or ""))
+        if type(v) == "number" then
+            if v <= minValue then minus:Disable() else minus:Enable() end
+            if v >= maxValue then plus:Disable() else plus:Enable() end
+        end
+        minus:Paint(); plus:Paint()
+    end
     minus:SetScript("OnClick", function() set(max(minValue, get() - step)); f:Refresh() end)
     plus:SetScript("OnClick", function() set(min(maxValue, get() + step)); f:Refresh() end)
     f:Refresh()
@@ -465,18 +566,29 @@ function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
 end
 
 --------------------------------------------------------------------------------
--- Section header: gold title followed by a thin rule
+-- Section header: a card strip - dark band, gold bar on the left, gold title, a thin rule under it
 --------------------------------------------------------------------------------
 function W.Header(parent, text, width)
     local h = CreateFrame("Frame", nil, parent)
-    h:SetSize(width or 400, 20)
-    h.label = W.Text(h, 12, T.accent)
-    h.label:SetPoint("LEFT", 0, 0)
+    h:SetSize(width or 400, 22)
+    local bg = h:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    if bg.SetGradient and CreateColor then
+        bg:SetColorTexture(1, 1, 1, 1)
+        bg:SetGradient("HORIZONTAL", CreateColor(T.card[1] + 0.03, T.card[2] + 0.03, T.card[3] + 0.03, 0.95),
+            CreateColor(T.card[1], T.card[2], T.card[3], 0.15))
+    else
+        bg:SetColorTexture(T.card[1], T.card[2], T.card[3], 0.85)
+    end
+    h.bar = W.Texture(h, "BORDER", T.brand)
+    h.bar:SetPoint("TOPLEFT"); h.bar:SetPoint("BOTTOMLEFT"); h.bar:SetWidth(3)
+    h.label = W.Text(h, 13, T.accent)
+    h.label:SetPoint("LEFT", 11, 0)
     h.label:SetText(text)
     local line = W.Texture(h, "ARTWORK", T.line)
     line:SetHeight(1)
-    line:SetPoint("LEFT", h.label, "RIGHT", 8, 0)
-    line:SetPoint("RIGHT", h, "RIGHT", 0, 0)
+    line:SetPoint("BOTTOMLEFT", 3, 0)
+    line:SetPoint("BOTTOMRIGHT", 0, 0)
     return h
 end
 
