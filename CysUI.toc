@@ -83,6 +83,8 @@ Modules\Consumables\CysConsumables.lua
 Modules\Cooldowns\CysCooldowns.lua
 Modules\Resource\CysResource.lua
 Modules\Swing\CysSwing.lua
+Modules\Alerts\CysAlerts.lua
+Modules\Mana\CysMana.lua
 Modules\VehicleExit\CysVehicleExit.lua
 Modules\QuestStart\CysQuestStart.lua
 Modules\Crates\CysCrates.lua

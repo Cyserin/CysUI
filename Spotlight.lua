@@ -14,20 +14,20 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.23",
+    version = "0.58.24",
     items = {
-        { title = "Guild Recruiter", page = "Guild Recruiter", module = "recruit",
-          icon = "Interface\\Icons\\INV_Misc_Note_02",
-          text = "Finds players without a guild with /who and whispers them your message while you play. The ones who answer show in a small window: click Invite.",
-          where = "Guild Recruiter page (Interface), or /cuirecruit." },
-        { title = "Click-Casting", page = "Click-Casting", module = "clickcast",
-          icon = "Interface\\Icons\\Spell_Nature_HealingWaveGreater",
-          text = "Click a unit frame with Shift, Ctrl or Alt and a mouse button to cast a spell or macro on that unit. Drop spells on the page, then click their gold button with the click you want.",
-          where = "Click-casting button beside the spellbook, or /cuiclick." },
-        { title = "Effect time on spells added by ID", page = "Cooldown Manager", module = "cooldowns",
-          icon = "Interface\\Icons\\Ability_Warrior_WarCry",
-          text = "Spells you added to your cooldown bars by ID now get the gold time line too while your buff or debuff runs, and Demoralizing Shout shows it like the others.",
-          where = "Cooldown Manager page, Your bars." },
+        { title = "Alerts", page = "Alerts", module = "alerts",
+          icon = "Interface\\Icons\\INV_Misc_Bell_01",
+          text = "Short notes in the middle of the screen: unspent talent points, potion ready again, no pet out, and group members dying. Each has its own switch.",
+          where = "Alerts page (Combat Helpers), or /cuialerts for a test." },
+        { title = "Mana Tick", page = "Mana Tick", module = "manatick",
+          icon = "Interface\\Icons\\Spell_Nature_ManaRegenTotem",
+          text = "A spark on your mana bar for the five-second rule and each regen tick after it. Druids see their mana and shifts left while in a form.",
+          where = "Mana Tick page (Combat Helpers)." },
+        { title = "Damage Meter extras", page = "Damage Meter", module = "meter",
+          icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
+          text = "Hide the windows per instance type, keys to show / hide and reset, grey bars out of combat, a combat timer, and spell tooltips in a pinned breakdown.",
+          where = "Damage Meter page." },
     },
 }
 

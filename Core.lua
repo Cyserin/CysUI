@@ -527,6 +527,11 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.24", date = "2026-11-17",
+              added = {
+                  "Alerts: short on-screen notes for unspent talent points (after a level up and at login), potion ready again (by default only in a fight), no pet out or a dead pet (Hunter, Warlock) and group members dying. Each has its own switch. Alerts page (Combat Helpers), test with /cuialerts.",
+                  "Mana Tick: a spark on your mana bar for the five-second rule (gold), then once per regen tick (white) until your mana is full. On the player frame, the Resource Bar or both. Druids get a thin mana bar under the player frame while in Bear or Cat Form, with how many shifts are left. Mana Tick page (Combat Helpers).",
+                  "Damage Meter: hide the windows in dungeons, raids, battlegrounds or the open world; a key to show or hide all windows and a key to reset all fights; grey bars out of combat; a small combat timer (move it in Layout mode); spell tooltips in a pinned breakdown. All on the Damage Meter page.",
+              },
               improved = {
                   "Guild Recruiter: right-click Guild on the info bar to open its window (or type /cuirecruit).",
                   "Settings window: a bigger, cleaner look with the Cys crest and a large title banner, a breadcrumb at the bottom showing where you are, and hover highlights in the page list. Related pages are now grouped as tabs (Social, Look, Minimap & Bars, Unit Frames, Damage Meter, Combat Helpers, Handy Extras, Vendor & Bags, Loot, Leveling), so the list is about half as long. Search still finds every setting.",

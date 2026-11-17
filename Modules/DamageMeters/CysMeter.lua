@@ -30,7 +30,8 @@ local Secret = CysUICompat.Secret
 CysUIDB.meter = CysUIDB.meter or {}
 local db = CysUIDB.meter
 local DEFAULTS = { rowH = 18, fontSize = 11, show = "always", hideGame = true, classColors = true, rank = true, rate = 0.5,
-    icons = true, pinMe = true, hover = true, more = false, autoCurrent = true }
+    icons = true, pinMe = true, hover = true, more = false, autoCurrent = true,
+    hideParty = false, hideRaid = false, hidePvP = false, hideWorld = false, greyOOC = false, timer = false }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 -- one entry per window: what it shows and its size. (0.58.10 test builds kept a single window's settings flat.)
 if not db.windows then
@@ -143,6 +144,17 @@ local function BreakRow(i)
     local back = r.bar:CreateTexture(nil, "BACKGROUND")
     back:SetAllPoints()
     back:SetColorTexture(0.16, 0.16, 0.16, 0.6)
+    -- point at a spell (with the breakdown pinned open by a click) for the game's spell tooltip
+    r:EnableMouse(true)
+    r:SetScript("OnEnter", function(self)
+        local id = self.spellID
+        if id == nil or Secret(id) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_NONE")
+        GameTooltip:ClearAllPoints()
+        GameTooltip:SetPoint("BOTTOMLEFT", bd, "TOPLEFT", 0, 4)
+        if pcall(GameTooltip.SetSpellByID, GameTooltip, id) then GameTooltip:Show() else GameTooltip:Hide() end
+    end)
+    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
     r.value = r.bar:CreateFontString(nil, "OVERLAY")
     r.value:SetFont(STANDARD_TEXT_FONT, 11, "")
     r.value:SetPoint("RIGHT", -4, 0)
@@ -163,6 +175,8 @@ local function HideBreakdown(force)
         return
     end
     bd.locked = nil
+    local owner = GameTooltip:GetOwner()
+    if owner and owner.GetParent and owner:GetParent() == bd then GameTooltip:Hide() end
     bd:Hide()
     bd.row = nil
 end
@@ -202,6 +216,7 @@ local function ShowBreakdown(row)
     for i = 1, shown do
         local sp = spells[i]
         local r = BreakRow(i)
+        r.spellID = sp.spellID
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", 8, -26 - (i - 1) * 19)
         r:SetPoint("TOPRIGHT", -8, -26 - (i - 1) * 19)
@@ -383,6 +398,12 @@ function Paint(win)
                 local cc = plainClass and RAID_CLASS_COLORS and RAID_CLASS_COLORS[plainClass]
                 if cc then cr, cg, cb = cc.r, cc.g, cc.b else cr, cg, cb = 0.55, 0.45, 0.35 end -- creatures, pets without a class
             end
+            local grey = db.greyOOC and not InCombatLockdown()
+            if grey then -- out of combat: the bars go grey so a fight stands out
+                local l = cr * 0.3 + cg * 0.59 + cb * 0.11
+                cr, cg, cb = l, l, l
+            end
+            r.icon:SetDesaturated(grey and true or false)
             r.bar:SetStatusBarColor(cr, cg, cb, 0.72)
             -- straight from the game into the bar: locked or not, the bar can show it
             if not pcall(r.bar.SetMinMaxValues, r.bar, 0, session.maxAmount) then r.bar:SetMinMaxValues(0, 1) end
@@ -441,6 +462,7 @@ end
 
 -- repaint at most once per Rate, and not at all while the windows are faded out
 local waiting, dirty, visible = false, false, true
+local keyHidden = false -- hidden with the show / hide key (until it is pressed again or you reload)
 function Queue()
     if not visible or waiting then dirty = true return end
     waiting = true
@@ -456,6 +478,19 @@ function UpdateShown()
     local show = true
     if db.show == "combat" then show = InCombatLockdown() and true or false
     elseif db.show == "group" then show = (IsInGroup and IsInGroup()) and true or false end
+    if show and (db.hideParty or db.hideRaid or db.hidePvP or db.hideWorld) then
+        local inInstance, kind = IsInInstance()
+        if not inInstance or kind == "none" or kind == nil then
+            if db.hideWorld then show = false end
+        elseif kind == "party" then
+            if db.hideParty then show = false end
+        elseif kind == "raid" then
+            if db.hideRaid then show = false end
+        elseif kind == "pvp" or kind == "arena" then
+            if db.hidePvP then show = false end
+        end
+    end
+    if keyHidden then show = false end
     if CUI.layoutMode then show = true end
     visible = show
     for _, win in ipairs(wins) do
@@ -926,15 +961,85 @@ if type(CUI.SetLayoutMode) == "function" then hooksecurefunc(CUI, "SetLayoutMode
 
 for _, cfg in ipairs(db.windows) do CreateWindow(cfg) end
 
+--------------------------------------------------------------------------------
+-- Combat timer: a small clock of the fight that shows only while it runs (and fades a few seconds after)
+--------------------------------------------------------------------------------
+local timer = CreateFrame("Frame", "CysMeterCombatTimer", UIParent)
+timer:SetSize(70, 22)
+timer:SetPoint("CENTER", UIParent, "CENTER", 0, -60)
+timer:SetFrameStrata("MEDIUM")
+W.Texture(timer, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.85 }):SetAllPoints()
+W.Border(timer, 1, T.border, "BORDER")
+timer.text = timer:CreateFontString(nil, "OVERLAY")
+timer.text:SetFont(STANDARD_TEXT_FONT, 13, "OUTLINE")
+timer.text:SetPoint("CENTER")
+timer.text:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+timer.text:SetText("0:00")
+timer:SetAlpha(0)
+CUI:RegisterMovable(timer, "combattimer", "Combat Timer", { point = "CENTER", x = 0, y = -60 })
+local fightStart, fightEnd, tAcc = nil, nil, 0
+local function TimerText(secs)
+    timer.text:SetFormattedText("%d:%02d", math.floor(secs / 60), math.floor(secs % 60))
+end
+timer:SetScript("OnUpdate", function(self, e)
+    tAcc = tAcc + e
+    if tAcc < 0.2 then return end
+    tAcc = 0
+    if CUI.layoutMode then self:SetAlpha(1) return end
+    if not db.timer then self:SetAlpha(0) return end
+    local now = GetTime()
+    if fightStart and not fightEnd then
+        TimerText(now - fightStart)
+        self:SetAlpha(1)
+    elseif fightEnd and now - fightEnd < 5 then
+        self:SetAlpha(math.min(1, 5 - (now - fightEnd)))
+    else
+        self:SetAlpha(0)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- Keys: show / hide all windows, reset all fights (set on the settings page)
+--------------------------------------------------------------------------------
+local keyOwner = CreateFrame("Frame")
+local lastKey = 0
+local function KeyButton(name, fn)
+    local b = CreateFrame("Button", name, UIParent)
+    b:RegisterForClicks("AnyUp", "AnyDown")
+    b:SetScript("OnClick", function() -- a key can arrive as a press and a release: act once
+        if GetTime() - lastKey < 0.3 then return end
+        lastKey = GetTime()
+        fn()
+    end)
+end
+KeyButton("CysMeterToggleButton", function() keyHidden = not keyHidden; UpdateShown() end)
+KeyButton("CysMeterResetButton", function() ResetAll() end)
+local keysPending = false
+local function ApplyKeys()
+    if InCombatLockdown() then keysPending = true return end
+    keysPending = false
+    ClearOverrideBindings(keyOwner)
+    if db.keyToggle and db.keyToggle ~= "" then SetOverrideBindingClick(keyOwner, true, db.keyToggle, "CysMeterToggleButton") end
+    if db.keyReset and db.keyReset ~= "" then SetOverrideBindingClick(keyOwner, true, db.keyReset, "CysMeterResetButton") end
+end
+ApplyKeys()
+
 local ev = CreateFrame("Frame")
 for _, event in ipairs({ "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED", "DAMAGE_METER_RESET",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE" }) do
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA" }) do
     pcall(ev.RegisterEvent, ev, event)
 end
 ev:SetScript("OnEvent", function(_, event)
     if event == "DAMAGE_METER_RESET" then
         for _, win in ipairs(wins) do win.segmentID = nil; win.offset = 0 end
-    elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" or event == "GROUP_ROSTER_UPDATE" then
+    elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" or event == "GROUP_ROSTER_UPDATE"
+        or event == "ZONE_CHANGED_NEW_AREA" then
+        if event == "PLAYER_REGEN_DISABLED" then
+            fightStart, fightEnd = GetTime(), nil
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            if fightStart then fightEnd = GetTime(); TimerText(fightEnd - fightStart) end
+            if keysPending then ApplyKeys() end
+        end
         if event == "PLAYER_REGEN_DISABLED" and db.autoCurrent then -- a new fight: windows looking at an old one come back
             for _, win in ipairs(wins) do
                 if win.segmentID then win.segmentID = nil; win.offset = 0 end
@@ -1009,11 +1114,69 @@ CUI:RegisterPage("Damage Meter", function(page)
         function() return db.rate end, function(v) db.rate = v end):SetPoint("TOPLEFT", 120, y)
     y = y - 40
 
+    local head = W.Text(page, 12, T.accent)
+    head:SetPoint("TOPLEFT", 4, y)
+    head:SetText("Hide the windows")
+    y = y - 22
+    Check("In dungeons", "hideParty")
+    Check("In raids", "hideRaid")
+    Check("In battlegrounds and arenas", "hidePvP")
+    Check("Outside instances (open world)", "hideWorld")
+    y = y - 6
+    Check("Grey bars when you are out of combat", "greyOOC")
+    Check("Combat timer: a small fight clock (box in Layout mode)", "timer")
+    y = y - 10
+
+    local function WithMods(key)
+        local m = ""
+        if IsAltKeyDown() then m = m .. "ALT-" end
+        if IsControlKeyDown() then m = m .. "CTRL-" end
+        if IsShiftKeyDown() then m = m .. "SHIFT-" end
+        return m .. key
+    end
+    local function KeyRow(text, field)
+        local lab = W.Text(page, 12, T.accent)
+        lab:SetPoint("TOPLEFT", 4, y - 4)
+        lab:SetText(text)
+        local bind = W.Button(page, 170, 22, "", true)
+        bind:SetPoint("TOPLEFT", 170, y)
+        local function ShowKey() bind:SetLabel(db[field] and GetBindingText(db[field]) or "Click to set a key") end
+        ShowKey()
+        local clear = W.Button(page, 60, 22, "Clear")
+        clear:SetPoint("LEFT", bind, "RIGHT", 8, 0)
+        clear:SetScript("OnClick", function() db[field] = nil; ApplyKeys(); ShowKey() end)
+        local catcher = CreateFrame("Frame", nil, bind)
+        catcher:SetAllPoints()
+        catcher:Hide()
+        local function Done(key)
+            catcher:Hide()
+            catcher:EnableKeyboard(false)
+            if key then db[field] = key; ApplyKeys() end
+            ShowKey()
+        end
+        catcher:SetScript("OnKeyDown", function(_, key)
+            if key == "ESCAPE" then Done(nil) return end
+            if key:find("SHIFT") or key:find("CTRL") or key:find("ALT") then return end
+            Done(WithMods(key))
+        end)
+        bind:SetScript("OnClick", function()
+            if InCombatLockdown() then return end
+            bind:SetLabel("Press a key... (Esc cancels)")
+            catcher:Show()
+            catcher:EnableKeyboard(true)
+        end)
+        y = y - 30
+    end
+    KeyRow("Show / hide key", "keyToggle")
+    KeyRow("Reset all fights key", "keyReset")
+    y = y - 10
+
     local note = W.Notes(page, 4, y, width, "", {
         { "On the window", "everything about a window is on its title strip. Clicking the title itself also opens what to show." },
         { "More windows", "each window keeps its own choice - damage in one, HPS in another, the overall total in a third. Up to " .. MAX_WINDOWS .. ". Each has its own box in Layout mode." },
         { "Buttons on the strip", "what to show, which fight, this window (rows, width, lock, close), reset all fights (click twice), and + for another window." },
         { "Moving and sizing", "drag a window by its title strip or its background; drag its bottom-right corner to make it wider or longer. The padlock beside the corner fixes it in place. Layout mode still works too." },
+        { "Spell tooltips", "with a breakdown pinned open (click a row), point at a spell for the game's tooltip." },
         { "Spell breakdown", "click a row to keep its breakdown open while you fight; click it again to close. Or just point at a row and that player's spells open beside the window: icon, name, bar and amount, with each spell's share once the fight is over. Your own row works during a fight; for other players the game decides - if it keeps their list locked the panel says so and fills in after the fight." },
         { "Where the numbers come from", "WoW Forever counts everything itself; these windows only show it. Nothing reads a combat log, so it stays light even in a raid." },
         { "The game's own window", "is only faded out. You can also set it to Hidden in the game's Edit Mode." },
