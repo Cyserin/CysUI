@@ -59,16 +59,28 @@ local function OpenMenu()
     ClickBlizz("MainMenuMicroButton")
 end
 
+local function FriendsOurs()
+    return CysUI.Friends and CysUI.Friends.IsActive and CysUI.Friends.IsActive()
+end
+
+local function OpenBags()
+    if _G.CysBagsFrame and CysBags and CysBags.Toggle then CysBags:Toggle() return end
+    if ToggleAllBags then ToggleAllBags() end
+end
+
+-- secure = Blizzard's own micro button to click on WoW Forever. Opening Blizzard windows from addon code
+-- leaves taint in the game's window manager, and then the world map's quest pins get blocked
+-- (SetPassThroughButtons). A secure click on Blizzard's button opens the window the game's own way.
 local buttons = {
-    { text = "Character", func = function() ToggleCharacter("PaperDollFrame") end },
-    { text = "Spells",    func = OpenSpells },
-    { text = "Talents",   func = OpenTalents },
-    { text = "Quests",    func = OpenQuests },
+    { text = "Character", func = function() ToggleCharacter("PaperDollFrame") end, secure = "CharacterMicroButton" },
+    { text = "Spells",    func = OpenSpells,  secure = "SpellbookMicroButton" },
+    { text = "Talents",   func = OpenTalents, secure = "TalentMicroButton" },
+    { text = "Quests",    func = OpenQuests,  secure = "QuestLogMicroButton" },
     { text = "Social",    func = function()
-        if CysUI.Friends and CysUI.Friends.IsActive and CysUI.Friends.IsActive() then CysUI.Friends:Toggle() else ToggleFriendsFrame() end
-    end },
-    { text = "Guild",     func = function() ToggleGuildFrame() end },
-    { text = "Bags",      func = function() ToggleAllBags() end },
+        if FriendsOurs() then CysUI.Friends:Toggle() else ToggleFriendsFrame() end
+    end, secure = "QuickJoinToastButton", unlessOurs = FriendsOurs },
+    { text = "Guild",     func = function() ToggleGuildFrame() end, secure = "GuildMicroButton" },
+    { text = "Bags",      func = OpenBags },
     { text = "Menu",      func = OpenMenu },
 }
 
@@ -88,6 +100,22 @@ local BLIZZ_MICRO = {
 
 function MM:HideBlizzard()
     local seen = {}
+    if CysUICompat and CysUICompat.isForever then
+        -- WoW Forever: alpha and mouse only. Replacing the micro bar's Layout or moving its buttons to another
+        -- parent spreads taint into Edit Mode and the window manager, so Blizzard's bar stays where it is,
+        -- just invisible and unclickable. Our panel clicks its buttons securely.
+        local function Fade(frame)
+            if not frame or seen[frame] then return end
+            seen[frame] = true
+            if frame.SetAlpha then frame:SetAlpha(0) end
+            if frame.EnableMouse then pcall(frame.EnableMouse, frame, false) end
+        end
+        for _, name in ipairs(BLIZZ_MICRO) do Fade(_G[name]) end
+        if type(MICRO_BUTTONS) == "table" then
+            for _, name in ipairs(MICRO_BUTTONS) do Fade(_G[name]) end
+        end
+        return
+    end
     -- Blizzard re-runs the micro bar's Layout whenever a button is moved out of it, and with the buttons
     -- gone that layout compares nil positions and errors. Nobody needs it once the bar is hidden.
     for _, name in ipairs({ "MicroMenu", "MicroMenuContainer", "MicroButtonAndBagsBar" }) do
@@ -124,6 +152,9 @@ function MM.Enable()
     local btns, seps = {}, {}
     -- buttons share the panel's width, so the panel can be resized in layout mode
     local function Relayout()
+        -- the panel holds secure buttons on Forever, so it can't be resized in combat: catch up afterwards
+        if InCombatLockdown() then holder.cysPending = true return end
+        holder.cysPending = nil
         local w, h = holder:GetWidth(), holder:GetHeight()
         local bh = max(h - padding * 2, 8)
         local function Edge(i) return floor((i - 1) * w / numButtons + 0.5) end -- whole pixels: every cell the same, text dead centre
@@ -164,8 +195,30 @@ function MM.Enable()
     bg:SetColorTexture(T.bg[1] or 0.08, T.bg[2] or 0.08, T.bg[3] or 0.08, 0.9)
     if W and W.Border then W.Border(holder, 1, T.border, "OVERLAY") end
 
+    local forever = CysUICompat and CysUICompat.isForever
+    local secureBtns = {}
     for i, info in ipairs(buttons) do
-        local btn = CreateFrame("Button", nil, holder)
+        local blizz = forever and info.secure and _G[info.secure]
+        local btn
+        if blizz then
+            btn = CreateFrame("Button", nil, holder, "SecureActionButtonTemplate")
+            btn:RegisterForClicks("AnyUp")
+            btn:SetAttribute("useOnKeyDown", false)
+            btn:SetAttribute("type", "click")
+            btn:SetAttribute("clickbutton", blizz)
+            btn.cysInfo = info
+            secureBtns[#secureBtns + 1] = btn
+            -- a button that sometimes opens our own window (Social with Cys's Friends on) drops its secure
+            -- click then (set out of combat) and runs ours instead
+            if info.unlessOurs then
+                btn:HookScript("OnClick", function(self)
+                    if self:GetAttribute("type") ~= "click" then pcall(info.func) end
+                end)
+            end
+        else
+            btn = CreateFrame("Button", nil, holder)
+            btn:SetScript("OnClick", info.func)
+        end
         local label = btn:CreateFontString(nil, "OVERLAY")
         label:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
         label:SetText(info.text)
@@ -179,7 +232,6 @@ function MM.Enable()
         hl:Hide()
         btn:SetScript("OnEnter", function() label:SetTextColor(T.accent[1], T.accent[2], T.accent[3], 1); hl:Show() end)
         btn:SetScript("OnLeave", function() label:SetTextColor(1, 1, 1, 1); hl:Hide() end)
-        btn:SetScript("OnClick", info.func)
         btns[i] = btn
 
         -- a thin gold separator to the right of each button except the last
@@ -192,6 +244,21 @@ function MM.Enable()
         end
     end
     Relayout()
+
+    local function SyncSecure()
+        if InCombatLockdown() then return end
+        for _, btn in ipairs(secureBtns) do
+            local ours = btn.cysInfo.unlessOurs and btn.cysInfo.unlessOurs()
+            btn:SetAttribute("type", (not ours) and "click" or nil)
+        end
+    end
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+    ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+    ev:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_ENABLED" and holder.cysPending then Relayout() end
+        C_Timer.After(0, SyncSecure)
+    end)
 end
 
 CUI:RegisterModule({

@@ -100,6 +100,7 @@ DT.guild = {
         end
         if ToggleGuildFrame then ToggleGuildFrame() elseif ToggleFriendsFrame then ToggleFriendsFrame(3) end
     end,
+    secure = "GuildMicroButton",
 }
 
 -- Friends --------------------------------------------------------------------
@@ -150,6 +151,8 @@ DT.friends = {
             ToggleFriendsFrame(1)
         end
     end,
+    secure = "QuickJoinToastButton",
+    unlessOurs = function() return _G.CysFriendsFrame and CUI.Friends and CUI.Friends.Toggle and true end,
 }
 
 -- Durability -----------------------------------------------------------------
@@ -192,6 +195,7 @@ DT.durability = {
         end
     end,
     click = function() if ToggleCharacter then ToggleCharacter("PaperDollFrame") end end,
+    secure = "CharacterMicroButton",
 }
 
 -- Bag slots ------------------------------------------------------------------
@@ -218,7 +222,10 @@ DT.bags = {
         tip:AddDoubleLine("Free", tostring(free), 1, 1, 1, 1, 1, 1)
         tip:AddDoubleLine("Total", tostring(total), 1, 1, 1, 1, 1, 1)
     end,
-    click = function() if ToggleAllBags then ToggleAllBags() end end,
+    click = function()
+        if _G.CysBagsFrame and CysBags and CysBags.Toggle then CysBags:Toggle()
+        elseif ToggleAllBags then ToggleAllBags() end
+    end,
 }
 
 -- Gold -----------------------------------------------------------------------
@@ -309,7 +316,20 @@ end
 local function GetButton(key)
     local b = buttons[key]
     if b then return b end
-    b = CreateFrame("Button", nil, bars[SlotOf(key)] or bars[1])
+    -- WoW Forever: a readout that opens a Blizzard window is a secure click on Blizzard's own micro button
+    -- (left click). Opening Blizzard windows from addon code taints the game's window manager, and the
+    -- world map's quest pins then get blocked (SetPassThroughButtons).
+    local dt0 = DT[key]
+    local blizz = CysUICompat and CysUICompat.isForever and dt0.secure and _G[dt0.secure]
+    if blizz then
+        b = CreateFrame("Button", nil, bars[SlotOf(key)] or bars[1], "SecureActionButtonTemplate")
+        b:SetAttribute("useOnKeyDown", false)
+        b:SetAttribute("type1", "click")
+        b:SetAttribute("clickbutton1", blizz)
+        b.cysSecure = true
+    else
+        b = CreateFrame("Button", nil, bars[SlotOf(key)] or bars[1])
+    end
     b.text = W.Text(b, 11, T.text, "CENTER")
     b.text:SetPoint("CENTER", 0, 0)
     b.text:SetWordWrap(false)
@@ -323,10 +343,12 @@ local function GetButton(key)
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b:SetScript("OnClick", function(_, button)
+    local function Click(self, button)
         local dt = DT[key]
+        if self.cysSecure and button == "LeftButton" and self:GetAttribute("type1") == "click" then return end
         if dt.click then pcall(dt.click, button) end
-    end)
+    end
+    if b.cysSecure then b:HookScript("OnClick", Click) else b:SetScript("OnClick", Click) end
     buttons[key] = b
     return b
 end
@@ -350,7 +372,21 @@ function IB:UpdateItem(key)
     FitText(b)
 end
 
+-- secure readouts with a window of our own (Friends with Cys's Friends on) drop the secure click then
+function IB:SyncSecure()
+    if InCombatLockdown() then return end
+    for key, b in pairs(buttons) do
+        if b.cysSecure then
+            local ours = DT[key].unlessOurs and DT[key].unlessOurs()
+            b:SetAttribute("type1", (not ours) and "click" or nil)
+        end
+    end
+end
+
 function IB:Layout()
+    -- the bars hold secure buttons on Forever, so they can't be laid out in combat: catch up afterwards
+    if InCombatLockdown() then IB.pendingLayout = true return end
+    IB.pendingLayout = nil
     for _, b in pairs(buttons) do b:Hide() end
     for slot = 1, 2 do for _, sep in ipairs(seps[slot]) do sep:Hide() end end
     for slot = 1, 2 do
@@ -383,10 +419,12 @@ function IB:Layout()
             end
         end
     end
+    self:SyncSecure()
 end
 
 function IB:Apply()
     if not bars[1] then return end
+    if InCombatLockdown() then IB.pendingLayout = true return end
     bars[1]:SetShown(DB().shown and #VisibleKeys(1) > 0)
     if bars[2] then bars[2]:SetShown(DB().shown and #VisibleKeys(2) > 0) end
     self:Layout()
@@ -446,6 +484,9 @@ function IB.Enable()
         elseif event == "PLAYER_REGEN_ENABLED" then
             IB.inCombat = false
             IB.lastCombat = GetTime() - (IB.combatStart or GetTime())
+            if IB.pendingLayout then IB:Apply() else IB:SyncSecure() end
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            C_Timer.After(1, function() IB:SyncSecure() end)
         end
         if not AnyShown() then return end
         for _, key in ipairs(readoutEvents[event] or {}) do IB:UpdateItem(key) end

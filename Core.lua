@@ -523,9 +523,16 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.25",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.26",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.26", date = "2026-11-18",
+              fixed = {
+                  "World map: fixed the blocked action error (SetPassThroughButtons) that could still show up when opening the quest log or map. On WoW Forever the Micro Menu, the Info Bar (Guild, Friends, Durability) and the Guild Window button in Cys's Friends now open Blizzard's windows the game's own way, by clicking its hidden micro buttons.",
+                  "Micro Menu: hiding Blizzard's micro buttons on WoW Forever no longer changes Blizzard's micro bar. The buttons stay in place, just invisible and unclickable.",
+                  "Micro Menu and Info Bar: the Bags button opens Cys's Bags directly.",
+              },
+            },
             { version = "0.58.25", date = "2026-11-17",
               added = {
                   "Cys's Bags: the item level now shows in the top-left corner of gear (in its rarity color), and Bind on Equip gear gets a small gold BoE tag in the bottom-left corner. Both have a switch on the Automation page.",

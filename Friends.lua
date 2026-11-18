@@ -1165,6 +1165,58 @@ local function Build()
     footM:SetPoint("BOTTOM", f, "BOTTOM", 0, 12)
     footM:SetScript("OnClick", OpenGuildWindow)
     footM:Hide()
+    if CysUICompat and CysUICompat.isForever and _G.GuildMicroButton then
+        -- WoW Forever: opening Blizzard's guild window from addon code taints the game's window manager (the
+        -- world map's quest pins then get blocked). A secure click on Blizzard's Guild micro button sits over
+        -- this button instead. It belongs to UIParent, so this window stays free to open and move in combat,
+        -- and it steps away in combat (the button then says so).
+        local px = CreateFrame("Button", "CysFriendsGuildProxy", UIParent, "SecureActionButtonTemplate, SecureHandlerStateTemplate")
+        px:RegisterForClicks("AnyUp")
+        px:SetAttribute("useOnKeyDown", false)
+        px:SetAttribute("type", "click")
+        px:SetAttribute("clickbutton", _G.GuildMicroButton)
+        px:SetAttribute("_onstate-combat", [[ if newstate == "1" then self:Hide() end ]])
+        RegisterStateDriver(px, "combat", "[combat] 1; 0")
+        px:Hide()
+        px:SetScript("OnEnter", function() local h = footM:GetScript("OnEnter"); if h then pcall(h, footM) end end)
+        px:SetScript("OnLeave", function() local h = footM:GetScript("OnLeave"); if h then pcall(h, footM) end end)
+        local lastX, lastY
+        local function Place()
+            if InCombatLockdown() then return end
+            local x, y = footM:GetLeft(), footM:GetBottom()
+            if f:IsShown() and footM:IsShown() and x and y then
+                local s = footM:GetEffectiveScale() / UIParent:GetEffectiveScale()
+                px:ClearAllPoints()
+                px:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x * s, y * s)
+                px:SetSize(footM:GetWidth() * s, footM:GetHeight() * s)
+                px:SetFrameStrata(f:GetFrameStrata())
+                px:SetFrameLevel(footM:GetFrameLevel() + 5)
+                px:Show()
+                lastX, lastY = x, y
+            else
+                px:Hide()
+                lastX, lastY = nil, nil
+            end
+        end
+        footM:HookScript("OnShow", Place)
+        footM:HookScript("OnHide", Place)
+        f:HookScript("OnShow", Place)
+        f:HookScript("OnHide", Place)
+        -- the window can be dragged: follow it (cheap, only while shown and out of combat)
+        local wait = 0
+        f:HookScript("OnUpdate", function(_, elapsed)
+            wait = wait + elapsed
+            if wait < 0.2 or InCombatLockdown() then return end
+            wait = 0
+            if footM:IsShown() and (footM:GetLeft() ~= lastX or footM:GetBottom() ~= lastY or not px:IsShown()) then Place() end
+        end)
+        local ev = CreateFrame("Frame")
+        ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+        ev:SetScript("OnEvent", Place)
+        footM:SetScript("OnClick", function()
+            CUI:Print("The guild window opens from here after combat (or use your guild key).")
+        end)
+    end
     footR = W.Button(f, 100, 24, "Whisper")
     footR:SetPoint("BOTTOMLEFT", f, "BOTTOM", 3, 12)
     footR:SetPoint("BOTTOMRIGHT", -10, 12)
