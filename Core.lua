@@ -532,6 +532,7 @@ if CysChangelog then
               },
               fixed = {
                   "Talent Planner: View Talents on another player now shows their talents. The planner and its button step aside while the talents window shows someone else.",
+                  "Cooldown Manager: trinkets and other items with a Use: effect now show the item's own icon and its cooldown (they showed a cogwheel with no timer). Items can also be added by their item ID.",
               },
             },
             { version = "0.58.24", date = "2026-11-17",

@@ -255,6 +255,65 @@ local function CurrentStance()
     return StanceKey(i)
 end
 
+-- Item use effects (trinkets, other on-use gear, bag items). Their spell carries a stand-in icon (often a
+-- cogwheel) and no cooldown of its own: the cooldown sits on the item. So a spell that is the use effect of an
+-- item you carry shows that item's icon and the item's cooldown instead. Equipped items win over bag items.
+local itemBySpell, itemsDirty = {}, true
+local function ItemSpell(itemID)
+    if type(itemID) ~= "number" or not (C_Item and C_Item.GetItemSpell) then return end
+    local ok, _, spell = pcall(C_Item.GetItemSpell, itemID)
+    if ok and type(spell) == "number" and not Secret(spell) then return spell end
+end
+local function ScanItems()
+    itemsDirty = false
+    wipe(itemBySpell)
+    for slot = 1, 19 do
+        local ok, id = pcall(GetInventoryItemID, "player", slot)
+        local spell = ok and ItemSpell(id)
+        if spell and not itemBySpell[spell] then itemBySpell[spell] = id end
+    end
+    if C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemID then
+        for bag = 0, 4 do
+            local ok, n = pcall(C_Container.GetContainerNumSlots, bag)
+            for slot = 1, (ok and type(n) == "number" and n) or 0 do
+                local ok2, id = pcall(C_Container.GetContainerItemID, bag, slot)
+                local spell = ok2 and ItemSpell(id)
+                if spell and not itemBySpell[spell] then itemBySpell[spell] = id end
+            end
+        end
+    end
+    db.itemOf = db.itemOf or {} -- remembered, so an item you are not carrying still shows its own icon
+    for spell, id in pairs(itemBySpell) do db.itemOf[spell] = id end
+end
+local function ItemOf(e)
+    if not e then return end
+    if itemsDirty then ScanItems() end
+    local mem = db.itemOf or {}
+    return itemBySpell[e.spell] or itemBySpell[e.base] or mem[e.spell] or mem[e.base]
+end
+local function EntryIcon(e)
+    local item = ItemOf(e)
+    local icon = item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
+    return icon or C_Spell.GetSpellTexture(e.spell)
+end
+local function EntryName(e)
+    local item = ItemOf(e)
+    local name = item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
+    return name or C_Spell.GetSpellName(e.spell)
+end
+local function ItemCooldown(item)
+    local fn = (C_Container and C_Container.GetItemCooldown) or (C_Item and C_Item.GetItemCooldown) or GetItemCooldown
+    if not fn then return end
+    local ok, start, dur = pcall(fn, item)
+    if ok and type(start) == "number" and type(dur) == "number" and not Secret(start) and not Secret(dur) then return start, dur end
+end
+local function ItemCount(item)
+    local fn = (C_Item and C_Item.GetItemCount) or GetItemCount
+    local ok, n = pcall(fn, item)
+    if ok and type(n) == "number" and not Secret(n) then return n end
+    return 0
+end
+
 local function MakeIcon(bar)
     local f = CreateFrame("Frame", nil, bar.holder)
     f.back = f:CreateTexture(nil, "BACKGROUND")
@@ -290,7 +349,9 @@ local function MakeIcon(bar)
     f:SetScript("OnEnter", function(self)
         if not (db.tips and self.entry) then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if GameTooltip.SetSpellByID then pcall(GameTooltip.SetSpellByID, GameTooltip, self.entry.spell) end
+        local item = ItemOf(self.entry)
+        if item and GameTooltip.SetItemByID then pcall(GameTooltip.SetItemByID, GameTooltip, item)
+        elseif GameTooltip.SetSpellByID then pcall(GameTooltip.SetSpellByID, GameTooltip, self.entry.spell) end
         GameTooltip:Show()
     end)
     f:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -318,9 +379,28 @@ end
 
 -- one icon's picture, cooldown, count and usable tint. Every game answer that could be locked goes straight
 -- into a widget (or through pcall); none is compared or used in math here.
+-- an item's use effect: the item's icon, the item's cooldown (plain numbers, never locked), how many you carry
+local function UpdateItemIcon(f, e, item)
+    local icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
+    if icon then f.tex:SetTexture(icon) end
+    local start, dur = ItemCooldown(item)
+    local running = start and start > 0 and dur > 0
+    local real = running and dur > 1.5 -- longer than a global cooldown
+    if running and (real or db.gcd) then f.cd:SetCooldown(start, dur) else f.cd:Clear() end
+    f.tex:SetDesaturation((db.grey and real) and 1 or 0)
+    local n = ItemCount(item)
+    f.count:SetText(n > 1 and n or "")
+    if n == 0 then f.tex:SetVertexColor(0.45, 0.45, 0.45) else f.tex:SetVertexColor(1, 1, 1) end
+    if f.midAura then
+        if real then pcall(f.num.SetCooldown, f.num, start, dur) else pcall(f.num.Clear, f.num) end
+    end
+end
+
 local function UpdateIcon(f)
     local e = f.entry
     if not e then return end
+    local item = ItemOf(e)
+    if item then return UpdateItemIcon(f, e, item) end
     local spell = e.spell
     local tex = C_Spell.GetSpellTexture(spell)
     if tex then f.tex:SetTexture(tex) end
@@ -665,6 +745,7 @@ local function Compose()
                 local ok, k = pcall(IsSpellKnownOrOverridesKnown, id)
                 if ok and not Secret(k) and k then known = true end
             end
+            if not known and ItemOf({ spell = id, base = id }) then known = true end -- a trinket's / item's use effect
             local charges = false
             if C_Spell.GetSpellCharges then
                 local ok, c = pcall(C_Spell.GetSpellCharges, id)
@@ -769,9 +850,18 @@ end
 -- a spell of your own choosing, by its ID: remembered per class (layout[CLASS].extra) and from then on offered
 -- like the spells the game tracks. Returns the entry, or nil and why not.
 function AddExtra(id)
-    if type(id) ~= "number" or id <= 0 then return nil, "type a spell ID (a number) first." end
+    if type(id) ~= "number" or id <= 0 then return nil, "type a spell or item ID (a number) first." end
+    -- an item ID (a trinket, other on-use gear, a potion): its use effect goes on the bar, shown as the item.
+    -- When the number is also a spell, the item wins only if you carry it.
+    local useSpell = ItemSpell(id)
+    if useSpell and (not C_Spell.GetSpellName(id) or ItemCount(id) > 0) then
+        db.itemOf = db.itemOf or {}
+        db.itemOf[useSpell] = id
+        itemsDirty = true
+        id = useSpell
+    end
     local name = C_Spell.GetSpellName(id)
-    if not name then return nil, "there is no spell with ID " .. id .. "." end
+    if not name then return nil, "there is no spell or usable item with ID " .. id .. " (an item has to be in your bags or worn)." end
     if not universe[id] then
         mine.extra = mine.extra or {}
         mine.extra[#mine.extra + 1] = id
@@ -906,7 +996,8 @@ local function StartOwn()
     local oe = CreateFrame("Frame")
     for _, event in ipairs({ "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES", "SPELL_UPDATE_USABLE", "PLAYER_REGEN_ENABLED",
         "PLAYER_REGEN_DISABLED", "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
-        "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED", "COOLDOWN_VIEWER_DATA_LOADED", "SPELL_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED" }) do
+        "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED", "COOLDOWN_VIEWER_DATA_LOADED", "SPELL_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED",
+        "BAG_UPDATE_COOLDOWN", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED" }) do
         pcall(oe.RegisterEvent, oe, event)
     end
     oe:SetScript("OnEvent", function(_, event, spellID, inRange, checksRange)
@@ -915,6 +1006,14 @@ local function StartOwn()
                 outOfRange[spellID] = (checksRange == true and inRange == false) or nil
                 QueueUpdate()
             end
+        elseif event == "BAG_UPDATE_COOLDOWN" then
+            QueueUpdate()
+        elseif event == "BAG_UPDATE_DELAYED" then
+            itemsDirty = true
+            QueueUpdate()
+        elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+            itemsDirty = true
+            QueueSync() -- a newly worn trinket may make an item on your bars usable
         elseif event == "PLAYER_TARGET_CHANGED" then
             RecheckRange()
             RefreshTargetAuras()
@@ -1320,7 +1419,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         local e = waiting or bar.list[index]
         if not e then return end
         ClearMenu()
-        menu.title:SetText(C_Spell.GetSpellName(e.spell) or "Spell")
+        menu.title:SetText(EntryName(e) or "Spell")
         local my = -30
         local forms = Forms()
         if #forms > 0 then
@@ -1390,7 +1489,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             local e = self.entry
             if not e then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(C_Spell.GetSpellName(e.spell) or "Spell", 1, 1, 1)
+            GameTooltip:SetText(EntryName(e) or "Spell", 1, 1, 1)
             if e.extra then GameTooltip:AddLine("Added by ID " .. e.base .. ". Right-click to forget it.", 0.8, 0.8, 0.8) end
             if e.known then
                 GameTooltip:AddLine("Click to add it to this bar.", T.accent[1], T.accent[2], T.accent[3])
@@ -1424,7 +1523,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             b.entry = e
             b:ClearAllPoints()
             b:SetPoint("TOPLEFT", 8 + ((i - 1) % COLS) * 33, my - math.floor((i - 1) / COLS) * 33)
-            b.tex:SetTexture(C_Spell.GetSpellTexture(e.spell))
+            b.tex:SetTexture(EntryIcon(e))
             b.tex:SetDesaturated(not e.known)
             b.tex:SetAlpha(e.known and 1 or 0.55)
             b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -1450,7 +1549,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             row:SetSize(200, 42)
             row.label = W.Text(row, 11, T.accent)
             row.label:SetPoint("TOPLEFT", 0, 0)
-            row.label:SetText("Another spell, by its ID")
+            row.label:SetText("Another spell or item, by its ID")
             row.box = CreateFrame("EditBox", nil, row)
             row.box:SetSize(122, 20)
             row.box:SetPoint("TOPLEFT", 0, -18)
@@ -1468,9 +1567,10 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             row.box:SetScript("OnEnterPressed", function() row.add:Click() end)
             row.box:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Add a spell by its ID", 1, 1, 1)
+                GameTooltip:SetText("Add a spell or item by its ID", 1, 1, 1)
                 GameTooltip:AddLine("For spells the game's list leaves out, such as racials. The ID is the number at the end of the spell's Wowhead address.", T.accent[1], T.accent[2], T.accent[3], true)
                 GameTooltip:AddLine("With spell ranks, each rank has its own ID: use the rank you cast.", 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine("Trinkets and other items with a Use: effect work too - type the item's ID (from its Wowhead address) while you carry it. It shows with the item's icon and cooldown.", 0.8, 0.8, 0.8, true)
                 GameTooltip:Show()
             end)
             row.box:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1487,7 +1587,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
                 for _, id in ipairs(mine[def.key] or {}) do if id == e.base then placed = true end end
             end
             if placed then
-                CUI:Print("Cooldown Manager: " .. (C_Spell.GetSpellName(e.spell) or "that spell") .. " is already on one of your bars.")
+                CUI:Print("Cooldown Manager: " .. (EntryName(e) or "that spell") .. " is already on one of your bars.")
             else
                 AddSpell(bar, e)
             end
@@ -1539,7 +1639,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             local e = self.waiting or (self.bar and self.bar.list[self.index])
             if not e or held then return end
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(C_Spell.GetSpellName(e.spell) or "Spell", 1, 1, 1)
+            GameTooltip:SetText(EntryName(e) or "Spell", 1, 1, 1)
             if self.waiting then
                 GameTooltip:AddLine("Not learned yet: it shows on the bar once you learn it. Click for options.", T.accent[1], T.accent[2], T.accent[3], true)
             else
@@ -1722,7 +1822,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
                 b.tex:SetDesaturated(false)
                 b:ClearAllPoints()
                 b:SetPoint("TOPLEFT", ((i - 1) % PER) * (BOX + BGAP), -math.floor((i - 1) / PER) * (BOX + BGAP))
-                b.tex:SetTexture(C_Spell.GetSpellTexture(e.spell))
+                b.tex:SetTexture(EntryIcon(e))
                 b.mark:SetShown(HasRule(e) and true or false)
                 local isHeld = held and held.bar == bar and held.index == i
                 W.SetBorder(b.edges, isHeld and T.glow or T.line)
@@ -1736,7 +1836,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
                 b.bar, b.index, b.waiting = bar, nil, e
                 b:ClearAllPoints()
                 b:SetPoint("TOPLEFT", ((i - 1) % PER) * (BOX + BGAP), -math.floor((i - 1) / PER) * (BOX + BGAP))
-                b.tex:SetTexture(C_Spell.GetSpellTexture(e.spell))
+                b.tex:SetTexture(EntryIcon(e))
                 b.tex:SetDesaturated(true)
                 b.tex:SetAlpha(0.5)
                 b.mark:SetShown(HasRule(e) and true or false)
