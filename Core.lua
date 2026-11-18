@@ -529,10 +529,12 @@ if CysChangelog then
             { version = "0.58.25", date = "2026-11-17",
               added = {
                   "Cys's Bags: the item level now shows in the top-left corner of gear (in its rarity color), and Bind on Equip gear gets a small gold BoE tag in the bottom-left corner. Both have a switch on the Automation page.",
+                  "Cys's Bags: sorting now also fills the reagent bag. Partial reagent stacks get topped up and empty reagent slots get crafting reagents from your other bags (switch on the Automation page).",
               },
               fixed = {
                   "Talent Planner: View Talents on another player now shows their talents. The planner and its button step aside while the talents window shows someone else.",
                   "Cooldown Manager: trinkets and other items with a Use: effect now show the item's own icon and its cooldown (they showed a cogwheel with no timer). Items can also be added by their item ID.",
+                  "World map: fixed a blocked action error (SetPassThroughButtons) when opening the map. Cys's UI no longer opens or closes Blizzard windows from its own code there: the minimap zone bar opens the map the game's own way, and clicking a quest in the Quest Tracker now focuses it (open the map with M to see it).",
               },
             },
             { version = "0.58.24", date = "2026-11-17",

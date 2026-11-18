@@ -1276,7 +1276,9 @@ do
         return string.format("|cff%02x%02x%02xCys's|r UI", c[1] * 255, c[2] * 255, c[3] * 255)
     end
     local function OpenFromMenu()
-        if GameMenuFrame and GameMenuFrame:IsShown() then HideUIPanel(GameMenuFrame) end
+        -- a plain Hide: HideUIPanel from addon code taints Blizzard's window manager (on WoW Forever the map's
+        -- quest pins then get blocked the next time it opens)
+        if GameMenuFrame and GameMenuFrame:IsShown() then GameMenuFrame:Hide() end
         CUI:OpenConfig()
     end
     local done

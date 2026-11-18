@@ -750,6 +750,8 @@ local function UpdateEmptyButton(btn)
     btn.cysIcon:SetDesaturated(false)
     btn.cysCount:SetText("")
     btn.cysCount:Hide()
+    if btn.cysILvl then btn.cysILvl:Hide() end -- an empty slot keeps nothing from the item that left it
+    if btn.cysBoE then btn.cysBoE:Hide() end
     ShowBorder(btn.cysQuality, false)
     btn:SetAlpha((CysBags.search or "") == "" and 1 or 0.25)
     UpdateButtonCooldown(btn)
@@ -1502,6 +1504,76 @@ local function SnapshotSortSlots()
     return pos, cur, n, anyLocked
 end
 
+-- WoW Forever reagent bag: before sorting, fill it from the ordinary bags. First top up its partial stacks,
+-- then put crafting reagents into its empty slots. An item the bag refuses bounces back to where it came from
+-- and is not tried again in this sort.
+local REAGENT_BAG = LAST_BAG > LAST_NORMAL_BAG and LAST_BAG or nil
+
+local function IsReagent(link)
+    local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    local ok, r = pcall(function() return select(17, fn(link)) end)
+    return ok and r == true
+end
+
+local function MaxStack(link)
+    local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    local ok, n = pcall(function() return select(8, fn(link)) end)
+    return ok and type(n) == "number" and n or nil
+end
+
+-- one move into the reagent bag, or nil when there is nothing (more) to move
+local function ReagentStep(pos, cur, n)
+    local rbag = REAGENT_BAG
+    if not rbag or not Opt("bagSortReagent") then return end
+    local rslots = GetNumSlots(rbag) or 0
+    if rslots == 0 then return end
+    sorter.noReagent = sorter.noReagent or {}
+    -- a reagent move from last tick that left the item where it was: the bag refused it
+    local t = sorter.reagentTry
+    if t then
+        sorter.reagentTry = nil
+        local _, _, _, _, _, id = GetSlotItem(t[1], t[2])
+        if id == t[3] then sorter.noReagent[t[3]] = true end
+    end
+    local function From(itemID, wantReagent)
+        for i = 1, n do
+            local e = cur[i]
+            if e and not e.isQuest and not sorter.noReagent[e.itemID]
+                and ((itemID and e.itemID == itemID) or (not itemID and wantReagent and IsReagent(e.link))) then
+                return pos[i], e
+            end
+        end
+    end
+    local function Move(src, e, bag, slot)
+        PickupItem(src[1], src[2])
+        PickupItem(bag, slot)
+        sorter.returnTo = src -- an overflow or a refused item goes back
+        sorter.reagentTry = { src[1], src[2], e.itemID }
+        sorter.moves = sorter.moves + 1
+        return true
+    end
+    -- 1) top up partial stacks already in the reagent bag
+    local empty
+    for slot = 1, rslots do
+        local _, count, locked, _, link, itemID = GetSlotItem(rbag, slot)
+        if locked then return true end -- still settling: wait
+        if link then
+            local max = MaxStack(link)
+            if max and (count or 1) < max and not sorter.noReagent[itemID] then
+                local src, e = From(itemID)
+                if src then return Move(src, e, rbag, slot) end
+            end
+        elseif not empty then
+            empty = slot
+        end
+    end
+    -- 2) a crafting reagent from the ordinary bags into the first empty slot
+    if empty then
+        local src, e = From(nil, true)
+        if src then return Move(src, e, rbag, empty) end
+    end
+end
+
 -- Gives up if the exact same move keeps failing (e.g. an item that refuses to move).
 local function Attempt(signature)
     if signature == sorter.lastSig then
@@ -1534,6 +1606,9 @@ local function SortStep()
         StopSort("Sort stopped (too many moves).")
         return
     end
+
+    -- 0) fill the reagent bag (WoW Forever)
+    if ReagentStep(pos, cur, n) then return end
 
     -- 1) merge partial stacks of the same item
     local firstPartial = {}
@@ -1622,6 +1697,7 @@ function CysBags:ToggleSort()
     end
     sorter.running = true
     sorter.moves, sorter.same, sorter.lastSig, sorter.returnTo, sorter.elapsed = 0, 0, nil, nil, 0
+    sorter.noReagent, sorter.reagentTry = {}, nil
     if CysBags.sortBtn then CysBags.sortBtn.icon:SetVertexColor(1, 0.35, 0.35) end -- red while sorting: click again to stop
     sorter:Show()
 end

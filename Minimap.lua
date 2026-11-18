@@ -244,7 +244,7 @@ end
 function MM:Apply()
     local db = DB()
     self:ApplyClock()
-    if zoneBar then zoneBar:SetShown(db.zoneText and true or false) end
+    if zoneBar and not (zoneBar.cysSecure and InCombatLockdown()) then zoneBar:SetShown(db.zoneText and true or false) end
     if coordsText then coordsText:SetShown(db.coords and true or false) end
     self:UpdateZone()
     self:UpdateCoords()
@@ -383,7 +383,20 @@ function MM.Enable()
 
     -- zone bar above the map
     Step("zone bar", function()
-        zoneBar = CreateFrame("Button", nil, holder)
+        -- WoW Forever: opening the map from addon code taints Blizzard's window manager (the map's quest pins
+        -- then get blocked with SetPassThroughButtons). So the bar is a secure button that clicks Blizzard's own
+        -- (hidden) zone text button, which opens the map the game's own way.
+        local blizz = CUI.isForever and MinimapCluster and MinimapCluster.ZoneTextButton
+        if blizz then
+            zoneBar = CreateFrame("Button", "CysUIZoneBar", holder, "SecureActionButtonTemplate")
+            zoneBar.cysSecure = true
+            zoneBar:RegisterForClicks("AnyUp")
+            zoneBar:SetAttribute("useOnKeyDown", false)
+            zoneBar:SetAttribute("type", "click")
+            zoneBar:SetAttribute("clickbutton", blizz)
+        else
+            zoneBar = CreateFrame("Button", nil, holder)
+        end
         zoneBar:SetHeight(20)
         zoneBar:SetPoint("BOTTOMLEFT", holder, "TOPLEFT", 0, 3)
         zoneBar:SetPoint("BOTTOMRIGHT", holder, "TOPRIGHT", 0, 3)
@@ -395,7 +408,7 @@ function MM.Enable()
         zoneBar.text = W.Text(zoneBar, 11, T.accent, "CENTER")
         zoneBar.text:SetPoint("CENTER", 0, 0)
         zoneBar.text:SetWidth(size - 8)
-        zoneBar:SetScript("OnClick", function() if ToggleWorldMap then ToggleWorldMap() end end)
+        if not zoneBar.cysSecure then zoneBar:SetScript("OnClick", function() if ToggleWorldMap then ToggleWorldMap() end end) end
     end)
 
     -- right-click: tracking menu (left-click still pings)

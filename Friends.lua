@@ -1188,7 +1188,7 @@ local function Build()
         acc = acc + dt
         if whoSuppress then
             if GetTime() > whoSuppress then whoSuppress = nil
-            elseif FriendsFrame and FriendsFrame:IsShown() then pcall(HideUIPanel, FriendsFrame) end
+            elseif FriendsFrame and FriendsFrame:IsShown() then pcall(FriendsFrame.Hide, FriendsFrame) end -- not HideUIPanel: taints the window manager
         end
         if dirty and acc > 0.2 then dirty = false; acc = 0; Rebuild() end
     end)

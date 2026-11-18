@@ -41,6 +41,7 @@ local DEFAULTS = {
     bagPlusSlots = true,     -- Cys's Bags: a "+" drop slot at the end of each category
     bagItemLevel = true,     -- Cys's Bags: item level in the corner of gear
     bagBoEText = true,       -- Cys's Bags: small BoE tag on Bind on Equip gear
+    bagSortReagent = true,   -- Cys's Bags: sorting also fills the reagent bag (WoW Forever)
     trainAll = true,         -- a Train all button on trainer windows (nothing is bought until you click it)
     openContainers = true,   -- open clams, sacks and other openable bag items (Classic Era)
     autoResurrect = false,   -- accept a resurrection, unless the caster is still in a fight
@@ -811,6 +812,9 @@ CUI:RegisterPage("Automation", function(page)
     Check("Cys's Bags: + drop slot at the end of each category", "bagPlusSlots"):HookScript("OnClick", BagsRefresh)
     Check("Cys's Bags: item level in the corner of gear", "bagItemLevel"):HookScript("OnClick", BagsRefresh)
     Check("Cys's Bags: small BoE tag on Bind on Equip gear", "bagBoEText"):HookScript("OnClick", BagsRefresh)
+    if CysUICompat and CysUICompat.isForever then
+        Check("Cys's Bags: sorting also fills the reagent bag", "bagSortReagent")
+    end
     Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
     local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
     fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)

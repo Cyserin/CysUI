@@ -370,13 +370,18 @@ local function IsWatched(questID)
     return ok and t ~= nil
 end
 
+-- WoW Forever: opening the map from addon code taints Blizzard's window manager, and the next time the map
+-- opens its quest pins are blocked (SetPassThroughButtons). There a click focuses the quest and selects it in
+-- the quest log instead; the map (M) then shows it.
 local function OpenOnMap(questID)
-    if InCombatLockdown() or type(QuestMapFrame_OpenToQuestDetails) ~= "function" then
-        C_SuperTrack.SetSuperTrackedQuestID(questID) -- in combat: focus it instead (the map can't open then)
+    if (CysUICompat and CysUICompat.isForever) or InCombatLockdown() or type(QuestMapFrame_OpenToQuestDetails) ~= "function" then
+        C_SuperTrack.SetSuperTrackedQuestID(questID)
+        if C_QuestLog.SetSelectedQuest then pcall(C_QuestLog.SetSelectedQuest, questID) end
         return
     end
     QuestMapFrame_OpenToQuestDetails(questID)
 end
+local FOREVER = CysUICompat and CysUICompat.isForever
 
 local function Share(questID)
     if QuestUtil and QuestUtil.ShareQuest then QuestUtil.ShareQuest(questID); return end
@@ -403,7 +408,7 @@ OnQuestClick = function(row, button)
         else
             root:CreateButton("Stop focusing", function() C_SuperTrack.SetSuperTrackedQuestID(0) end)
         end
-        root:CreateButton("Show in the quest log", function() OpenOnMap(id) end)
+        if not FOREVER then root:CreateButton("Show in the quest log", function() OpenOnMap(id) end) end
         if IsWatched(id) then
             root:CreateButton("Stop tracking", function() C_QuestLog.RemoveQuestWatch(id) end)
         else
@@ -426,7 +431,7 @@ OnQuestEnter = function(row)
     GameTooltip:SetText(C_QuestLog.GetTitleForQuestID(id) or "", 1, 0.82, 0)
     if row.zone then GameTooltip:AddLine(row.zone, 0.7, 0.7, 0.7) end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Click: show in the quest log", 1, 1, 1)
+    GameTooltip:AddLine(FOREVER and "Click: focus this quest" or "Click: show in the quest log", 1, 1, 1)
     GameTooltip:AddLine("Shift-click: " .. (IsWatched(id) and "stop tracking" or "track"), 1, 1, 1)
     GameTooltip:AddLine("Right-click: more", 1, 1, 1)
     GameTooltip:Show()
