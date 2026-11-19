@@ -478,6 +478,25 @@ local function LayoutBar(bar)
     local cols = math.min(max(shown, 1), perRow)
     local rows = max(1, math.ceil(shown / perRow))
     local w = cols * size + (cols - 1) * gap
+    -- the widest this bar gets in any of your stances / forms: the player and target frames keep clear of that
+    -- width, since they can't slide aside in a fight when a stance swap makes the bar wider
+    local most = shown
+    local nForms = GetNumShapeshiftForms and GetNumShapeshiftForms()
+    if type(nForms) == "number" and not Secret(nForms) and nForms > 0 then
+        local keys = {}
+        if select(2, UnitClass("player")) ~= "WARRIOR" then keys[1] = 0 end -- warriors are always in a stance
+        for i = 1, nForms do keys[#keys + 1] = StanceKey(i) end
+        for _, k in ipairs(keys) do
+            local n = 0
+            for _, e in ipairs(bar.list) do
+                local hide = db.stanceHide[e.base]
+                if not (hide and hide[k]) then n = n + 1 end
+            end
+            if n > most then most = n end
+        end
+    end
+    local mostCols = math.min(max(most, 1), perRow)
+    bar.holder.cysMaxW = max(w, mostCols * size + (mostCols - 1) * gap)
     bar.holder:SetSize(w, rows * size + (rows - 1) * gap)
     for i = 1, shown do
         local f = bar.icons[i]

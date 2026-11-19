@@ -371,11 +371,14 @@ local function IsWatched(questID)
 end
 
 -- WoW Forever: opening the map from addon code taints Blizzard's window manager, and the next time the map
--- opens its quest pins are blocked (SetPassThroughButtons). There a click focuses the quest and selects it in
--- the quest log instead; the map (M) then shows it.
+-- opens its quest pins are blocked (SetPassThroughButtons). Changing the focused (super-tracked) quest or the
+-- watch list from addon code does the same: SUPER_TRACKING_CHANGED / QUEST_WATCH_LIST_CHANGED fire inside our
+-- call and the map refreshes its pins tainted (it keeps listening for focus changes even while closed).
+-- So on Forever a click only selects the quest in the quest log; the map (M) then shows it. Focus and
+-- track / untrack are done in Blizzard's quest log or map.
 local function OpenOnMap(questID)
     if (CysUICompat and CysUICompat.isForever) or InCombatLockdown() or type(QuestMapFrame_OpenToQuestDetails) ~= "function" then
-        C_SuperTrack.SetSuperTrackedQuestID(questID)
+        if not (CysUICompat and CysUICompat.isForever) then C_SuperTrack.SetSuperTrackedQuestID(questID) end
         if C_QuestLog.SetSelectedQuest then pcall(C_QuestLog.SetSelectedQuest, questID) end
         return
     end
@@ -394,6 +397,7 @@ OnQuestClick = function(row, button)
     if button == "LeftButton" then
         if ChatFrameUtil and ChatFrameUtil.TryInsertQuestLinkForQuestID and ChatFrameUtil.TryInsertQuestLinkForQuestID(id) then return end
         if IsShiftKeyDown() then
+            if FOREVER then return end
             if IsWatched(id) then C_QuestLog.RemoveQuestWatch(id) else C_QuestLog.AddQuestWatch(id) end
             return
         end
@@ -403,13 +407,17 @@ OnQuestClick = function(row, button)
     if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
     MenuUtil.CreateContextMenu(row, function(_, root)
         root:CreateTitle(C_QuestLog.GetTitleForQuestID(id) or "")
-        if C_SuperTrack.GetSuperTrackedQuestID() ~= id then
+        if FOREVER then
+            -- focus / track changes from addon code block the map's quest pins on Forever (see OpenOnMap)
+        elseif C_SuperTrack.GetSuperTrackedQuestID() ~= id then
             root:CreateButton("Focus this quest", function() C_SuperTrack.SetSuperTrackedQuestID(id) end)
         else
             root:CreateButton("Stop focusing", function() C_SuperTrack.SetSuperTrackedQuestID(0) end)
         end
         if not FOREVER then root:CreateButton("Show in the quest log", function() OpenOnMap(id) end) end
-        if IsWatched(id) then
+        if FOREVER then
+            -- see above
+        elseif IsWatched(id) then
             root:CreateButton("Stop tracking", function() C_QuestLog.RemoveQuestWatch(id) end)
         else
             root:CreateButton("Track", function() C_QuestLog.AddQuestWatch(id) end)
@@ -431,8 +439,13 @@ OnQuestEnter = function(row)
     GameTooltip:SetText(C_QuestLog.GetTitleForQuestID(id) or "", 1, 0.82, 0)
     if row.zone then GameTooltip:AddLine(row.zone, 0.7, 0.7, 0.7) end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine(FOREVER and "Click: focus this quest" or "Click: show in the quest log", 1, 1, 1)
-    GameTooltip:AddLine("Shift-click: " .. (IsWatched(id) and "stop tracking" or "track"), 1, 1, 1)
+    if FOREVER then
+        GameTooltip:AddLine("Click: select it in the quest log (M shows it on the map)", 1, 1, 1)
+        GameTooltip:AddLine("Focus or stop tracking it from the quest log or map.", 0.7, 0.7, 0.7, true)
+    else
+        GameTooltip:AddLine("Click: show in the quest log", 1, 1, 1)
+        GameTooltip:AddLine("Shift-click: " .. (IsWatched(id) and "stop tracking" or "track"), 1, 1, 1)
+    end
     GameTooltip:AddLine("Right-click: more", 1, 1, 1)
     GameTooltip:Show()
 end

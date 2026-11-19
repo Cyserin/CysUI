@@ -256,6 +256,23 @@ local function SkinButton(b)
     if b.cooldown and icon then
         b.cooldown:ClearAllPoints()
         b.cooldown:SetAllPoints(icon)
+        -- WoW Forever's cooldown numbers use one big font made for 45 px buttons: size them to the button
+        -- (hooks only; the font string is the cooldown's own)
+        local cd = b.cooldown
+        local lastSize
+        local function SizeCountdown()
+            local fs = cd.GetCountdownFontString and cd:GetCountdownFontString()
+            if not fs then return end
+            local ok, w = pcall(function() local v = b:GetWidth(); return v + 0 end)
+            if not ok or type(w) ~= "number" or w <= 0 then w = 36 end
+            local size = math.max(8, math.min(16, math.floor(w * 0.36 + 0.5)))
+            if lastSize ~= size then
+                lastSize = size
+                fs:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+            end
+        end
+        SizeCountdown()
+        b:HookScript("OnSizeChanged", SizeCountdown)
     end
 
     if DB().hideNames then

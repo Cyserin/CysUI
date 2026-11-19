@@ -1258,6 +1258,15 @@ function UF.KeepClear()
                     local bar = _G[name]
                     if bar and bar:IsVisible() then
                         local bl, bb, br, bt = ScreenRect(bar)
+                        -- room for the bar's widest stance (it can't be made in a fight): grow it the way it grows
+                        local maxW = bl and type(bar.cysMaxW) == "number" and bar.cysMaxW * bar:GetEffectiveScale()
+                        if maxW and maxW > br - bl then
+                            local extra = maxW - (br - bl)
+                            local pt = bar:GetPoint(1) or "CENTER"
+                            if pt:find("LEFT") then br = br + extra
+                            elseif pt:find("RIGHT") then bl = bl - extra
+                            else bl, br = bl - extra / 2, br + extra / 2 end
+                        end
                         if bl and bt > fb and bb < ft then -- the bar is level with the frame
                             if fc < (bl + br) / 2 then
                                 shift = math.min(shift, bl - gap - fr) -- frame left of the bar: slide left
