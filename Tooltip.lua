@@ -96,10 +96,16 @@ end
 --------------------------------------------------------------------------------
 -- Content
 --------------------------------------------------------------------------------
-local function OnItem(tip)
+local function OnItem(tip, data)
     if not tip.cysPanel then return end
     local db = DB()
     local link = tip.GetItem and select(2, tip:GetItem())
+    -- a recipe tooltip carries the crafted item's tooltip inside it, and GetItem then returns the crafted
+    -- item: the data the game hands us names the item this tooltip is really for
+    local dataID = data and type(data.id) == "number" and data.id or nil
+    if dataID and (not link or tonumber(link:match("item:(%d+)")) ~= dataID) then
+        link = (data.hyperlink and data.hyperlink:find("item:" .. dataID, 1, true) and data.hyperlink) or ("item:" .. dataID)
+    end
     if not link then return end
 
     if db.qualityBorder then
@@ -130,11 +136,27 @@ local function OnItem(tip)
         end
     end
 
-    -- Classic only shows the sell price at a vendor, where Blizzard adds its own money line
-    if db.sellPrice and (tip.shownMoneyFrames or 0) == 0 then
+    -- Our sell price line only when the game shows none. When the game shows one it is for the whole stack
+    -- (11 Deeprock Salt: 27s 50c), so then a stack gets ours as the price of one ("Sell price each").
+    if db.sellPrice then
         local sell = select(11, GetItemInfo(link))
         if sell and sell > 0 then
-            tip:AddDoubleLine("Sell price", GetCoinTextureString(sell), T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
+            local shown
+            local lineType = Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.SellPrice
+            if data and type(data.lines) == "table" and lineType then
+                for _, l in ipairs(data.lines) do
+                    if l.type == lineType then
+                        shown = l.price or (l.args and l.args[2] and l.args[2].intVal) or true
+                        break
+                    end
+                end
+            end
+            if not shown and (tip.shownMoneyFrames or 0) > 0 then shown = true end
+            if not shown then
+                tip:AddDoubleLine("Sell price", GetCoinTextureString(sell), T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
+            elseif type(shown) == "number" and shown > sell then
+                tip:AddDoubleLine("Sell price each", GetCoinTextureString(sell), T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
+            end
         end
     end
     tip:Show() -- re-measure after adding lines

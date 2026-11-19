@@ -94,9 +94,35 @@ end
 -- What a bag item does. Returns nil for anything that isn't food, drink, a potion, a bandage or a
 -- healthstone. Fields: food, drink (amount restored), hp, mp (average potion amount), bandage, stone,
 -- buff (Well Fed food), conjured, usable.
+-- Items (and their Use: spell text) the game hasn't loaded yet give a tooltip without the "Restores ..." line,
+-- so a newly looted potion was skipped until the bags changed again. Ask the game for the data and scan again
+-- once it arrives (GET_ITEM_INFO_RECEIVED / SPELL_DATA_LOAD_RESULT), plus a couple of timed retries per item.
+local waiting = false
+local retried = {} -- itemID -> retries used this session
+local function NotLoaded(itemID)
+    local loading = false
+    if C_Item and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(itemID) then
+        if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
+        loading = true
+    end
+    local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+    local spellID = getSpell and select(2, getSpell(itemID))
+    if spellID and C_Spell and C_Spell.IsSpellDataCached and not C_Spell.IsSpellDataCached(spellID) then
+        if C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(spellID) end
+        loading = true
+    end
+    return loading, spellID
+end
+
 local function Read(bag, slot, itemID)
     local _, _, _, _, _, classID = GetItemInfoInstant(itemID)
     if classID ~= 0 then return nil end -- consumables only
+    local loading, spellID = NotLoaded(itemID)
+    if loading then
+        retried[itemID] = (retried[itemID] or 0) + 1
+        if retried[itemID] <= 10 then waiting = true end
+        return nil
+    end
     scan:ClearLines()
     scan:SetBagItem(bag, slot)
     local info = { usable = true }
@@ -132,7 +158,16 @@ local function Read(bag, slot, itemID)
     if info.stone and not ((GetItemInfo(itemID) or ""):find("Healthstone")) then
         info.hp, info.stone = info.hp or info.stone, nil
     end
-    if not (info.food or info.drink or info.hp or info.mp or info.bandage or info.stone) then return nil end
+    if not (info.food or info.drink or info.hp or info.mp or info.bandage or info.stone) then
+        -- an item with a Use: effect whose tooltip came back empty / still loading: try again shortly
+        local first = _G[name .. "TextLeft1"]
+        local text = first and first:GetText() or ""
+        if spellID and (scan:NumLines() < 2 or text:find("Retrieving")) and (retried[itemID] or 0) < 3 then
+            retried[itemID] = (retried[itemID] or 0) + 1
+            waiting = true
+        end
+        return nil
+    end
     return info
 end
 
@@ -152,6 +187,7 @@ local best = {}   -- kind key -> { id, amount, count, conjured }
 
 local function Scan()
     local db = DB()
+    waiting = false
     local items = {}  -- itemID -> { info, count }
     for bag = 0, 4 do
         for slot = 1, (CC.GetContainerNumSlots(bag) or 0) do
@@ -254,7 +290,8 @@ end
 
 local lastScan = 0
 local queued = false
-local function Refresh()
+local Refresh
+function Refresh()
     if queued then return end
     queued = true
     -- bags fire many updates at once: wait a moment, then do one pass
@@ -263,6 +300,7 @@ local function Refresh()
         Scan()
         WriteMacros()
         lastScan = GetTime()
+        if waiting then C_Timer.After(2, function() if waiting then Refresh() end end) end
         if CUI.ConsumablesPage and CUI.ConsumablesPage:IsShown() then CUI.ConsumablesPage.RefreshPicks() end
     end)
 end
@@ -439,7 +477,8 @@ local function Enable()
     DB()
     frame = CreateFrame("Frame")
     for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "SKILL_LINES_CHANGED",
-                         "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "MERCHANT_SHOW" }) do
+                         "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "MERCHANT_SHOW",
+                         "GET_ITEM_INFO_RECEIVED", "SPELL_DATA_LOAD_RESULT" }) do
         pcall(frame.RegisterEvent, frame, e)
     end
     pcall(frame.RegisterUnitEvent, frame, "UNIT_AURA", "player")
@@ -450,6 +489,10 @@ local function Enable()
             if not DB().buffFoodUnfed or InCombatLockdown() then return end
             local now = IsWellFed()
             if now ~= fed then fed = now; Refresh() end
+            return
+        end
+        if event == "GET_ITEM_INFO_RECEIVED" or event == "SPELL_DATA_LOAD_RESULT" then
+            if waiting then Refresh() end -- only while a bag item is still loading
             return
         end
         if event == "MERCHANT_SHOW" then
