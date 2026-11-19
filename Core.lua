@@ -523,9 +523,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.26",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.27",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.27", date = "2026-11-19",
+              added = {
+                  "Cys's BiS (WoW Forever): a window beside the character panel (BiS button) with your best item for every slot, scored with Cys's Upgrade's weights, and where it comes from: the boss and dungeon, a quest, a vendor, the Auction House or your bags. Shows the gain over what you wear, the level it needs, and how many of your BiS you already have. Click a slot for its other picks; drop an item on a slot to pin it.",
+                  "Cys's BiS weighs what you wear and carry, every dungeon drop and quest reward from the DungeonJournal addon (by Exehn) when it is installed, the gear Cys's Auction House has seen on your realm, and gear you meet in loot, roll windows, quest rewards and vendors.",
+                  "Cys's BiS marks BiS items on their tooltips (Cys BiS: #1 for Head) and tells you when one shows up in a loot or roll window. Both have switches on the BiS List page.",
+              },
+              improved = {
+                  "Upgrade: tank profiles (Protection Warrior and Paladin, Bear) now blend a Survival side and a Threat side, both from SixtyUpgrades' WoW Forever presets. Set the mix with the - and + buttons in the BiS window (60% survival to start). Your old tank weights are kept as a profile named Protection tank (old).",
+              },
+            },
             { version = "0.58.26", date = "2026-11-18",
               fixed = {
                   "World map: fixed the blocked action error (SetPassThroughButtons) that could still show up when opening the quest log or map. On WoW Forever the Micro Menu, the Info Bar (Guild, Friends, Durability) and the Guild Window button in Cys's Friends now open Blizzard's windows the game's own way, by clicking its hidden micro buttons.",

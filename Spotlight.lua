@@ -14,12 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.25",
+    version = "0.58.27",
     items = {
-        { title = "Item level and BoE in your bags", page = "Automation",
-          icon = "Interface\\Icons\\INV_Chest_Chain_05",
-          text = "Gear in Cys's Bags shows its item level in the top-left corner (rarity color) and a small gold BoE tag when it is Bind on Equip.",
-          where = "Automation page (switches under Cys's Bags)." },
+        { title = "Cys's BiS", page = "BiS List", module = "bis",
+          icon = "Interface\\Icons\\INV_Helmet_03",
+          text = "Your best item for every slot, beside the character panel: where it drops, what it gains over your gear and the level it needs. Tank profiles get a Survival / Threat mix.",
+          where = "Character panel: the BiS button (top right)." },
     },
 }
 

@@ -196,6 +196,58 @@ local LEVEL_SETS = {
 }
 CysUpgrade.LEVEL_SETS = LEVEL_SETS
 
+-- Tank weights: a Survival side and a Threat side, blended (default 60% survival). Both sides are SixtyUpgrades'
+-- WoW Forever presets for Protection: Mitigation EP (per point of Stamina) and Threat EP (per point of Attack
+-- Power). The Threat side is halved so one point of Strength weighs the same on both sides, then
+-- weight = survival% x Survival + (1 - survival%) x Threat. Paladins add Intellect / Spell Power to the threat
+-- side; bears drop parry, block and weapon DPS (forms ignore them) and add Feral Attack Power.
+local TANK_SURVIVAL = {
+    ITEM_MOD_STAMINA_SHORT = 1, ITEM_MOD_HEALTH_SHORT = 0.1, ITEM_MOD_AGILITY_SHORT = 0.91, ITEM_MOD_STRENGTH_SHORT = 0.02,
+    RESISTANCE0_NAME = 0.05, ITEM_MOD_DODGE_RATING_SHORT = 16.29, ITEM_MOD_PARRY_RATING_SHORT = 16.29,
+    ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 2.61, ITEM_MOD_BLOCK_VALUE_SHORT = 0.43,
+}
+local TANK_THREAT = {
+    ITEM_MOD_ATTACK_POWER_SHORT = 1, ITEM_MOD_AGILITY_SHORT = 1.05, ITEM_MOD_STRENGTH_SHORT = 2,
+    ITEM_MOD_PARRY_RATING_SHORT = 7.47, ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 0.22, ITEM_MOD_BLOCK_VALUE_SHORT = 0.9,
+    ITEM_MOD_CRIT_RATING_SHORT = 22, ITEM_MOD_HIT_RATING_SHORT = 27, ITEM_MOD_WEAPON_DPS = 7.5,
+}
+local TANK_EXTRA = {
+    PALADIN = { threat = { ITEM_MOD_INTELLECT_SHORT = 1, ITEM_MOD_SPELL_POWER_SHORT = 0.8 } },
+    DRUID = { threat = { ITEM_MOD_FERAL_ATTACK_POWER_SHORT = 1 },
+              drop = { ITEM_MOD_PARRY_RATING_SHORT = true, ITEM_MOD_BLOCK_VALUE_SHORT = true, ITEM_MOD_WEAPON_DPS = true } },
+}
+local TANK_ROW_ORDER = {
+    "ITEM_MOD_STAMINA_SHORT", "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", "ITEM_MOD_DODGE_RATING_SHORT", "ITEM_MOD_PARRY_RATING_SHORT",
+    "RESISTANCE0_NAME", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_HIT_RATING_SHORT", "ITEM_MOD_CRIT_RATING_SHORT",
+    "ITEM_MOD_WEAPON_DPS", "ITEM_MOD_ATTACK_POWER_SHORT", "ITEM_MOD_FERAL_ATTACK_POWER_SHORT", "ITEM_MOD_BLOCK_VALUE_SHORT",
+    "ITEM_MOD_HEALTH_SHORT", "ITEM_MOD_INTELLECT_SHORT", "ITEM_MOD_SPELL_POWER_SHORT",
+}
+-- the profile names the leveling sets give tanks, and the classes they belong to
+local TANK_PROFILES = { ["Protection tank"] = { WARRIOR = true, PALADIN = true }, ["Feral bear"] = { DRUID = true } }
+CysUpgrade.TANK_DEFAULT = 60
+function CysUpgrade.TankRows(class, survival)
+    local s = math.max(0, math.min(100, tonumber(survival) or CysUpgrade.TANK_DEFAULT)) / 100
+    local extra = TANK_EXTRA[class] or {}
+    local drop = extra.drop or {}
+    local w = {}
+    for k, v in pairs(TANK_SURVIVAL) do if not drop[k] then w[k] = (w[k] or 0) + s * v end end
+    for k, v in pairs(TANK_THREAT) do if not drop[k] then w[k] = (w[k] or 0) + (1 - s) * v / 2 end end
+    for k, v in pairs(extra.threat or {}) do w[k] = (w[k] or 0) + (1 - s) * v / 2 end
+    local rows = {}
+    for _, k in ipairs(TANK_ROW_ORDER) do
+        local v = w[k] and math.floor(w[k] * 1000 + 0.5) / 1000
+        if v and v > 0 then rows[#rows + 1] = { key = k, weight = v } end
+    end
+    return rows
+end
+function CysUpgrade.IsTankProfile(name, class)
+    if not class then class = select(2, UnitClass("player")) end
+    return (TANK_PROFILES[name or ""] and TANK_PROFILES[name or ""][class or ""]) and true or false
+end
+LEVEL_SETS["Warrior Tank"][1].rows = CysUpgrade.TankRows("WARRIOR")
+LEVEL_SETS["Paladin Prot"][1].rows = CysUpgrade.TankRows("PALADIN")
+LEVEL_SETS["Druid Bear"][1].rows = CysUpgrade.TankRows("DRUID")
+
 -- the talent tree (1-3, in talent window order) with the most points, nil before any are spent
 local function TopTalentTree()
     if not GetNumTalentTabs or not GetNumTalents or not GetTalentInfo then return nil end
@@ -556,6 +608,7 @@ function CysUpgrade:GetItemEP(itemLink, customWeights)
 end
 
 CalculateItemScore = function(link, weights) return CysUpgrade:GetItemEP(link, weights) end
+CysUpgrade.IsItemValidForClass = IsItemValidForClass
 
 local SLOT_MAP = {
     INVTYPE_HEAD              = 1,
@@ -1097,6 +1150,28 @@ elseif event == "PLAYER_LOGIN" then
 local charKey = (UnitName("player") or "Unknown") .. " - " .. (GetRealmName() or "Unknown")
 if CysUIDB and CysUIDB.upgrade and CysUIDB.upgrade.charProfiles and CysUIDB.upgrade.charProfiles[charKey] then
 local charDB = CysUIDB.upgrade.charProfiles[charKey]
+-- one time: tank profiles from the leveling sets move to the Survival + Threat blend; the old rows stay as "<name> (old)"
+if not charDB.tankBlendV and charDB.profiles then
+local _, myClass = UnitClass("player")
+local names = {}
+for name, prof in pairs(charDB.profiles) do
+if type(prof) == "table" and not prof.blend and CysUpgrade.IsTankProfile(name, myClass) then names[#names + 1] = name end
+end
+for _, name in ipairs(names) do
+local prof = charDB.profiles[name]
+local old = name .. " (old)"
+if not charDB.profiles[old] then
+local copy = {}
+for i, r in ipairs(prof.statRows or {}) do copy[i] = { key = r.key, weight = r.weight } end
+charDB.profiles[old] = { statRows = copy }
+end
+prof.statRows = prof.statRows or {}
+wipe(prof.statRows)
+for i, r in ipairs(CysUpgrade.TankRows(myClass, CysUpgrade.TANK_DEFAULT)) do prof.statRows[i] = r end
+prof.blend = CysUpgrade.TANK_DEFAULT
+end
+charDB.tankBlendV = 1
+end
 if CysUpgrade.activeProfileName ~= "" and charDB.profiles[CysUpgrade.activeProfileName] then
 CysUpgrade.statRows = charDB.profiles[CysUpgrade.activeProfileName].statRows
 end
@@ -1129,7 +1204,10 @@ CysUIDB.upgrade.charProfiles = CysUIDB.upgrade.charProfiles or {}
 CysUIDB.upgrade.charProfiles[charKey] = CysUIDB.upgrade.charProfiles[charKey] or { profiles = {} }
 CysUpgrade.activeProfileName = CysUpgrade.activeProfileName
 CysUIDB.upgrade.charProfiles[charKey].activeProfile = CysUpgrade.activeProfileName
-CysUIDB.upgrade.charProfiles[charKey].profiles[CysUpgrade.activeProfileName] = { statRows = CysUpgrade.statRows }
+local profs = CysUIDB.upgrade.charProfiles[charKey].profiles
+local p = type(profs[CysUpgrade.activeProfileName]) == "table" and profs[CysUpgrade.activeProfileName] or {}
+p.statRows = CysUpgrade.statRows -- keep the profile's other fields (the tank blend)
+profs[CysUpgrade.activeProfileName] = p
 end
 end
 end)
@@ -1674,6 +1752,32 @@ end
 local function RefreshOverlays()
     if _G.UpdateCysBagsUpgradeOverlays then _G.UpdateCysBagsUpgradeOverlays() end
     if _G.UpdateCysBankUpgradeOverlays then _G.UpdateCysBankUpgradeOverlays() end
+end
+
+-- The Survival / Threat blend of the active tank profile (Cys's BiS window changes it).
+-- GetTankBlend: nil = not a tank profile, a number = the survival %, false = its own rows (not a blend).
+function CysUpgrade.GetTankBlend()
+    local name = CysUpgrade.activeProfileName or ""
+    if not CysUpgrade.IsTankProfile(name) then return nil end
+    local prof = CharDB().profiles[name]
+    if not prof then return nil end
+    return prof.blend or false
+end
+function CysUpgrade.SetTankBlend(pct)
+    local name = CysUpgrade.activeProfileName or ""
+    if not CysUpgrade.IsTankProfile(name) then return false end
+    local prof = CharDB().profiles[name]
+    if not prof then return false end
+    pct = math.max(0, math.min(100, math.floor((tonumber(pct) or CysUpgrade.TANK_DEFAULT) + 0.5)))
+    prof.statRows = prof.statRows or {}
+    wipe(prof.statRows)
+    for i, r in ipairs(CysUpgrade.TankRows(select(2, UnitClass("player")), pct)) do prof.statRows[i] = r end
+    prof.blend = pct
+    CysUpgrade.statRows = prof.statRows
+    UpdateWeightsFromRows()
+    RefreshOverlays()
+    if CysUpgrade.OnProfileAutoSwitched then pcall(CysUpgrade.OnProfileAutoSwitched) end
+    return true
 end
 
 local function BuildUpgradeSettingsPage(page)
