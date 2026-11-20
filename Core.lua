@@ -527,6 +527,9 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.29", date = "2026-11-20",
+              added = {
+                  "Crate Tracker: click an item you carry in the list to put it in its crate, no more right-clicking the crate and hunting for the item in your bags. Works out of combat.",
+              },
               improved = {
                   "Crate Tracker: the window now sits on the same layer as Cys's Bags, so action bars and other screen pieces no longer show through it.",
                   "Crate Tracker: the window is never taller than the bags beside it (or the bags height cap when it is not docked). A long list scrolls with the mouse wheel or the thin bar on the right.",

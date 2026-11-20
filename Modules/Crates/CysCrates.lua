@@ -46,9 +46,11 @@ end
 local carried = {}   -- [normalised name] = count in your bags
 local idByName = {}  -- [normalised name] = itemID (for icons and tooltips)
 local crateIDs = {}  -- itemIDs of everything in your bags, in bag order (crates are picked from these)
+local spotByID = {}  -- [itemID] = { bag, slot } of its first stack (for the crates)
+local spotByKey = {} -- [normalised name] = { bag, slot, n } of its biggest stack (what a click puts in)
 
 local function ScanBags()
-    wipe(carried); wipe(crateIDs)
+    wipe(carried); wipe(crateIDs); wipe(spotByID); wipe(spotByKey)
     local seen = {}
     local last = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or NUM_BAG_SLOTS or 4
     for bag = 0, last do
@@ -61,11 +63,14 @@ local function ScanBags()
                 if name then
                     local k = Norm(name)
                     carried[k] = (carried[k] or 0) + (info.stackCount or 1)
+                    local n = info.stackCount or 1
+                    if not spotByKey[k] or n > spotByKey[k][3] then spotByKey[k] = { bag, slot, n } end
                     idByName[k] = info.itemID
                     db.ids[k] = info.itemID
                 end
                 if not seen[info.itemID] then
                     seen[info.itemID] = true
+                    spotByID[info.itemID] = { bag, slot }
                     crateIDs[#crateIDs + 1] = info.itemID
                 end
             end
@@ -177,6 +182,67 @@ local function ItemIcon(itemID)
     return icon
 end
 
+-- Click a needed item to put it in its crate: does what right-clicking the crate and then the item in your bags
+-- does. Using items is protected, so it is one secure button laid over the row you point at (out of combat only;
+-- it hides itself when a fight starts).
+local fill
+local function RowTip(row, owner)
+    GameTooltip:SetOwner(owner or row, "ANCHOR_RIGHT")
+    pcall(GameTooltip.SetItemByID, GameTooltip, row.itemID)
+    if row.fillMacro then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click to put it in the crate", T.accent[1], T.accent[2], T.accent[3])
+    end
+    GameTooltip:Show()
+end
+
+local function FillButton()
+    if fill then return fill end
+    fill = CreateFrame("Button", "CysCratesFillButton", UIParent, "SecureActionButtonTemplate, SecureHandlerStateTemplate")
+    fill:SetFrameStrata("DIALOG")
+    fill:RegisterForClicks("LeftButtonUp")
+    fill:SetAttribute("useOnKeyDown", false)
+    fill:SetAttribute("type", "macro")
+    fill:Hide()
+    fill:SetAttribute("_onstate-combat", [[ if newstate == "in" then self:Hide() end ]])
+    RegisterStateDriver(fill, "combat", "[combat] in; out")
+    fill:SetScript("OnEnter", function(self)
+        local r = self.row
+        if r and r:IsVisible() and r.itemID then r.hl:Show(); RowTip(r, self) end
+    end)
+    fill:SetScript("OnLeave", function(self)
+        if self.row then self.row.hl:Hide() end
+        GameTooltip:Hide()
+        if not InCombatLockdown() then self:Hide() end
+    end)
+    return fill
+end
+
+local function HideFill()
+    if fill and fill:IsShown() and not InCombatLockdown() then fill:Hide() end
+end
+Crates.HideFill = HideFill
+
+local function ShowFill(row)
+    if not row.fillMacro or InCombatLockdown() then return end
+    local ok, l, b, w, h = pcall(function()
+        local s = row:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        local l, b, w, h = row:GetLeft(), row:GetBottom(), row:GetWidth(), row:GetHeight()
+        -- only rows fully inside the scrolled view
+        local sb, st = frame.scroll:GetBottom(), frame.scroll:GetTop()
+        if b < sb - 0.5 or b + h > st + 0.5 then return nil end
+        return l * s, b * s, w * s, h * s
+    end)
+    if not ok or not l then return end
+    local f = FillButton()
+    f.row = row
+    f:SetAttribute("macrotext", row.fillMacro)
+    f:ClearAllPoints()
+    f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b)
+    f:SetSize(w, h)
+    f:Show()
+end
+
 local function GetRow(i)
     if rows[i] then return rows[i] end
     local r = CreateFrame("Button", nil, frame.content)
@@ -196,11 +262,8 @@ local function GetRow(i)
     r:SetScript("OnEnter", function(self)
         if not (self.itemID or self.crate) then return end -- nothing to show for an item the game doesn't know
         self.hl:Show()
-        if self.itemID then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            pcall(GameTooltip.SetItemByID, GameTooltip, self.itemID)
-            GameTooltip:Show()
-        end
+        if self.itemID then RowTip(self) end
+        ShowFill(self)
     end)
     r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
     r:SetScript("OnClick", function(self)
@@ -224,6 +287,7 @@ local function Cheapest(c)
 end
 
 function Crates.Refresh()
+    HideFill()
     if not frame or not frame:IsShown() then return end
     local list = Crates.List()
     frame.header:SetShown(not db.slim)
@@ -248,7 +312,7 @@ function Crates.Refresh()
         if n >= MAX_ROWS then break end
         n = n + 1
         local r = GetRow(n)
-        r.crate, r.itemID = c.itemID, c.itemID
+        r.crate, r.itemID, r.fillMacro = c.itemID, c.itemID, nil
         r:SetHeight(CRATE_H)
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", 1, -(y - TOP)); r:SetPoint("TOPRIGHT", -1, -(y - TOP))
@@ -274,6 +338,9 @@ function Crates.Refresh()
                 n = n + 1
                 local s = GetRow(n)
                 s.crate, s.itemID = nil, q.itemID
+                local from, to = spotByID[c.itemID], spotByKey[q.key]
+                s.fillMacro = (from and to and q.have > 0)
+                    and format("/use %d %d\n/use %d %d", from[1], from[2], to[1], to[2]) or nil
                 s:SetHeight(ROW_H)
                 s:ClearAllPoints()
                 s:SetPoint("TOPLEFT", 1, -(y - TOP)); s:SetPoint("TOPRIGHT", -1, -(y - TOP))
@@ -349,6 +416,7 @@ function Crates.SetScroll(v)
     if not frame then return end
     local m = frame.maxScroll or 0
     v = max(0, min(v or 0, m))
+    if v ~= frame.scroll:GetVerticalScroll() then HideFill() end
     frame.scroll:SetVerticalScroll(v)
     local bar, thumb = frame.bar, frame.thumb
     if m <= 0 then bar:Hide(); return end
@@ -516,6 +584,7 @@ local function BuildWindow()
     f.empty:SetPoint("TOP", 0, -(HEADER_H + 14))
     f.empty:SetText("No crates to fill in your bags.")
     f:SetScript("OnShow", Crates.Refresh)
+    f:HookScript("OnHide", HideFill)
 end
 
 
