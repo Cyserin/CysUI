@@ -47,10 +47,11 @@ local carried = {}   -- [normalised name] = count in your bags
 local idByName = {}  -- [normalised name] = itemID (for icons and tooltips)
 local crateIDs = {}  -- itemIDs of everything in your bags, in bag order (crates are picked from these)
 local spotByID = {}  -- [itemID] = { bag, slot } of its first stack (for the crates)
+local countByID = {} -- [itemID] = how many you carry (how many crates of one kind)
 local spotByKey = {} -- [normalised name] = { bag, slot, n } of its biggest stack (what a click puts in)
 
 local function ScanBags()
-    wipe(carried); wipe(crateIDs); wipe(spotByID); wipe(spotByKey)
+    wipe(carried); wipe(crateIDs); wipe(spotByID); wipe(spotByKey); wipe(countByID)
     local seen = {}
     local last = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or NUM_BAG_SLOTS or 4
     for bag = 0, last do
@@ -68,6 +69,7 @@ local function ScanBags()
                     idByName[k] = info.itemID
                     db.ids[k] = info.itemID
                 end
+                countByID[info.itemID] = (countByID[info.itemID] or 0) + (info.stackCount or 1)
                 if not seen[info.itemID] then
                     seen[info.itemID] = true
                     spotByID[info.itemID] = { bag, slot }
@@ -101,9 +103,33 @@ local KNOWN = {
     ["Strange Dust"] = 10940, ["Lesser Magic Essence"] = 10938, ["Greater Magic Essence"] = 10939,
     ["Small Glimmering Shard"] = 10978, ["Large Glimmering Shard"] = 11084,
     ["Peacebloom"] = 2447, ["Silverleaf"] = 765, ["Earthroot"] = 2449, ["Mageroyal"] = 785, ["Briarthorn"] = 2450,
+    ["Vision Dust"] = 11176, ["Greater Mystic Essence"] = 11135, ["Small Radiant Shard"] = 11177,
+    ["Large Radiant Shard"] = 11178, ["Soul Dust"] = 11083, ["Greater Astral Essence"] = 11082,
+    ["Small Glowing Shard"] = 11138, ["Large Glowing Shard"] = 11139,
+    ["Mageweave Cloth"] = 4338, ["Bolt of Mageweave"] = 4339, ["Heavy Leather"] = 4234, ["Cured Heavy Hide"] = 4236,
+    ["Gold Ore"] = 2776, ["Mithril Ore"] = 3858,
+    ["Wintersbite"] = 3819, ["Firebloom"] = 4625, ["Purple Lotus"] = 8831, ["Arthas' Tears"] = 8836,
+    ["Liferoot"] = 3357, ["Fadeleaf"] = 3818, ["Goldthorn"] = 3821, ["Khadgar's Whisker"] = 3358,
 }
 local KNOWN_IDS = {}
 for name, id in pairs(KNOWN) do KNOWN_IDS[Norm(name)] = id end
+
+-- Every item Cys's Auction House has seen, by name (its scan keeps names[itemID]). Rebuilt at most every 30 s,
+-- and only when a lookup misses.
+local ahIDs, ahBuilt = nil, nil
+local function AHItemID(key)
+    local names = CysAHDB and CysAHDB.names
+    if type(names) ~= "table" then return nil end
+    if ahIDs and ahIDs[key] then return ahIDs[key] end
+    local now = GetTime and GetTime() or 0
+    if ahBuilt and now - ahBuilt < 30 then return nil end
+    ahBuilt = now
+    ahIDs = {}
+    for id, n in pairs(names) do
+        if type(id) == "number" and type(n) == "string" and n ~= "" then ahIDs[Norm(n)] = id end
+    end
+    return ahIDs[key]
+end
 
 local function Analyze(itemID)
     if cache[itemID] ~= nil then return cache[itemID] end
@@ -152,7 +178,8 @@ function Crates.List()
             local ready = 0
             for _, r in ipairs(c.reqs) do
                 r.have = carried[r.key] or 0
-                r.itemID = r.itemID or idByName[r.key] or db.ids[r.key] or KNOWN_IDS[r.key]
+                r.itemID = r.itemID or idByName[r.key] or db.ids[r.key] or AHItemID(r.key) or KNOWN_IDS[r.key]
+                if r.itemID and not db.ids[r.key] then db.ids[r.key] = r.itemID end
                 if not r.itemID and C_Item and C_Item.GetItemInfoInstant then
                     -- items you don't carry: the game knows many by name once it has seen them anywhere
                     local ok, id = pcall(C_Item.GetItemInfoInstant, r.name)
@@ -160,7 +187,7 @@ function Crates.List()
                 end
                 if r.have >= r.count then ready = ready + 1 end
             end
-            list[#list + 1] = { itemID = itemID, name = c.name, reqs = c.reqs, ready = ready }
+            list[#list + 1] = { itemID = itemID, name = c.name, reqs = c.reqs, ready = ready, n = countByID[itemID] or 1 }
         end
     end
     return list
@@ -280,7 +307,9 @@ local function Cheapest(c)
     if not Crates.Price then return nil end
     local best, bestKey
     for _, r in ipairs(c.reqs) do
-        local p = r.itemID and Crates.Price(r.itemID)
+        -- what it costs to buy the rest of this bundle: price each x how many you still need
+        local each = r.itemID and Crates.Price(r.itemID)
+        local p = each and each * max(0, r.count - (r.have or 0))
         if p and (not best or p < best) then best, bestKey = p, r.key end
     end
     return bestKey
@@ -323,7 +352,8 @@ function Crates.Refresh()
         r.name:ClearAllPoints(); r.name:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
         r.name:SetPoint("RIGHT", r.right, "LEFT", -6, 0)
         r.name:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
-        r.name:SetText((db.folded[c.itemID] and "+ " or "") .. (c.name or "Crate"))
+        r.name:SetText((db.folded[c.itemID] and "+ " or "") .. (c.name or "Crate")
+            .. ((c.n or 1) > 1 and format("  |cFFFFFFFFx%d|r", c.n) or ""))
         local all = c.ready == #c.reqs
         r.right:SetText(format("%d / %d", c.ready, #c.reqs))
         if all then r.right:SetTextColor(0.35, 0.85, 0.35) else r.right:SetTextColor(0.7, 0.7, 0.7) end

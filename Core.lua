@@ -529,6 +529,11 @@ if CysChangelog then
             { version = "0.58.29", date = "2026-11-20",
               added = {
                   "Crate Tracker: click an item you carry in the list to put it in its crate, no more right-clicking the crate and hunting for the item in your bags. Works out of combat.",
+                  "Crate Tracker: when you carry more than one crate of the same kind, its heading shows how many (x3).",
+              },
+              fixed = {
+                  "Crate Tracker: the (cheapest) tag now compares what each whole bundle costs (price times how many you still need), not the price of one item.",
+                  "Crate Tracker: items you have never carried now get their icon, tooltip and price too (from the Auction House scan of Cys's Auction House and a built-in list), so every crate can show its cheapest bundle.",
               },
               improved = {
                   "Crate Tracker: the window now sits on the same layer as Cys's Bags, so action bars and other screen pieces no longer show through it.",
