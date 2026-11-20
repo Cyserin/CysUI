@@ -30,7 +30,9 @@ db.folded = db.folded or {}
 db.ids = db.ids or {} -- [normalised item name] = itemID, remembered once seen
 
 local floor, max, min = math.floor, math.max, math.min
-local WIDTH, HEADER_H, ROW_H, CRATE_H, MAX_ROWS = 300, 26, 18, 22, 40
+local WIDTH, HEADER_H, ROW_H, CRATE_H, MAX_ROWS = 300, 26, 18, 22, 120
+local TOP = HEADER_H + 4 -- where the list starts under the header
+local BAR_W = 6 -- scroll bar width (only shown when the list is taller than the window)
 local SLIM_W = 34 -- folded to a small strip (like the bags sidebar): crate icon + how many crates
 
 --------------------------------------------------------------------------------
@@ -177,7 +179,7 @@ end
 
 local function GetRow(i)
     if rows[i] then return rows[i] end
-    local r = CreateFrame("Button", nil, frame)
+    local r = CreateFrame("Button", nil, frame.content)
     r:SetHeight(ROW_H)
     r.hl = W.Texture(r, "BACKGROUND", T.hover)
     r.hl:SetAllPoints(); r.hl:Hide()
@@ -229,6 +231,7 @@ function Crates.Refresh()
     if db.slim then
         for i = 1, #rows do rows[i]:Hide() end
         frame.empty:Hide()
+        frame.scroll:Hide(); frame.bar:Hide()
         local ready, total = 0, 0
         for _, c in ipairs(list) do total = total + 1; if c.ready == #c.reqs then ready = ready + 1 end end
         frame.slim.count:SetText(total)
@@ -239,7 +242,8 @@ function Crates.Refresh()
         return
     end
     frame:SetWidth(WIDTH)
-    local y, n = HEADER_H + 4, 0
+    frame.scroll:Show()
+    local y, n = TOP, 0
     for _, c in ipairs(list) do
         if n >= MAX_ROWS then break end
         n = n + 1
@@ -247,7 +251,7 @@ function Crates.Refresh()
         r.crate, r.itemID = c.itemID, c.itemID
         r:SetHeight(CRATE_H)
         r:ClearAllPoints()
-        r:SetPoint("TOPLEFT", 1, -y); r:SetPoint("TOPRIGHT", -1, -y)
+        r:SetPoint("TOPLEFT", 1, -(y - TOP)); r:SetPoint("TOPRIGHT", -1, -(y - TOP))
         r.icon:SetSize(16, 16)
         r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 8, 0)
         r.icon:SetTexture(ItemIcon(c.itemID) or "Interface\\Icons\\INV_Crate_02")
@@ -272,7 +276,7 @@ function Crates.Refresh()
                 s.crate, s.itemID = nil, q.itemID
                 s:SetHeight(ROW_H)
                 s:ClearAllPoints()
-                s:SetPoint("TOPLEFT", 1, -y); s:SetPoint("TOPRIGHT", -1, -y)
+                s:SetPoint("TOPLEFT", 1, -(y - TOP)); s:SetPoint("TOPRIGHT", -1, -(y - TOP))
                 s.icon:SetSize(14, 14)
                 s.icon:ClearAllPoints(); s.icon:SetPoint("LEFT", 22, 0)
                 local tex = ItemIcon(q.itemID)
@@ -307,15 +311,61 @@ function Crates.Refresh()
     fold:SetShown(#list > 1)
     frame.empty:SetShown(#list == 0)
     if #list == 0 then y = y + 30 end
-    frame:SetHeight(y + 8)
+    -- never taller than the bags (docked) or the bags height cap; scroll the rest
+    local listH = y - TOP
+    local viewH = max(ROW_H * 3, min(listH, Crates.MaxHeight() - TOP - 8))
+    local over = listH > viewH + 0.5
+    frame.scroll:SetHeight(viewH)
+    frame.content:SetHeight(max(listH, 1))
+    frame.scroll:ClearAllPoints()
+    frame.scroll:SetPoint("TOPLEFT", 0, -TOP)
+    frame.scroll:SetPoint("TOPRIGHT", over and -(BAR_W + 4) or 0, -TOP)
+    frame.content:SetWidth(WIDTH - (over and (BAR_W + 4) or 0))
+    frame.maxScroll = over and (listH - viewH) or 0
+    Crates.SetScroll(frame.scroll:GetVerticalScroll() or 0)
+    frame:SetHeight(TOP + viewH + 8)
     if waiting then C_Timer.After(1, Crates.Refresh) end -- some crate tooltips were still loading
+end
+
+-- How tall the window may be: as tall as Cys's Bags while docked, else the bags height cap.
+local function SafeHeight(f)
+    local ok, h = pcall(function()
+        local v = f:GetHeight() * f:GetEffectiveScale() / frame:GetEffectiveScale()
+        if v > 0 then return v end
+    end)
+    return ok and h or nil
+end
+function Crates.MaxHeight()
+    local bags = _G.CysBagsFrame
+    if frame and frame.docked and bags and bags:IsShown() then
+        local h = SafeHeight(bags)
+        if h then return h end
+    end
+    local auto = CysUIDB.automation
+    return (auto and tonumber(auto.bagsMaxH)) or 650
+end
+
+function Crates.SetScroll(v)
+    if not frame then return end
+    local m = frame.maxScroll or 0
+    v = max(0, min(v or 0, m))
+    frame.scroll:SetVerticalScroll(v)
+    local bar, thumb = frame.bar, frame.thumb
+    if m <= 0 then bar:Hide(); return end
+    bar:Show()
+    local track = frame.scroll:GetHeight()
+    local th = max(20, track * track / (track + m))
+    thumb:SetHeight(th)
+    thumb:ClearAllPoints()
+    thumb:SetPoint("TOP", bar, "TOP", 0, -((track - th) * v / m))
 end
 
 local function BuildWindow()
     local f = CreateFrame("Frame", "CysCratesFrame", UIParent)
     frame = f
     f:SetSize(WIDTH, 120)
-    f:SetFrameStrata("MEDIUM")
+    f:SetFrameStrata("HIGH") -- same layer as Cys's Bags: drawn over action bars, chat and the like
+    f:SetToplevel(true)
     f:SetClampedToScreen(true)
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -415,6 +465,53 @@ local function BuildWindow()
     slim:SetScript("OnClick", function() db.slim = nil; GameTooltip:Hide(); Crates.Refresh() end)
     f.slim = slim
 
+    -- the list scrolls when it is taller than the window may be
+    local scroll = CreateFrame("ScrollFrame", nil, f)
+    scroll:SetPoint("TOPLEFT", 0, -TOP); scroll:SetPoint("TOPRIGHT", 0, -TOP)
+    scroll:SetHeight(100)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(WIDTH, 1)
+    scroll:SetScrollChild(content)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(_, delta)
+        Crates.SetScroll(scroll:GetVerticalScroll() - delta * ROW_H * 3)
+    end)
+    f.scroll, f.content = scroll, content
+
+    local bar = CreateFrame("Frame", nil, f)
+    bar:SetWidth(BAR_W)
+    bar:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", BAR_W + 2, 0)
+    bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", BAR_W + 2, 0)
+    W.Texture(bar, "BACKGROUND", { 1, 1, 1, 0.06 }):SetAllPoints()
+    bar:EnableMouse(true)
+    bar:Hide()
+    local thumb = CreateFrame("Button", nil, bar)
+    thumb:SetWidth(BAR_W)
+    thumb.tex = W.Texture(thumb, "ARTWORK", { T.accent[1], T.accent[2], T.accent[3], 0.55 })
+    thumb.tex:SetAllPoints()
+    thumb:SetScript("OnEnter", function(s) s.tex:SetAlpha(1) end)
+    thumb:SetScript("OnLeave", function(s) if not s.drag then s.tex:SetAlpha(0.55) end end)
+    local function CursorY() local _, cy = GetCursorPosition(); return cy / bar:GetEffectiveScale() end
+    thumb:SetScript("OnMouseDown", function(s)
+        s.drag, s.startY, s.startScroll = true, CursorY(), scroll:GetVerticalScroll()
+        s:SetScript("OnUpdate", function()
+            local track = bar:GetHeight() - s:GetHeight()
+            if track <= 0 then return end
+            Crates.SetScroll(s.startScroll + (s.startY - CursorY()) / track * (f.maxScroll or 0))
+        end)
+    end)
+    thumb:SetScript("OnMouseUp", function(s)
+        s.drag = nil; s:SetScript("OnUpdate", nil)
+        if not s:IsMouseOver() then s.tex:SetAlpha(0.55) end
+    end)
+    -- clicking the track pages up / down
+    bar:SetScript("OnMouseDown", function()
+        local page = scroll:GetHeight() - ROW_H
+        if CursorY() > thumb:GetTop() then page = -page end
+        Crates.SetScroll(scroll:GetVerticalScroll() + page)
+    end)
+    f.bar, f.thumb = bar, thumb
+
     f.empty = W.Text(f, 11, T.dim, "CENTER")
     f.empty:SetPoint("TOP", 0, -(HEADER_H + 14))
     f.empty:SetText("No crates to fill in your bags.")
@@ -483,6 +580,9 @@ local function HookBags()
     end)
     bags:HookScript("OnHide", function()
         if frame and frame:IsShown() and frame.docked then frame:Hide() end
+    end)
+    bags:HookScript("OnSizeChanged", function()
+        if frame and frame:IsShown() and frame.docked then Crates.Refresh() end
     end)
 end
 Crates.HookBags = HookBags

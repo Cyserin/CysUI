@@ -523,9 +523,15 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.28",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.29",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.29", date = "2026-11-20",
+              improved = {
+                  "Crate Tracker: the window now sits on the same layer as Cys's Bags, so action bars and other screen pieces no longer show through it.",
+                  "Crate Tracker: the window is never taller than the bags beside it (or the bags height cap when it is not docked). A long list scrolls with the mouse wheel or the thin bar on the right.",
+              },
+            },
             { version = "0.58.28", date = "2026-11-19",
               added = {
                   "Guild Recruiter: players who leave the guild or are removed now show under the replies in the recruiter window, with their level, class color and who removed them. Players who left while you were offline show after your next login.",
