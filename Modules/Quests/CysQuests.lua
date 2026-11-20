@@ -441,17 +441,84 @@ end
 --   left-click = open the quest in the quest log; Shift + left or right click = stop tracking.
 -- Shift + right-click is turned into a click named "untrack" (helpbutton remap; needs a unit, so "player"):
 -- the game's header treats any click but RightButton as a left click and Shift makes it untrack.
+-- Attributes start with "*": a plain "type1" / "clickbutton" only counts with NO modifier held.
 -- Plain right-click still opens our menu. Quests the game's tracker doesn't show (untracked zone quests, or a
 -- full game tracker) fall back to the Quest Log button. Out of combat only: it hides when a fight starts.
 --------------------------------------------------------------------------------
 local proxy
+-- point the proxy at the game's tracker line (header) or, without one, at the Quest Log button for plain
+-- clicks only. "*" = any modifier; the plain names only count with no modifier, so a Shift-click without a
+-- header does nothing instead of opening the quest log.
+local function ApplyHeader(p, header)
+    p.header = header
+    if header then
+        p:SetAttribute("type1", nil); p:SetAttribute("clickbutton1", nil)
+        p:SetAttribute("*type1", "click"); p:SetAttribute("*clickbutton1", header)
+        p:SetAttribute("*type-untrack", "click"); p:SetAttribute("*clickbutton-untrack", header)
+    else
+        p:SetAttribute("*type1", nil); p:SetAttribute("*clickbutton1", nil)
+        p:SetAttribute("type1", "click"); p:SetAttribute("clickbutton1", _G.QuestLogMicroButton)
+        p:SetAttribute("*type-untrack", nil); p:SetAttribute("*clickbutton-untrack", nil)
+    end
+end
+local QUEST_MODULES = { "QuestObjectiveTracker", "CampaignQuestObjectiveTracker" }
+-- read only: the game's own block for a quest, under any block template the module uses
+local function FindBlock(m, id)
+    local ok, b = pcall(m.GetExistingBlock, m, id)
+    if ok and type(b) == "table" then return b end
+    local used = rawget(m, "usedBlocks")
+    if type(used) == "table" then
+        for _, blocks in pairs(used) do
+            local blk = type(blocks) == "table" and blocks[id]
+            if type(blk) == "table" then return blk end
+        end
+    end
+end
 local function BlizzHeader(id)
-    for _, n in ipairs({ "QuestObjectiveTracker", "CampaignQuestObjectiveTracker" }) do
+    for _, n in ipairs(QUEST_MODULES) do
         local m = _G[n]
         if m and m.GetExistingBlock then
-            local ok, b = pcall(m.GetExistingBlock, m, id)
-            if ok and type(b) == "table" and b.HeaderButton then return b.HeaderButton end
+            local b = FindBlock(m, id)
+            if b and b.HeaderButton then return b.HeaderButton end
         end
+    end
+end
+
+-- /cuiquests probe: what the game's own (faded) tracker holds, to see why a quest has no line there
+SLASH_CYSQUESTPROBE1 = "/cuiquests"
+SlashCmdList.CYSQUESTPROBE = function()
+    local P = function(s) DEFAULT_CHAT_FRAME:AddMessage("|cFFFFD100Cys's UI|r " .. s) end
+    local ot = _G.ObjectiveTrackerFrame
+    if not ot then P("Quest probe: the game's tracker is not loaded.") return end
+    local okC, col = pcall(function() return ot:IsCollapsed() end)
+    local okH, h = pcall(function() return floor(ot:GetHeight()) end)
+    P("Quest probe: game tracker shown " .. tostring(ot:IsShown()) .. ", collapsed " .. tostring(okC and col) ..
+        ", height " .. tostring(okH and h) .. ", alpha " .. format("%.2f", ot:GetAlpha()))
+    for _, n in ipairs(QUEST_MODULES) do
+        local m = _G[n]
+        local cnt = 0
+        local used = m and rawget(m, "usedBlocks")
+        if type(used) == "table" then for _, blocks in pairs(used) do for _ in pairs(blocks) do cnt = cnt + 1 end end end
+        local okT, tr = pcall(function() return m and m:IsTruncated() end)
+        P("  " .. n .. ": " .. cnt .. " lines" .. ((okT and tr) and " (cut off: not enough height)" or ""))
+    end
+    local watched, missing = 0, {}
+    local okN, num = pcall(C_QuestLog.GetNumQuestWatches)
+    for i = 1, (okN and num or 0) do
+        local okW, qid = pcall(C_QuestLog.GetQuestIDForQuestWatchIndex, i)
+        if okW and qid then
+            watched = watched + 1
+            if not BlizzHeader(qid) then missing[#missing + 1] = C_QuestLog.GetTitleForQuestID(qid) or tostring(qid) end
+        end
+    end
+    P("  tracked quests " .. watched .. ", without a game line " .. #missing .. (#missing > 0 and (": " .. table.concat(missing, ", ", 1, min(#missing, 5))) or ""))
+    if C_TradeSkillUI and C_TradeSkillUI.GetRecipesTracked then
+        local m = _G.ProfessionsRecipeTracker
+        local okR, list = pcall(C_TradeSkillUI.GetRecipesTracked, false)
+        local cnt = 0
+        local used = m and rawget(m, "usedBlocks")
+        if type(used) == "table" then for _, blocks in pairs(used) do for _ in pairs(blocks) do cnt = cnt + 1 end end end
+        P("  tracked recipes " .. ((okR and type(list) == "table") and #list or 0) .. ", game recipe lines " .. cnt)
     end
 end
 
@@ -461,15 +528,16 @@ local function ClickProxy()
     proxy:SetFrameStrata("DIALOG")
     proxy:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     proxy:SetAttribute("useOnKeyDown", false)
-    proxy:SetAttribute("unit", "player")
-    proxy:SetAttribute("type1", "click")
+    proxy:SetAttribute("*unit2", "player")
     proxy:SetAttribute("shift-helpbutton2", "untrack")
     proxy:Hide()
     proxy:SetAttribute("_onstate-combat", [[ if newstate == "in" then self:Hide() end ]])
     RegisterStateDriver(proxy, "combat", "[combat] in; out")
     proxy:SetScript("PreClick", function(self, button)
-        -- no game tracker button: the Quest Log button opens the log, with this quest picked
+        -- the game's tracker adds a quest's line a frame after ours: look it up again right before the click
         local row = self.row
+        if row and row.questID and not InCombatLockdown() then ApplyHeader(self, BlizzHeader(row.questID)) end
+        -- no game tracker button: the Quest Log button opens the log, with this quest picked
         if not self.header and button == "LeftButton" and not IsShiftKeyDown() and row and row.questID and C_QuestLog.SetSelectedQuest then
             pcall(C_QuestLog.SetSelectedQuest, row.questID)
         end
@@ -481,7 +549,13 @@ local function ClickProxy()
     end)
     proxy:SetScript("OnEnter", function(self)
         local r = self.row
-        if r and r:IsVisible() and r.questID then r.hl:Show(); OnQuestEnter(r) end
+        if r and r:IsVisible() and r.questID then
+            r.hl:Show(); OnQuestEnter(r)
+            if not self.header and IsWatched(r.questID) then
+                GameTooltip:AddLine("Shift-click can't untrack this one yet: the game's own (hidden) tracker doesn't list it. Raise the Objective Tracker height in Edit Mode if this keeps happening.", 1, 0.45, 0.45, true)
+                GameTooltip:Show()
+            end
+        end
     end)
     proxy:SetScript("OnLeave", function(self)
         if self.row then self.row.hl:Hide() end
@@ -499,10 +573,8 @@ local function ShowProxy(row)
     end)
     if not ok or not l or Secret(l) or Secret(w) then return end
     local p = ClickProxy()
-    local header = BlizzHeader(row.questID)
-    p.row, p.header = row, header
-    p:SetAttribute("clickbutton", header or _G.QuestLogMicroButton)
-    p:SetAttribute("type-untrack", header and "click" or nil)
+    p.row = row
+    ApplyHeader(p, BlizzHeader(row.questID))
     p:ClearAllPoints()
     p:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b)
     p:SetSize(w, h)
@@ -951,14 +1023,19 @@ local function Deafen(frame, depth)
 end
 
 local deafPending = false
+-- Edit Mode open: the game's tracker shows (and takes the mouse) so it can be picked and sized there
+local function EditModeOpen()
+    local em = _G.EditModeManagerFrame
+    return em and em:IsShown()
+end
 local function FadeGame()
     local ot = _G.ObjectiveTrackerFrame
     if not ot then return end
-    if db.hideGame then
+    if db.hideGame and not EditModeOpen() then
         guard = true; ot:SetAlpha(0); guard = false
         if not InCombatLockdown() and not deafPending then
             deafPending = true
-            C_Timer.After(0, function() deafPending = false; if db.hideGame and not InCombatLockdown() then Deafen(ot, 0) end end)
+            C_Timer.After(0, function() deafPending = false; if db.hideGame and not EditModeOpen() and not InCombatLockdown() then Deafen(ot, 0) end end)
         end
     else
         guard = true; ot:SetAlpha(1); guard = false
@@ -974,8 +1051,13 @@ local function HookGame()
     local ot = _G.ObjectiveTrackerFrame
     if gameHooked or not ot then return end
     gameHooked = true
+    local em = _G.EditModeManagerFrame
+    if em then
+        em:HookScript("OnShow", function() FadeGame() end)
+        em:HookScript("OnHide", function() FadeGame() end)
+    end
     hooksecurefunc(ot, "SetAlpha", function(_, a)
-        if guard or not db.hideGame or Secret(a) then return end
+        if guard or not db.hideGame or Secret(a) or EditModeOpen() then return end
         if type(a) == "number" and a > 0 then guard = true; ot:SetAlpha(0); guard = false end
     end)
     ot:HookScript("OnShow", FadeGame)

@@ -20,6 +20,10 @@ local SPOTLIGHT = {
           icon = "Interface\\Icons\\INV_Misc_Note_02",
           text = "The Guild Recruiter window shows how many guild members sit in each level bracket, with thin brackets marked, so you know which levels to recruit. Click a bracket to recruit those levels.",
           where = "/cuirecruit, or right-click the Guild block on the info bar."},
+        { title = "Tracked Recipes", page = "Tracked Recipes", module = "recipes",
+          icon = "Interface\\Icons\\Trade_BlackSmithing",
+          text = "Tick Track Recipe in a profession window and a small window lists the materials it needs, how many you carry and how many you can make. Shift-click a material to search the Auction House.",
+          where = "Track Recipe in any profession window, or /cuirecipes."},
     },
 }
 

@@ -89,6 +89,7 @@ Modules\Mana\CysMana.lua
 Modules\VehicleExit\CysVehicleExit.lua
 Modules\QuestStart\CysQuestStart.lua
 Modules\Crates\CysCrates.lua
+Modules\Recipes\CysRecipes.lua
 Modules\Flight\CysFlight.lua
 Modules\ClickCast\CysClickCast.lua
 Modules\Recruit\CysRecruit.lua

@@ -529,9 +529,10 @@ if CysChangelog then
             { version = "0.58.30", date = "2026-11-20",
               added = {
                   "Guild Recruiter: a Guild levels section in the window shows how many members sit in each level bracket (1-9, 10-14, 15-19 and so on), so you can see which levels to recruit. Thin brackets are gold and marked few; hover one to see who is in it, click it to recruit those levels. Only members seen in the last 14 days count (change it on the settings page). /cuirecruit levels prints it in chat.",
+                  "Tracked Recipes: tick Track Recipe in a profession window and a small window lists every material the recipe needs, how many you carry (green when you have enough) and how many you can make now. Set how many to make with - and +. A material you can craft yourself and still need lists its own materials under it (two levels deep; open each profession window once so it learns what you can craft). Click the recipe to open it, Shift-click it to stop tracking, or x (it unticks Track Recipe while the profession window shows that recipe); Shift-click a material to search the Auction House. With Cys's Auction House the cost of what you are missing shows too. /cuirecipes. New file: restart the game once.",
               },
               fixed = {
-                  "Quest Tracker: left-click a quest opens it in the quest log again, and Shift-click (left or right) stops tracking it. The game now does both itself, so the map keeps its quest markers. Out of combat only.",
+                  "Quest Tracker: left-click a quest opens it in the quest log again, and Shift-click (left or right) stops tracking it. The game now does both itself, so the map keeps its quest markers. A Shift-click never opens the quest log by mistake anymore. Out of combat only. While Edit Mode is open the game's tracker shows again, so its height can be set (the game only keeps lines for the quests that fit in that height; /cuiquests shows how many fit).",
               },
             },
             { version = "0.58.29", date = "2026-11-20",
