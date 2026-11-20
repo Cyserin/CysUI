@@ -10,7 +10,9 @@
 --
 -- It reads the game's own watch list, so tracking a quest anywhere (quest log, map) shows it here, and
 -- Shift-click here stops tracking it for the game as well. The game's tracker is only faded (alpha and
--- mouse), never hidden, moved or changed, so nothing of Blizzard's runs from our code.
+-- mouse), never hidden, moved or changed, so nothing of Blizzard's runs from our code. Clicks that open the
+-- quest log or stop tracking are handed to the game's own (faded) tracker button for that quest by a secure
+-- button laid over the quest you point at, so the game does them itself (see ClickProxy).
 --
 -- Combat: quest item buttons are secure, so the list can only be rebuilt out of combat. In combat the
 -- numbers and colors still update; a quest that is added or removed mid-fight shows after the fight.
@@ -163,7 +165,7 @@ local function QuestRow(i)
     r.hl:SetColorTexture(1, 1, 1, 0.05)
     r.hl:Hide()
     r:SetScript("OnClick", function(self, button) OnQuestClick(self, button) end)
-    r:SetScript("OnEnter", function(self) self.hl:Show(); OnQuestEnter(self) end)
+    r:SetScript("OnEnter", function(self) self.hl:Show(); OnQuestEnter(self); if CUI.QuestProxyShow then CUI.QuestProxyShow(self) end end)
     r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
     questRows[i] = r
     return r
@@ -430,6 +432,89 @@ OnQuestClick = function(row, button)
             root:CreateButton("Copy Wowhead link", function() CUI:ShowCopyBox("https://www.wowhead.com/classic/quest=" .. id) end)
         end
     end)
+end
+
+--------------------------------------------------------------------------------
+-- Click proxy (Forever). Our own code may not open the map or change the watch list (see OpenOnMap), but the
+-- game's tracker is still there (faded) with a header button per tracked quest. One secure button is laid over
+-- the quest you point at and passes the click to that header button, so Blizzard's own code runs it:
+--   left-click = open the quest in the quest log; Shift + left or right click = stop tracking.
+-- Shift + right-click is turned into a click named "untrack" (helpbutton remap; needs a unit, so "player"):
+-- the game's header treats any click but RightButton as a left click and Shift makes it untrack.
+-- Plain right-click still opens our menu. Quests the game's tracker doesn't show (untracked zone quests, or a
+-- full game tracker) fall back to the Quest Log button. Out of combat only: it hides when a fight starts.
+--------------------------------------------------------------------------------
+local proxy
+local function BlizzHeader(id)
+    for _, n in ipairs({ "QuestObjectiveTracker", "CampaignQuestObjectiveTracker" }) do
+        local m = _G[n]
+        if m and m.GetExistingBlock then
+            local ok, b = pcall(m.GetExistingBlock, m, id)
+            if ok and type(b) == "table" and b.HeaderButton then return b.HeaderButton end
+        end
+    end
+end
+
+local function ClickProxy()
+    if proxy then return proxy end
+    proxy = CreateFrame("Button", "CysQuestClickProxy", UIParent, "SecureActionButtonTemplate, SecureHandlerStateTemplate")
+    proxy:SetFrameStrata("DIALOG")
+    proxy:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    proxy:SetAttribute("useOnKeyDown", false)
+    proxy:SetAttribute("unit", "player")
+    proxy:SetAttribute("type1", "click")
+    proxy:SetAttribute("shift-helpbutton2", "untrack")
+    proxy:Hide()
+    proxy:SetAttribute("_onstate-combat", [[ if newstate == "in" then self:Hide() end ]])
+    RegisterStateDriver(proxy, "combat", "[combat] in; out")
+    proxy:SetScript("PreClick", function(self, button)
+        -- no game tracker button: the Quest Log button opens the log, with this quest picked
+        local row = self.row
+        if not self.header and button == "LeftButton" and not IsShiftKeyDown() and row and row.questID and C_QuestLog.SetSelectedQuest then
+            pcall(C_QuestLog.SetSelectedQuest, row.questID)
+        end
+    end)
+    proxy:HookScript("OnClick", function(self, button)
+        local row = self.row
+        if not (row and row.questID) then return end
+        if button == "RightButton" and not IsShiftKeyDown() then OnQuestClick(row, "RightButton") end
+    end)
+    proxy:SetScript("OnEnter", function(self)
+        local r = self.row
+        if r and r:IsVisible() and r.questID then r.hl:Show(); OnQuestEnter(r) end
+    end)
+    proxy:SetScript("OnLeave", function(self)
+        if self.row then self.row.hl:Hide() end
+        GameTooltip:Hide()
+        if not InCombatLockdown() then self:Hide() end
+    end)
+    return proxy
+end
+
+local function ShowProxy(row)
+    if not FOREVER or InCombatLockdown() or not row or not row.questID then return end
+    local ok, l, b, w, h = pcall(function()
+        local s = row:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        return row:GetLeft() * s, row:GetBottom() * s, row:GetWidth() * s, row:GetHeight() * s
+    end)
+    if not ok or not l or Secret(l) or Secret(w) then return end
+    local p = ClickProxy()
+    local header = BlizzHeader(row.questID)
+    p.row, p.header = row, header
+    p:SetAttribute("clickbutton", header or _G.QuestLogMicroButton)
+    p:SetAttribute("type-untrack", header and "click" or nil)
+    p:ClearAllPoints()
+    p:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b)
+    p:SetSize(w, h)
+    p:Show()
+end
+CUI.QuestProxyShow = ShowProxy
+
+-- after a rebuild: follow the row under the mouse (it may now hold another quest) or hide
+local function RefreshProxy()
+    if not proxy or not proxy:IsShown() or InCombatLockdown() then return end
+    local r = proxy.row
+    if r and r:IsVisible() and r.questID then ShowProxy(r) else proxy:Hide() end
 end
 
 OnQuestEnter = function(row)
@@ -770,6 +855,7 @@ local function Build(groups, total, elsewhere, logCount)
     for i = used.quest + 1, #questRows do questRows[i]:Hide(); questRows[i].questID = nil end
     for i = used.line + 1, #lineRows do lineRows[i]:Hide() end
     for i = used.item + 1, #itemButtons do itemButtons[i]:Hide(); itemButtons[i].itemID = nil end
+    RefreshProxy()
 
     local h = -y + 4
     content:SetHeight(h)
@@ -999,7 +1085,7 @@ CUI:RegisterPage("Quest Tracker", function(page)
     y = y - 6
 
     local note = W.Notes(page, 4, y, width, "", {
-        { "Click", "a quest to open it in the quest log; Shift-click stops tracking it; right-click to focus, share, untrack or copy its Wowhead link." },
+        { "Click", "a quest to open it in the quest log; Shift-click (left or right) stops tracking it; right-click to share it or copy its Wowhead link. Out of combat only." },
         { "Grey quests", "stay listed while you focus one." },
         { "Party notes", "go to party chat only (never a raid), when an objective finishes or the quest is ready." },
         { "Zone headers", "collapse when clicked; click the QUESTS header to fold the whole list." },

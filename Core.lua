@@ -523,9 +523,17 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.29",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.30",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.30", date = "2026-11-20",
+              added = {
+                  "Guild Recruiter: a Guild levels section in the window shows how many members sit in each level bracket (1-9, 10-14, 15-19 and so on), so you can see which levels to recruit. Thin brackets are gold and marked few; hover one to see who is in it, click it to recruit those levels. Only members seen in the last 14 days count (change it on the settings page). /cuirecruit levels prints it in chat.",
+              },
+              fixed = {
+                  "Quest Tracker: left-click a quest opens it in the quest log again, and Shift-click (left or right) stops tracking it. The game now does both itself, so the map keeps its quest markers. Out of combat only.",
+              },
+            },
             { version = "0.58.29", date = "2026-11-20",
               added = {
                   "Crate Tracker: click an item you carry in the list to put it in its crate, no more right-clicking the crate and hunting for the item in your bags. Works out of combat.",

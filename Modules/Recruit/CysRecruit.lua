@@ -8,6 +8,8 @@
 -- Optional: welcome new members in guild chat (one welcome per new member when several guildies run Cys's UI).
 -- Left the guild: players who left or were removed show in the window until the days you pick have passed
 -- (also the ones who left while you were offline, found by comparing the guild roster with your last login).
+-- Guild levels: how many members sit in each level bracket (from the same roster snapshot), so thin brackets
+-- stand out; click a bracket to recruit those levels.
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "recruit", name = "Guild Recruiter", foreverOnly = true,
@@ -41,6 +43,8 @@ db.left = db.left or {}           -- [realm-faction] = { { name, key, lvl, class
 db.roster = db.roster or {}       -- [realm-faction] = { guild, n, m = { [key] = { n, l, c, r } } }
 db.leftDays = db.leftDays or 3
 if db.leftShow == nil then db.leftShow = true end
+if db.levelsShow == nil then db.levelsShow = true end
+db.levelsDays = db.levelsDays or 14 -- only members seen within this many days count
 
 local floor, max, min, time, GetTime = math.floor, math.max, math.min, time, GetTime
 local PREFIX = "CysUIRec"
@@ -530,11 +534,18 @@ local function ReadRoster()
     if Secret(total) or type(total) ~= "number" or total <= 0 then return end
     local m, count = {}, 0
     for i = 1, total do
-        local ok, name, rank, _, level, _, _, _, _, _, _, class = pcall(GetGuildRosterInfo, i)
+        local ok, name, rank, _, level, _, _, _, _, online, _, class = pcall(GetGuildRosterInfo, i)
         if not ok or Secret(name) then return end
         local key = BaseKey(name)
         if key then
-            m[key] = { n = name:match("^[^%s%-]+"), l = level, c = class, r = rank }
+            -- days since last online (0 = online now); nil when the game won't say
+            local days
+            if online then days = 0
+            elseif GetGuildRosterLastOnline then
+                local okL, yr, mo, dy = pcall(GetGuildRosterLastOnline, i)
+                if okL and type(yr) == "number" and not Secret(yr) then days = yr * 365 + (mo or 0) * 30 + (dy or 0) end
+            end
+            m[key] = { n = name:match("^[^%s%-]+"), l = level, c = class, r = rank, o = days }
             count = count + 1
         end
     end
@@ -553,6 +564,46 @@ local function ReadRoster()
         for _, n in ipairs(gone) do AddLeft(n, nil, true) end
     end
     db.roster[rk] = { guild = gname, n = count, m = m }
+    if R.Refresh and frame and frame:IsShown() then R.Refresh() end
+end
+
+-- Members per level bracket from the last roster snapshot: { { lo, hi, n, list = { {n, l, c} } } }, counted, low.
+-- Only members seen within db.levelsDays count (alts too: the roster can't tell them apart).
+local BRACKETS = { { 1, 9 } }
+for a = 10, 55, 5 do BRACKETS[#BRACKETS + 1] = { a, a + 4 } end
+BRACKETS[#BRACKETS + 1] = { 60, 60 }
+function R.Levels()
+    local snap = db.roster[RealmKey()]
+    local out, total = {}, 0
+    for i, b in ipairs(BRACKETS) do out[i] = { lo = b[1], hi = b[2], n = 0, list = {} } end
+    if not (snap and snap.m) then return out, 0, 0 end
+    local keep = db.levelsDays or 14
+    for _, e in pairs(snap.m) do
+        local l = tonumber(e.l)
+        if l and (not e.o or e.o <= keep) then
+            for _, b in ipairs(out) do
+                if l >= b.lo and l <= b.hi then
+                    b.n = b.n + 1
+                    b.list[#b.list + 1] = e
+                    total = total + 1
+                    break
+                end
+            end
+        end
+    end
+    -- a bracket under half the average (below max level) is "few"
+    local sum, cnt = 0, 0
+    for i = 2, #out - 1 do sum = sum + out[i].n; cnt = cnt + 1 end
+    local avg = cnt > 0 and sum / cnt or 0
+    for i = 1, #out - 1 do out[i].few = out[i].n < avg * 0.5 end
+    return out, total, avg
+end
+
+function R.RecruitBracket(lo, hi)
+    db.lo, db.hi = lo, hi
+    BuildSearches()
+    Print("Guild Recruiter: now looking for levels " .. lo .. "-" .. hi .. ".")
+    if R.Refresh then R.Refresh() end
 end
 
 local rosterPending
@@ -588,7 +639,8 @@ end
 --------------------------------------------------------------------------------
 local WIDTH, HEADER_H, STRIP_H, ROW_H, MAX_ROWS = 340, 26, 46, 36, 8
 local LEFT_HEAD, LEFT_ROW, MAX_LEFT = 24, 20, 8
-local rows, leftRows = {}, {}
+local LV_ROW, LV_BAR = 15, 170
+local rows, leftRows, lvRows = {}, {}, {}
 
 local function Ago(t)
     local s = time() - (t or time())
@@ -807,6 +859,21 @@ local function BuildWindow()
     lh:SetScript("OnClick", function() db.leftFolded = not db.leftFolded; R.Refresh() end)
     f.leftMore = W.Text(f, 10, T.dim, "CENTER")
 
+    -- Guild levels: header line (click folds it) + one row per level bracket
+    local vh = CreateFrame("Button", nil, f)
+    f.lvHead = vh
+    vh:SetHeight(LEFT_HEAD)
+    vh.line = W.Texture(vh, "BORDER", T.line)
+    vh.line:SetPoint("TOPLEFT", 7, 0); vh.line:SetPoint("TOPRIGHT", -7, 0); vh.line:SetHeight(1)
+    vh.text = W.Text(vh, 11, T.accent)
+    vh.text:SetPoint("LEFT", 10, -1)
+    vh.fold = W.Text(vh, 10, T.dim, "RIGHT")
+    vh.fold:SetPoint("RIGHT", -10, -1)
+    vh:SetScript("OnEnter", function(s) s.fold:SetTextColor(T.accent[1], T.accent[2], T.accent[3]) end)
+    vh:SetScript("OnLeave", function(s) s.fold:SetTextColor(T.dim[1], T.dim[2], T.dim[3]) end)
+    vh:SetScript("OnClick", function() db.levelsFolded = not db.levelsFolded; R.Refresh() end)
+    vh:Hide()
+
     local acc = 0
     f:SetScript("OnUpdate", function(_, el)
         acc = acc + el
@@ -863,6 +930,7 @@ function R.Refresh(show)
         frame.more:Hide()
     end
     h = R.PaintLeft(h)
+    h = R.PaintLevels(h)
     frame:SetHeight(h)
 end
 
@@ -909,6 +977,93 @@ function R.PaintLeft(y)
         frame.leftMore:Hide()
     end
     if #list > 0 then y = y + 4 end
+    return y
+end
+
+local function MakeLevelRow(i)
+    local r = CreateFrame("Button", nil, frame)
+    r:SetHeight(LV_ROW)
+    r.hl = W.Texture(r, "BACKGROUND", T.hover); r.hl:SetAllPoints(); r.hl:Hide()
+    r.label = W.Text(r, 10, T.desc, "RIGHT")
+    r.label:SetPoint("LEFT", 10, 0)
+    r.label:SetWidth(38)
+    r.track = W.Texture(r, "BORDER", T.line)
+    r.track:SetPoint("LEFT", 56, 0)
+    r.track:SetSize(LV_BAR, 7)
+    r.bar = r:CreateTexture(nil, "ARTWORK")
+    r.bar:SetPoint("LEFT", r.track, "LEFT")
+    r.bar:SetHeight(7)
+    r.num = W.Text(r, 10, { 1, 1, 1 })
+    r.num:SetPoint("LEFT", r.track, "RIGHT", 8, 0)
+    r.tag = W.Text(r, 10, T.accent)
+    r.tag:SetPoint("LEFT", r.num, "RIGHT", 6, 0)
+    r:SetScript("OnEnter", function(s)
+        s.hl:Show()
+        local b = s.entry
+        if not b then return end
+        GameTooltip:SetOwner(s, "ANCHOR_LEFT")
+        GameTooltip:AddLine("Levels " .. (b.lo == b.hi and b.lo or (b.lo .. "-" .. b.hi)) .. ":  " .. b.n .. (b.n == 1 and " member" or " members"), 1, 0.82, 0)
+        table.sort(b.list, function(x, y)
+            if (x.l or 0) ~= (y.l or 0) then return (x.l or 0) > (y.l or 0) end
+            return (x.n or "") < (y.n or "")
+        end)
+        for k = 1, min(#b.list, 15) do
+            local e = b.list[k]
+            GameTooltip:AddDoubleLine(ClassColored(e.n or "?", e.c), tostring(e.l or ""), 1, 1, 1, 0.7, 0.7, 0.7)
+        end
+        if #b.list > 15 then GameTooltip:AddLine("+" .. (#b.list - 15) .. " more", 0.6, 0.6, 0.6) end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click to recruit levels " .. b.lo .. "-" .. b.hi .. ".", T.accent[1], T.accent[2], T.accent[3])
+        GameTooltip:Show()
+    end)
+    r:SetScript("OnLeave", function(s) s.hl:Hide(); GameTooltip:Hide() end)
+    r:SetScript("OnClick", function(s) if s.entry then R.RecruitBracket(s.entry.lo, s.entry.hi) end end)
+    lvRows[i] = r
+    return r
+end
+
+-- the Guild levels section at the bottom; returns the new window height
+function R.PaintLevels(y)
+    local lh = frame.lvHead
+    local list, total = R.Levels()
+    local show = db.levelsShow and total > 0
+    lh:SetShown(show)
+    local n = 0
+    if show then
+        lh:ClearAllPoints()
+        lh:SetPoint("TOPLEFT", 1, -y); lh:SetPoint("TOPRIGHT", -1, -y)
+        local days = db.levelsDays or 14
+        lh.text:SetText("Guild levels  |cFF999999(" .. total .. " seen in " .. days .. (days == 1 and " day" or " days") .. ")|r")
+        lh.fold:SetText(db.levelsFolded and "Show" or "Hide")
+        y = y + LEFT_HEAD
+        if not db.levelsFolded then n = #list end
+    end
+    local top = 0
+    for _, b in ipairs(list) do top = max(top, b.n) end
+    for i = 1, max(n, #lvRows) do
+        local b = i <= n and list[i] or nil
+        local r = lvRows[i] or (b and MakeLevelRow(i))
+        if r then
+            r.entry = b
+            r:SetShown(b ~= nil)
+            if b then
+                r:ClearAllPoints()
+                r:SetPoint("TOPLEFT", 1, -(y + (i - 1) * LV_ROW))
+                r:SetPoint("TOPRIGHT", -1, -(y + (i - 1) * LV_ROW))
+                r.label:SetText(b.lo == b.hi and tostring(b.lo) or (b.lo .. "-" .. b.hi))
+                local w = top > 0 and floor(LV_BAR * b.n / top + 0.5) or 0
+                r.bar:SetWidth(max(w, 1))
+                r.bar:SetShown(b.n > 0)
+                if b.few then r.bar:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.95)
+                else r.bar:SetColorTexture(0.55, 0.55, 0.55, 0.8) end
+                r.num:SetText(b.n)
+                local here = db.lo == b.lo and db.hi == b.hi
+                r.tag:SetText(here and "|cFF33FF66recruiting|r" or (b.few and "few" or ""))
+            end
+        end
+    end
+    y = y + n * LV_ROW
+    if show then y = y + 6 end
     return y
 end
 
@@ -970,6 +1125,13 @@ SlashCmdList.CYSRECRUIT = function(msg)
         local list = Left()
         if #list == 0 then Print("Guild Recruiter: nobody left the guild in the last " .. db.leftDays .. " days.") end
         for _, e in ipairs(list) do Print(LeftLine(e) .. "  |cFF999999" .. AgoText(e.t) .. "|r") end
+    elseif msg == "levels" then
+        local list, total = R.Levels()
+        if total == 0 then Print("Guild Recruiter: no guild roster read yet (open the guild window once).") return end
+        Print("Guild Recruiter: members per level (seen in the last " .. db.levelsDays .. " days, alts included):")
+        for _, b in ipairs(list) do
+            Print("  " .. (b.lo == b.hi and b.lo or (b.lo .. "-" .. b.hi)) .. ": " .. b.n .. (b.few and "  |cFFFFD100few|r" or ""))
+        end
     else R.Toggle() end
 end
 
@@ -1055,13 +1217,21 @@ CUI:RegisterPage("Guild Recruiter", function(page)
     clearLeft:SetPoint("TOPLEFT", 4, y - 80)
     clearLeft:SetScript("OnClick", function() wipe(Left()); if R.Refresh then R.Refresh() end end)
 
-    W.Notes(page, 4, y - 112, width, "", {
+    y = y - 112
+    W.Header(page, "Guild levels", width):SetPoint("TOPLEFT", 0, y)
+    W.Checkbox(page, "Show members per level bracket in the window", function() return db.levelsShow end,
+        function(v) db.levelsShow = v; if R.Refresh then R.Refresh() end end):SetPoint("TOPLEFT", 4, y - 26)
+    W.Stepper(page, "Count members seen in the last", function() return db.levelsDays end,
+        function(v) db.levelsDays = v; if R.Refresh then R.Refresh() end end, 1, 90, 1, " days"):SetPoint("TOPLEFT", 4, y - 52)
+
+    W.Notes(page, 4, y - 86, width, "", {
         { "How it runs", "Press Start, then play as usual. The game only allows /who from a real key press or click, so each key press or click on the game world takes one step: a /who search or one whisper. Your keys still work as normal. It pauses in combat, battlegrounds and arenas." },
         { "Who is whispered", "Players without a guild in your level range, never the same player twice within the days above. Ranges with more than 50 players are searched again one class at a time." },
         { "Invites", "The game only lets you invite yourself, never an addon. Players who answer show in the window; Invite shows /ginvite and their name in a small box: Ctrl+C, then Enter, Ctrl+V, Enter (your guild rank must be allowed to invite)." },
         { "Left the guild", "Players who leave or are removed show under the replies in the window, with who removed them. Players who left while you were offline show after your next login. Each name clears by itself after the days above; x takes it off sooner." },
         { "Welcome", "Sent on your next key press or click after someone joins. When several guildies run Cys's UI, only one of them welcomes each new member." },
-        "/cuirecruit opens the window; /cuirecruit start, stop, next or left. A key press with the chat box open doesn't count.",
+        { "Guild levels", "Members per level bracket, from the guild roster (alts count too; members not seen within the days above are left out). Thin brackets are gold and marked few. Click a bracket to recruit those levels; hover it to see who is in it." },
+        "/cuirecruit opens the window; /cuirecruit start, stop, next, left or levels. A key press with the chat box open doesn't count.",
     })
 end, function() end)
 

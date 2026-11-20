@@ -14,11 +14,11 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.28",
+    version = "0.58.30",
     items = {
-        { title = "Left the guild", page = "Guild Recruiter", module = "recruit",
+        { title = "Guild levels", page = "Guild Recruiter", module = "recruit",
           icon = "Interface\\Icons\\INV_Misc_Note_02",
-          text = "The Guild Recruiter window now lists who left the guild or was removed (and by whom), including while you were offline. Names clear by themselves after the days you pick.",
+          text = "The Guild Recruiter window shows how many guild members sit in each level bracket, with thin brackets marked, so you know which levels to recruit. Click a bracket to recruit those levels.",
           where = "/cuirecruit, or right-click the Guild block on the info bar."},
     },
 }
