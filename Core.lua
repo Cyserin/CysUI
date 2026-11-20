@@ -523,9 +523,15 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.27",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.28",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.28", date = "2026-11-19",
+              added = {
+                  "Guild Recruiter: players who leave the guild or are removed now show under the replies in the recruiter window, with their level, class color and who removed them. Players who left while you were offline show after your next login.",
+                  "Guild Recruiter: each name clears from the list by itself after the days you pick (3 by default, Guild Recruiter page), x takes it off sooner, and /cuirecruit left lists them in chat.",
+              },
+            },
             { version = "0.58.27", date = "2026-11-19",
               added = {
                   "Cys's BiS (WoW Forever): a window beside the character panel (BiS button) with your best item for every slot, scored with Cys's Upgrade's weights, and where it comes from: the boss and dungeon, a quest, a vendor, the Auction House or your bags. Shows the gain over what you wear, the level it needs, and how many of your BiS you already have. Click a slot for its other picks; drop an item on a slot to pin it.",

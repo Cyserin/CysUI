@@ -14,12 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.27",
+    version = "0.58.28",
     items = {
-        { title = "Cys's BiS", page = "BiS List", module = "bis",
-          icon = "Interface\\Icons\\INV_Helmet_03",
-          text = "Your best item for every slot, beside the character panel: where it drops, what it gains over your gear and the level it needs. Tank profiles get a Survival / Threat mix.",
-          where = "Character panel: the BiS button (top right)." },
+        { title = "Left the guild", page = "Guild Recruiter", module = "recruit",
+          icon = "Interface\\Icons\\INV_Misc_Note_02",
+          text = "The Guild Recruiter window now lists who left the guild or was removed (and by whom), including while you were offline. Names clear by themselves after the days you pick.",
+          where = "/cuirecruit, or right-click the Guild block on the info bar."},
     },
 }
 

@@ -6,6 +6,8 @@
 -- within the days you pick. Players who answer show in a small box: interested ones in gold, questions in white.
 -- Invites are never sent by themselves: Invite shows /ginvite Name to copy into chat (the game allows no other way).
 -- Optional: welcome new members in guild chat (one welcome per new member when several guildies run Cys's UI).
+-- Left the guild: players who left or were removed show in the window until the days you pick have passed
+-- (also the ones who left while you were offline, found by comparing the guild roster with your last login).
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "recruit", name = "Guild Recruiter", foreverOnly = true,
@@ -35,6 +37,10 @@ if db.chatNote == nil then db.chatNote = true end
 if db.welcome == nil then db.welcome = false end -- talks in guild chat: off by default
 db.contacted = db.contacted or {} -- [realm-faction] = { [lower name] = time() }
 db.box = db.box or {}             -- [realm-faction] = { { name, lvl, class, text, t, kind } }
+db.left = db.left or {}           -- [realm-faction] = { { name, key, lvl, class, rank, t, by, offline } }
+db.roster = db.roster or {}       -- [realm-faction] = { guild, n, m = { [key] = { n, l, c, r } } }
+db.leftDays = db.leftDays or 3
+if db.leftShow == nil then db.leftShow = true end
 
 local floor, max, min, time, GetTime = math.floor, math.max, math.min, time, GetTime
 local PREFIX = "CysUIRec"
@@ -125,6 +131,25 @@ local function Eligible(name)
     if not name:find("%a") then return false end -- names only in another alphabet are passed by
     if queued[Key(name)] or Recent(name) or InBox(name) then return false end
     return true
+end
+
+-- guild members by first name part (roster names are "Name Realm" or "Name-Realm" on Forever)
+local function BaseKey(name)
+    if type(name) ~= "string" then return nil end
+    local b = name:match("^[^%s%-]+")
+    return b and b:lower()
+end
+local function Left()
+    local k = RealmKey()
+    db.left[k] = db.left[k] or {}
+    return db.left[k]
+end
+local function PruneLeft()
+    local list, now = Left(), time()
+    local keep = (db.leftDays or 3) * 86400
+    for i = #list, 1, -1 do
+        if now - (list[i].t or 0) > keep then table.remove(list, i) end
+    end
 end
 
 local function PruneBox()
@@ -463,13 +488,93 @@ local function StartWelcome(name)
     end)
 end
 
+--------------------------------------------------------------------------------
+-- Left the guild
+--------------------------------------------------------------------------------
+local LEFT = Pattern(ERR_GUILD_LEAVE_S)
+local KICKED = Pattern(ERR_GUILD_REMOVE_SS)
+local loginAt = GetTime()
+
+function R.RemoveLeft(key)
+    local list = Left()
+    for i = #list, 1, -1 do if list[i].key == key then table.remove(list, i) end end
+    if R.Refresh then R.Refresh() end
+end
+
+local function AddLeft(name, by, offline)
+    local key = BaseKey(name)
+    if not key or key == BaseKey(UnitName("player")) then return end
+    local list, now = Left(), time()
+    for _, e in ipairs(list) do
+        if e.key == key then
+            if by and not e.by then e.by = Short(by); e.offline = nil end
+            return
+        end
+    end
+    local snap = db.roster[RealmKey()]
+    local m = snap and snap.m and snap.m[key]
+    table.insert(list, 1, {
+        name = m and m.n or Short(name):match("^[^%s%-]+") or name, key = key,
+        lvl = m and m.l, class = m and m.c, rank = m and m.r,
+        t = now, by = by and Short(by) or nil, offline = offline or nil,
+    })
+    if R.Refresh then R.Refresh() end
+end
+
+-- Compare the guild roster with the last one we saw: members gone since then left while we were away.
+local function ReadRoster()
+    if not IsInGuild() or GetTime() - loginAt < 5 then return end
+    local gname = GetGuildInfo("player")
+    if not gname or Secret(gname) then return end
+    local total = GetNumGuildMembers and GetNumGuildMembers() or 0
+    if Secret(total) or type(total) ~= "number" or total <= 0 then return end
+    local m, count = {}, 0
+    for i = 1, total do
+        local ok, name, rank, _, level, _, _, _, _, _, _, class = pcall(GetGuildRosterInfo, i)
+        if not ok or Secret(name) then return end
+        local key = BaseKey(name)
+        if key then
+            m[key] = { n = name:match("^[^%s%-]+"), l = level, c = class, r = rank }
+            count = count + 1
+        end
+    end
+    if count == 0 then return end
+    local rk = RealmKey()
+    local snap = db.roster[rk]
+    if snap and snap.guild == gname and snap.m then
+        if count < (snap.n or 0) * 0.5 then return end -- roster not fully loaded yet
+        local gone = {}
+        for key, old in pairs(snap.m) do
+            if not m[key] then gone[#gone + 1] = old.n or key end
+        end
+        -- a big chunk missing at once is a roster that hasn't fully loaded, not players leaving
+        if #gone > 10 and #gone > (snap.n or 0) * 0.25 then return end
+        table.sort(gone)
+        for _, n in ipairs(gone) do AddLeft(n, nil, true) end
+    end
+    db.roster[rk] = { guild = gname, n = count, m = m }
+end
+
+local rosterPending
+local function RosterSoon()
+    if rosterPending then return end
+    rosterPending = true
+    C_Timer.After(2, function() rosterPending = nil; pcall(ReadRoster) end)
+end
+
 local function OnSystem(msg)
     if Secret(msg) then return end
+    local gone, by = nil, nil
+    if KICKED then gone, by = msg:match(KICKED) end
+    if not gone and LEFT then gone = msg:match(LEFT) end
+    if gone then AddLeft(gone, by); return end
     local who = INVITED and msg:match(INVITED)
     if who then pendingInvite[Key(who)] = nil; local e = InBox(who); if e then e.invited = time() end; if R.Refresh then R.Refresh() end; return end
     who = JOINED and msg:match(JOINED)
     if who then
         if InBox(who) or Contacted()[Key(who)] then session.joined = session.joined + 1 end
+        local bk = BaseKey(who)
+        if bk then R.RemoveLeft(bk) end
         R.Remove(who)
         StartWelcome(who)
         return
@@ -482,7 +587,8 @@ end
 -- The window: status, Start / Stop, and the players who answered
 --------------------------------------------------------------------------------
 local WIDTH, HEADER_H, STRIP_H, ROW_H, MAX_ROWS = 340, 26, 46, 36, 8
-local rows = {}
+local LEFT_HEAD, LEFT_ROW, MAX_LEFT = 24, 20, 8
+local rows, leftRows = {}, {}
 
 local function Ago(t)
     local s = time() - (t or time())
@@ -536,6 +642,57 @@ local function MakeRow(i)
     r:SetPoint("TOPRIGHT", -1, -(HEADER_H + STRIP_H + (i - 1) * ROW_H))
     rows[i] = r
     return r
+end
+
+local function MakeLeftRow(i)
+    local r = CreateFrame("Frame", nil, frame)
+    r:SetHeight(LEFT_ROW)
+    r:EnableMouse(true)
+    r.hl = W.Texture(r, "BACKGROUND", T.hover); r.hl:SetAllPoints(); r.hl:Hide()
+    r.name = W.Text(r, 11, { 1, 1, 1 })
+    r.name:SetPoint("LEFT", 10, 0)
+    r.name:SetWordWrap(false)
+    r.x = CreateFrame("Button", nil, r)
+    r.x:SetSize(18, 18)
+    r.x:SetPoint("RIGHT", -6, 0)
+    r.x.text = W.Text(r.x, 11, T.dim, "CENTER"); r.x.text:SetPoint("CENTER"); r.x.text:SetText("x")
+    r.x:SetScript("OnEnter", function(s) s.text:SetTextColor(1, 0.3, 0.3) end)
+    r.x:SetScript("OnLeave", function(s) s.text:SetTextColor(T.dim[1], T.dim[2], T.dim[3]) end)
+    r.x:SetScript("OnClick", function() if r.entry then R.RemoveLeft(r.entry.key) end end)
+    r.age = W.Text(r, 10, T.dim, "RIGHT")
+    r.age:SetPoint("RIGHT", r.x, "LEFT", -4, 0)
+    r.name:SetPoint("RIGHT", r.age, "LEFT", -8, 0)
+    r:SetScript("OnEnter", function(s)
+        s.hl:Show()
+        local e = s.entry
+        if not e then return end
+        GameTooltip:SetOwner(s, "ANCHOR_LEFT")
+        GameTooltip:AddLine(ClassColored(e.name, e.class))
+        if e.lvl then GameTooltip:AddLine("Level " .. e.lvl .. (e.rank and ("  -  " .. e.rank) or ""), 1, 1, 1) end
+        if e.by then GameTooltip:AddLine("Removed by " .. e.by, 1, 0.45, 0.45)
+        elseif e.offline then GameTooltip:AddLine("Left while you were offline (noticed " .. AgoText(e.t) .. ")", T.desc[1], T.desc[2], T.desc[3], true)
+        else GameTooltip:AddLine("Left the guild " .. AgoText(e.t), T.desc[1], T.desc[2], T.desc[3]) end
+        local days = db.leftDays or 3
+        GameTooltip:AddLine("Clears from this list after " .. days .. (days == 1 and " day" or " days") .. ".", T.dim[1], T.dim[2], T.dim[3])
+        GameTooltip:Show()
+    end)
+    r:SetScript("OnLeave", function(s) s.hl:Hide(); GameTooltip:Hide() end)
+    leftRows[i] = r
+    return r
+end
+
+local function AgoText(t)
+    local a = Ago(t)
+    return a == "now" and "just now" or (a .. " ago")
+end
+
+local function LeftLine(e)
+    local s = ClassColored(e.name, e.class)
+    if e.lvl then s = s .. "  |cFF999999" .. e.lvl .. "|r" end
+    if e.by then s = s .. "  |cFFFF7373removed by " .. e.by .. "|r"
+    elseif e.offline then s = s .. "  |cFF999999left while you were away|r"
+    else s = s .. "  |cFF999999left|r" end
+    return s
 end
 
 local function StatusText()
@@ -635,6 +792,21 @@ local function BuildWindow()
     f.empty:SetText("Players who answer show here.")
     f.more = W.Text(f, 10, T.dim, "CENTER")
 
+    -- Left the guild: header line (click folds it) + small rows
+    local lh = CreateFrame("Button", nil, f)
+    f.leftHead = lh
+    lh:SetHeight(LEFT_HEAD)
+    lh.line = W.Texture(lh, "BORDER", T.line)
+    lh.line:SetPoint("TOPLEFT", 7, 0); lh.line:SetPoint("TOPRIGHT", -7, 0); lh.line:SetHeight(1)
+    lh.text = W.Text(lh, 11, T.accent)
+    lh.text:SetPoint("LEFT", 10, -1)
+    lh.fold = W.Text(lh, 10, T.dim, "RIGHT")
+    lh.fold:SetPoint("RIGHT", -10, -1)
+    lh:SetScript("OnEnter", function(s) s.fold:SetTextColor(T.accent[1], T.accent[2], T.accent[3]) end)
+    lh:SetScript("OnLeave", function(s) s.fold:SetTextColor(T.dim[1], T.dim[2], T.dim[3]) end)
+    lh:SetScript("OnClick", function() db.leftFolded = not db.leftFolded; R.Refresh() end)
+    f.leftMore = W.Text(f, 10, T.dim, "CENTER")
+
     local acc = 0
     f:SetScript("OnUpdate", function(_, el)
         acc = acc + el
@@ -690,7 +862,54 @@ function R.Refresh(show)
     else
         frame.more:Hide()
     end
+    h = R.PaintLeft(h)
     frame:SetHeight(h)
+end
+
+-- the Left the guild section under the replies; returns the new window height
+function R.PaintLeft(y)
+    PruneLeft()
+    local list = db.leftShow and Left() or {}
+    local lh = frame.leftHead
+    local shown = 0
+    if #list > 0 then
+        lh:ClearAllPoints()
+        lh:SetPoint("TOPLEFT", 1, -y); lh:SetPoint("TOPRIGHT", -1, -y)
+        lh.text:SetText("Left the guild  |cFF999999(" .. #list .. ")|r")
+        lh.fold:SetText(db.leftFolded and "Show" or "Hide")
+        lh:Show()
+        y = y + LEFT_HEAD
+        if not db.leftFolded then shown = min(#list, MAX_LEFT) end
+    else
+        lh:Hide()
+    end
+    for i = 1, max(shown, #leftRows) do
+        local e = i <= shown and list[i] or nil
+        local r = leftRows[i] or (e and MakeLeftRow(i))
+        if r then
+            r.entry = e
+            r:SetShown(e ~= nil)
+            if e then
+                r:ClearAllPoints()
+                r:SetPoint("TOPLEFT", 1, -(y + (i - 1) * LEFT_ROW))
+                r:SetPoint("TOPRIGHT", -1, -(y + (i - 1) * LEFT_ROW))
+                r.name:SetText(LeftLine(e))
+                r.age:SetText(Ago(e.t))
+            end
+        end
+    end
+    y = y + shown * LEFT_ROW
+    if shown > 0 and #list > shown then
+        frame.leftMore:ClearAllPoints()
+        frame.leftMore:SetPoint("TOP", 0, -(y + 2))
+        frame.leftMore:SetText("+" .. (#list - shown) .. " more")
+        frame.leftMore:Show()
+        y = y + 16
+    else
+        frame.leftMore:Hide()
+    end
+    if #list > 0 then y = y + 4 end
+    return y
 end
 
 function R.Toggle()
@@ -706,6 +925,8 @@ ev:RegisterEvent("CHAT_MSG_WHISPER")
 ev:RegisterEvent("CHAT_MSG_SYSTEM")
 ev:RegisterEvent("CHAT_MSG_ADDON")
 ev:RegisterEvent("PLAYER_GUILD_UPDATE")
+ev:RegisterEvent("GUILD_ROSTER_UPDATE")
+ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 ev:RegisterEvent("ADDON_ACTION_BLOCKED")
 if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then C_ChatInfo.RegisterAddonMessagePrefix(PREFIX) end
@@ -721,6 +942,15 @@ ev:SetScript("OnEvent", function(_, e, a1, a2, a3, a4)
             local k = a2:match("^W:(.+)$")
             if k then welcomeTimers[k] = nil end -- someone else is welcoming them
         end
+    elseif e == "GUILD_ROSTER_UPDATE" then
+        RosterSoon()
+    elseif e == "PLAYER_ENTERING_WORLD" then
+        if a1 or a2 then -- login or /reload: ask the server for the roster once we are settled
+            C_Timer.After(8, function()
+                if IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
+                RosterSoon()
+            end)
+        end
     elseif e == "PLAYER_GUILD_UPDATE" then
         if R.running and not IsInGuild() then R.Stop("You left your guild") end
     elseif e == "ADDON_ACTION_FORBIDDEN" or e == "ADDON_ACTION_BLOCKED" then
@@ -735,6 +965,11 @@ SlashCmdList.CYSRECRUIT = function(msg)
     elseif msg == "stop" then R.Stop()
     elseif msg == "next" then R.Step()
     elseif msg == "reset" then wipe(Contacted()); Print("Guild Recruiter: whisper history cleared for this realm.")
+    elseif msg == "left" then
+        PruneLeft()
+        local list = Left()
+        if #list == 0 then Print("Guild Recruiter: nobody left the guild in the last " .. db.leftDays .. " days.") end
+        for _, e in ipairs(list) do Print(LeftLine(e) .. "  |cFF999999" .. AgoText(e.t) .. "|r") end
     else R.Toggle() end
 end
 
@@ -810,12 +1045,23 @@ CUI:RegisterPage("Guild Recruiter", function(page)
     wel:SetPoint("TOPLEFT", 4, y - 26)
     MessageBox(page, width - 8, 40, function() return db.welcomeMsg end, function(v) db.welcomeMsg = v end):SetPoint("TOPLEFT", 4, y - 52)
 
-    W.Notes(page, 4, y - 104, width, "", {
+    y = y - 104
+    W.Header(page, "Left the guild", width):SetPoint("TOPLEFT", 0, y)
+    W.Checkbox(page, "Show players who left the guild in the window", function() return db.leftShow end,
+        function(v) db.leftShow = v; if R.Refresh then R.Refresh() end end):SetPoint("TOPLEFT", 4, y - 26)
+    W.Stepper(page, "Keep them on the list for", function() return db.leftDays end,
+        function(v) db.leftDays = v; if R.Refresh then R.Refresh() end end, 1, 30, 1, " days"):SetPoint("TOPLEFT", 4, y - 52)
+    local clearLeft = W.Button(page, 110, 20, "Clear the list")
+    clearLeft:SetPoint("TOPLEFT", 4, y - 80)
+    clearLeft:SetScript("OnClick", function() wipe(Left()); if R.Refresh then R.Refresh() end end)
+
+    W.Notes(page, 4, y - 112, width, "", {
         { "How it runs", "Press Start, then play as usual. The game only allows /who from a real key press or click, so each key press or click on the game world takes one step: a /who search or one whisper. Your keys still work as normal. It pauses in combat, battlegrounds and arenas." },
         { "Who is whispered", "Players without a guild in your level range, never the same player twice within the days above. Ranges with more than 50 players are searched again one class at a time." },
         { "Invites", "The game only lets you invite yourself, never an addon. Players who answer show in the window; Invite shows /ginvite and their name in a small box: Ctrl+C, then Enter, Ctrl+V, Enter (your guild rank must be allowed to invite)." },
+        { "Left the guild", "Players who leave or are removed show under the replies in the window, with who removed them. Players who left while you were offline show after your next login. Each name clears by itself after the days above; x takes it off sooner." },
         { "Welcome", "Sent on your next key press or click after someone joins. When several guildies run Cys's UI, only one of them welcomes each new member." },
-        "/cuirecruit opens the window; /cuirecruit start, stop or next. A key press with the chat box open doesn't count.",
+        "/cuirecruit opens the window; /cuirecruit start, stop, next or left. A key press with the chat box open doesn't count.",
     })
 end, function() end)
 
