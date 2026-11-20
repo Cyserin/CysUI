@@ -48,10 +48,12 @@ local idByName = {}  -- [normalised name] = itemID (for icons and tooltips)
 local crateIDs = {}  -- itemIDs of everything in your bags, in bag order (crates are picked from these)
 local spotByID = {}  -- [itemID] = { bag, slot } of its first stack (for the crates)
 local countByID = {} -- [itemID] = how many you carry (how many crates of one kind)
+local writs = {}     -- Craftsman's Writs in your bags: { itemID, bag, slot, name, active }
+db.writQ = db.writQ or {} -- [questID] = true for quests started from a writ
 local spotByKey = {} -- [normalised name] = { bag, slot, n } of its biggest stack (what a click puts in)
 
 local function ScanBags()
-    wipe(carried); wipe(crateIDs); wipe(spotByID); wipe(spotByKey); wipe(countByID)
+    wipe(carried); wipe(crateIDs); wipe(spotByID); wipe(spotByKey); wipe(countByID); wipe(writs)
     local seen = {}
     local last = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or NUM_BAG_SLOTS or 4
     for bag = 0, last do
@@ -70,6 +72,12 @@ local function ScanBags()
                     db.ids[k] = info.itemID
                 end
                 countByID[info.itemID] = (countByID[info.itemID] or 0) + (info.stackCount or 1)
+                if name and name:find("Writ:") then
+                    local q = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
+                    if q and q.questID then db.writQ[q.questID] = true end
+                    writs[#writs + 1] = { itemID = info.itemID, bag = bag, slot = slot, name = name,
+                        active = q and q.isActive, questID = q and q.questID }
+                end
                 if not seen[info.itemID] then
                     seen[info.itemID] = true
                     spotByID[info.itemID] = { bag, slot }
@@ -107,7 +115,7 @@ local KNOWN = {
     ["Large Radiant Shard"] = 11178, ["Soul Dust"] = 11083, ["Greater Astral Essence"] = 11082,
     ["Small Glowing Shard"] = 11138, ["Large Glowing Shard"] = 11139,
     ["Mageweave Cloth"] = 4338, ["Bolt of Mageweave"] = 4339, ["Heavy Leather"] = 4234, ["Cured Heavy Hide"] = 4236,
-    ["Gold Ore"] = 2776, ["Mithril Ore"] = 3858,
+    ["Gold Ore"] = 2776, ["Mithril Ore"] = 3858, ["Mechanical Repair Kit"] = 11590,
     ["Wintersbite"] = 3819, ["Firebloom"] = 4625, ["Purple Lotus"] = 8831, ["Arthas' Tears"] = 8836,
     ["Liferoot"] = 3357, ["Fadeleaf"] = 3818, ["Goldthorn"] = 3821, ["Khadgar's Whisker"] = 3358,
 }
@@ -190,7 +198,66 @@ function Crates.List()
             list[#list + 1] = { itemID = itemID, name = c.name, reqs = c.reqs, ready = ready, n = countByID[itemID] or 1 }
         end
     end
+    Crates.AddWrits(list)
     return list
+end
+
+-- Craftsman's Writs: a writ not started yet shows the item its name asks for (click its heading to start the
+-- quest); a started one shows the quest's objectives with exact counts.
+local function ReqFor(name, count)
+    local key = Norm(name)
+    local id = idByName[key] or db.ids[key] or AHItemID(key) or KNOWN_IDS[key]
+    if not id and C_Item and C_Item.GetItemInfoInstant then
+        local ok, v = pcall(C_Item.GetItemInfoInstant, name)
+        if ok and type(v) == "number" then id = v end
+    end
+    if id then db.ids[key] = id end
+    return { name = name, key = key, count = count, have = carried[key] or 0, itemID = id }
+end
+
+function Crates.AddWrits(list)
+    local Q = C_QuestLog
+    local inLog = {}
+    if Q and Q.GetNumQuestLogEntries and Q.GetInfo and Q.GetQuestObjectives then
+        for i = 1, (Q.GetNumQuestLogEntries() or 0) do
+            local info = Q.GetInfo(i)
+            local qid = info and not info.isHeader and info.questID
+            local title = info and info.title
+            if qid and (db.writQ[qid] or (type(title) == "string" and title:find("Writ"))) then
+                db.writQ[qid] = true
+                inLog[qid] = true
+                local reqs, ready = {}, 0
+                for _, o in ipairs(Q.GetQuestObjectives(qid) or {}) do
+                    local text = type(o.text) == "string" and o.text or ""
+                    local nm = text:gsub("^%s*%d+%s*/%s*%d+%s*", ""):gsub(":?%s*%d+%s*/%s*%d+%s*$", "")
+                    if nm ~= "" and o.numRequired and o.numRequired > 0 then
+                        local r = ReqFor(nm, o.numRequired)
+                        if r.have == 0 and o.numFulfilled then r.have = o.numFulfilled end
+                        if r.have >= r.count then ready = ready + 1 end
+                        reqs[#reqs + 1] = r
+                    end
+                end
+                list[#list + 1] = { writ = true, fold = "q" .. qid, name = title, reqs = reqs, ready = ready, n = 1 }
+            end
+        end
+    end
+    -- writs in your bags whose quest isn't started yet (one heading per kind)
+    local seen = {}
+    for _, w in ipairs(writs) do
+        if not (w.questID and inLog[w.questID]) and not w.active and not seen[w.itemID] then
+            seen[w.itemID] = true
+            local want = w.name:match("Writ:%s*(.+)$")
+            local reqs = want and { ReqFor(want, nil) } or {}
+            list[#list + 1] = { writ = true, itemID = w.itemID, fold = w.itemID, name = w.name, reqs = reqs,
+                ready = 0, n = countByID[w.itemID] or 1, startMacro = format("/use %d %d", w.bag, w.slot) }
+        end
+    end
+end
+
+local function Money(c)
+    local ok, s = pcall(GetMoneyString, c, true)
+    if ok and type(s) == "string" then return s end
+    return format("%dg %ds", floor(c / 10000), floor(c / 100) % 100)
 end
 
 -- Hook for Cys's Auction House later: return a price in copper for an item, or nil. The cheapest item of each
@@ -215,10 +282,10 @@ end
 local fill
 local function RowTip(row, owner)
     GameTooltip:SetOwner(owner or row, "ANCHOR_RIGHT")
-    pcall(GameTooltip.SetItemByID, GameTooltip, row.itemID)
+    if row.itemID then pcall(GameTooltip.SetItemByID, GameTooltip, row.itemID) end
     if row.fillMacro or row.searchName then GameTooltip:AddLine(" ") end
     if row.fillMacro then
-        GameTooltip:AddLine("Click to put it in the crate", T.accent[1], T.accent[2], T.accent[3])
+        GameTooltip:AddLine(row.fillHint or "Click to put it in the crate", T.accent[1], T.accent[2], T.accent[3])
     end
     if row.searchName then
         GameTooltip:AddLine("Shift-click to search the Auction House", T.accent[1], T.accent[2], T.accent[3])
@@ -367,35 +434,36 @@ function Crates.Refresh()
         if n >= MAX_ROWS then break end
         n = n + 1
         local r = GetRow(n)
-        r.crate, r.itemID, r.fillMacro, r.searchName = c.itemID, c.itemID, nil, nil
+        r.crate, r.itemID, r.fillMacro, r.searchName = c.fold or c.itemID, c.itemID, c.startMacro, nil
+        r.fillHint = c.startMacro and "Click to start the writ's quest" or nil
         r:SetHeight(CRATE_H)
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", 1, -(y - TOP)); r:SetPoint("TOPRIGHT", -1, -(y - TOP))
         r.icon:SetSize(16, 16)
         r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 8, 0)
-        r.icon:SetTexture(ItemIcon(c.itemID) or "Interface\\Icons\\INV_Crate_02")
+        r.icon:SetTexture(ItemIcon(c.itemID) or (c.writ and "Interface\\Icons\\INV_Scroll_03") or "Interface\\Icons\\INV_Crate_02")
         r.icon:Show()
         r.name:ClearAllPoints(); r.name:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
         r.name:SetPoint("RIGHT", r.right, "LEFT", -6, 0)
         r.name:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
-        r.name:SetText((db.folded[c.itemID] and "+ " or "") .. (c.name or "Crate")
+        r.name:SetText((db.folded[c.fold or c.itemID] and "+ " or "") .. (c.name or "Crate")
             .. ((c.n or 1) > 1 and format("  |cFFFFFFFFx%d|r", c.n) or ""))
         local all = c.ready == #c.reqs
-        r.right:SetText(format("%d / %d", c.ready, #c.reqs))
+        r.right:SetText(c.startMacro and "not started" or format("%d / %d", c.ready, #c.reqs))
         if all then r.right:SetTextColor(0.35, 0.85, 0.35) else r.right:SetTextColor(0.7, 0.7, 0.7) end
         r.tag:SetText("")
         r.line:Show()
         r:Show()
         y = y + CRATE_H
-        if not db.folded[c.itemID] then
-            local cheap = Cheapest(c)
+        if not db.folded[c.fold or c.itemID] then
+            local cheap = (not c.writ and #c.reqs > 1) and Cheapest(c) or nil
             for _, q in ipairs(c.reqs) do
                 if n >= MAX_ROWS then break end
                 n = n + 1
                 local s = GetRow(n)
-                s.crate, s.itemID, s.searchName = nil, q.itemID, q.name
+                s.crate, s.itemID, s.searchName, s.fillHint = nil, q.itemID, q.name, nil
                 local from, to = spotByID[c.itemID], spotByKey[q.key]
-                s.fillMacro = (from and to and q.have > 0)
+                s.fillMacro = (not c.writ and from and to and q.have > 0)
                     and format("/use %d %d\n/use %d %d", from[1], from[2], to[1], to[2]) or nil
                 s:SetHeight(ROW_H)
                 s:ClearAllPoints()
@@ -412,12 +480,20 @@ function Crates.Refresh()
                 s.name:ClearAllPoints(); s.name:SetPoint("LEFT", s.icon, "RIGHT", 6, 0)
                 s.name:SetPoint("RIGHT", s.tag, "LEFT", -6, 0)
                 s.name:SetTextColor(0.9, 0.9, 0.9)
-                s.name:SetText(format("|cFFBBBBBB%d|r  %s", q.count, q.name))
+                s.name:SetText(q.count and format("|cFFBBBBBB%d|r  %s", q.count, q.name) or q.name)
                 s.right:SetText(format("(%d)", q.have))
-                if q.have >= q.count then s.right:SetTextColor(0.35, 0.85, 0.35)
+                if not q.count then s.right:SetTextColor(1, 1, 1)
+                elseif q.have >= q.count then s.right:SetTextColor(0.35, 0.85, 0.35)
                 elseif q.have > 0 then s.right:SetTextColor(0.95, 0.75, 0.3)
                 else s.right:SetTextColor(0.85, 0.35, 0.3) end
-                s.tag:SetText(cheap == q.key and "(cheapest)" or "")
+                local tag = cheap == q.key and "(cheapest)" or ""
+                if c.writ and Crates.Price and q.itemID then
+                    -- writs: what the rest costs on the AH (or one, before the quest says how many)
+                    local each = Crates.Price(q.itemID)
+                    local need = q.count and max(0, q.count - q.have) or 1
+                    if each and need > 0 then tag = Money(each * need) end
+                end
+                s.tag:SetText(tag)
                 s.line:Hide()
                 s:Show()
                 y = y + ROW_H
@@ -426,7 +502,7 @@ function Crates.Refresh()
     end
     for i = n + 1, #rows do rows[i]:Hide() end
     local anyOpen = false
-    for _, c in ipairs(list) do if not db.folded[c.itemID] then anyOpen = true break end end
+    for _, c in ipairs(list) do if not db.folded[c.fold or c.itemID] then anyOpen = true break end end
     local fold = frame.fold
     fold.collapse = anyOpen
     fold.text:SetText(anyOpen and "Collapse all" or "Expand all")
@@ -545,7 +621,7 @@ local function BuildWindow()
     fold:SetScript("OnEnter", function(s) s.text:SetTextColor(1, 1, 1) end)
     fold:SetScript("OnLeave", function(s) s.text:SetTextColor(T.dim[1], T.dim[2], T.dim[3]) end)
     fold:SetScript("OnClick", function(s)
-        for _, c in ipairs(Crates.List()) do db.folded[c.itemID] = s.collapse or nil end
+        for _, c in ipairs(Crates.List()) do db.folded[c.fold or c.itemID] = s.collapse or nil end
         Crates.Refresh()
     end)
     f.fold = fold
@@ -719,7 +795,7 @@ function Crates.Toggle()
 end
 
 local ev = CreateFrame("Frame")
-for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED" }) do
+for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "QUEST_LOG_UPDATE" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 local queued = false

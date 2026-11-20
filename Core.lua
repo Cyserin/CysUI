@@ -531,6 +531,7 @@ if CysChangelog then
                   "Crate Tracker: click an item you carry in the list to put it in its crate, no more right-clicking the crate and hunting for the item in your bags. Works out of combat.",
                   "Crate Tracker: when you carry more than one crate of the same kind, its heading shows how many (x3).",
                   "Crate Tracker: Shift-click an item to put its name in the Auction House search box (or link it in chat when the Auction House is closed).",
+                  "Crate Tracker: Craftsman's Writs get their own spot. A writ you have not started shows the item it asks for and how many you carry (click its heading to start the quest); a started writ shows the quest's items with exact counts and what the rest costs on the Auction House.",
               },
               fixed = {
                   "Crate Tracker: the (cheapest) tag now compares what each whole bundle costs (price times how many you still need), not the price of one item.",
