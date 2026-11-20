@@ -216,11 +216,34 @@ local fill
 local function RowTip(row, owner)
     GameTooltip:SetOwner(owner or row, "ANCHOR_RIGHT")
     pcall(GameTooltip.SetItemByID, GameTooltip, row.itemID)
+    if row.fillMacro or row.searchName then GameTooltip:AddLine(" ") end
     if row.fillMacro then
-        GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Click to put it in the crate", T.accent[1], T.accent[2], T.accent[3])
     end
+    if row.searchName then
+        GameTooltip:AddLine("Shift-click to search the Auction House", T.accent[1], T.accent[2], T.accent[3])
+    end
     GameTooltip:Show()
+end
+
+-- Shift-click: the item's name goes into the Auction House search box (or a link into chat when the AH is closed)
+function Crates.Search(row)
+    local name = row and row.searchName
+    if not name then return end
+    local ah = _G.AuctionHouseFrame
+    local box = ah and ah:IsShown() and ah.SearchBar and ah.SearchBar.SearchBox
+    if box then
+        box:SetText(name)
+        box:SetFocus()
+        box:HighlightText(0, 0)
+        return
+    end
+    local link
+    if row.itemID and C_Item and C_Item.GetItemInfo then
+        local ok, _, l = pcall(C_Item.GetItemInfo, row.itemID)
+        if ok then link = l end
+    end
+    if ChatEdit_InsertLink then ChatEdit_InsertLink(link or name) end
 end
 
 local function FillButton()
@@ -230,6 +253,8 @@ local function FillButton()
     fill:RegisterForClicks("LeftButtonUp")
     fill:SetAttribute("useOnKeyDown", false)
     fill:SetAttribute("type", "macro")
+    fill:SetAttribute("shift-type1", "none") -- Shift-click searches instead of filling
+    fill:HookScript("OnClick", function(self) if IsShiftKeyDown() and self.row then Crates.Search(self.row) end end)
     fill:Hide()
     fill:SetAttribute("_onstate-combat", [[ if newstate == "in" then self:Hide() end ]])
     RegisterStateDriver(fill, "combat", "[combat] in; out")
@@ -294,6 +319,7 @@ local function GetRow(i)
     end)
     r:SetScript("OnLeave", function(self) self.hl:Hide(); GameTooltip:Hide() end)
     r:SetScript("OnClick", function(self)
+        if IsShiftKeyDown() and self.searchName then Crates.Search(self) return end
         if self.crate then
             db.folded[self.crate] = not db.folded[self.crate] or nil
             Crates.Refresh()
@@ -341,7 +367,7 @@ function Crates.Refresh()
         if n >= MAX_ROWS then break end
         n = n + 1
         local r = GetRow(n)
-        r.crate, r.itemID, r.fillMacro = c.itemID, c.itemID, nil
+        r.crate, r.itemID, r.fillMacro, r.searchName = c.itemID, c.itemID, nil, nil
         r:SetHeight(CRATE_H)
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", 1, -(y - TOP)); r:SetPoint("TOPRIGHT", -1, -(y - TOP))
@@ -367,7 +393,7 @@ function Crates.Refresh()
                 if n >= MAX_ROWS then break end
                 n = n + 1
                 local s = GetRow(n)
-                s.crate, s.itemID = nil, q.itemID
+                s.crate, s.itemID, s.searchName = nil, q.itemID, q.name
                 local from, to = spotByID[c.itemID], spotByKey[q.key]
                 s.fillMacro = (from and to and q.have > 0)
                     and format("/use %d %d\n/use %d %d", from[1], from[2], to[1], to[2]) or nil

@@ -530,6 +530,7 @@ if CysChangelog then
               added = {
                   "Crate Tracker: click an item you carry in the list to put it in its crate, no more right-clicking the crate and hunting for the item in your bags. Works out of combat.",
                   "Crate Tracker: when you carry more than one crate of the same kind, its heading shows how many (x3).",
+                  "Crate Tracker: Shift-click an item to put its name in the Auction House search box (or link it in chat when the Auction House is closed).",
               },
               fixed = {
                   "Crate Tracker: the (cheapest) tag now compares what each whole bundle costs (price times how many you still need), not the price of one item.",
