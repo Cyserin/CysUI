@@ -26,7 +26,7 @@ local GROUPS = {
                             "Swing Timer", "Threat Bar", "Taunt Alert", "Missing Buffs", "Raid Debuffs", "Alerts", "Mana Tick",
                             "Marker Wheel", "Weapon Swap", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
     { "Items & Leveling", { "Vendor", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Tracked Recipes", "Upgrade", "BiS List",
-                            "Quest Tracker", "XP Bar", "Kill Tracker", "Skill Tracker", "Characters" } },
+                            "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
 }
 
 -- Related pages share one sidebar entry and show as tabs along the top of the page (first tab = the
@@ -41,7 +41,7 @@ local MERGED = {
     { "Handy Extras",   { "Marker Wheel", "Weapon Swap", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
     { "Vendor & Bags",  { "Vendor", "Consumables", "Durability" } },
     { "Loot",           { "Loot", "Roll Tracker", "Crate Tracker" } },
-    { "Leveling",       { "Quest Tracker", "XP Bar", "Kill Tracker", "Skill Tracker", "Characters" } },
+    { "Leveling",       { "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
 }
 local TAB_NAMES = { PlayerAuras = "Player Auras", ["Cys's UI Users"] = "Cys's UI Users" }
 local TAB_H = 30
@@ -329,7 +329,7 @@ end
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel", "weaponswap", "clickcast", "vehicleexit", "alerts", "manatick" } },
-    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "characters", "micromenu", "tooltip", "skins", "friends", "recruit", "hello", "scale", "durability", "automation", "questlist", "flight" } },
+    { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "runs", "characters", "micromenu", "tooltip", "skins", "friends", "recruit", "hello", "scale", "durability", "automation", "questlist", "flight" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade", "bis", "queststart", "crates", "recipes" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "talentplan", "healadvisor", "warrior", "shoutremind" } },
 }

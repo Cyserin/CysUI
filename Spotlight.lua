@@ -14,16 +14,12 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.30",
+    version = "0.58.31",
     items = {
-        { title = "Guild levels", page = "Guild Recruiter", module = "recruit",
-          icon = "Interface\\Icons\\INV_Misc_Note_02",
-          text = "The Guild Recruiter window shows how many guild members sit in each level bracket, with thin brackets marked, so you know which levels to recruit. Click a bracket to recruit those levels.",
-          where = "/cuirecruit, or right-click the Guild block on the info bar."},
-        { title = "Tracked Recipes", page = "Tracked Recipes", module = "recipes",
-          icon = "Interface\\Icons\\Trade_BlackSmithing",
-          text = "Tick Track Recipe in a profession window and a small window lists the materials it needs, how many you carry and how many you can make. Shift-click a material to search the Auction House.",
-          where = "Track Recipe in any profession window, or /cuirecipes."},
+        { title = "Dungeon Runs", page = "Dungeon Runs", module = "runs",
+          icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
+          text = "Each dungeon run is timed and its XP counted. When you leave, a summary in your own chat shows XP from kills and quests, XP per hour and how many more runs take you to level. Works with Cys's Level Pace.",
+          where = "Just run a dungeon. /cuiruns prints the last run again."},
     },
 }
 

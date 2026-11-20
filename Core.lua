@@ -523,9 +523,15 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.30",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.31",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.31", date = "2026-11-20",
+              added = {
+                  "Dungeon Runs (WoW Forever): times each dungeon run and counts the XP it gave you. When you leave, a summary prints in your own chat window (nobody else sees it): run time, XP from kills and quests, XP per hour, how many more runs like it take you to your next level, and the gold you picked up. Died and ran back in? It stays the same run. Your recent runs are listed on its settings page. /cuiruns prints the last run again, /cuiruns now the run you are in, /cuiruns history your last 10. New file: restart the game once.",
+                  "Dungeon Runs works with Cys's Level Pace: the summary says how many runs your Level Pace goal takes (and how many a day to make your date), and Level Pace shows the run you are in, or how many runs of your last dungeon are left to your goal.",
+              },
+            },
             { version = "0.58.30", date = "2026-11-20",
               added = {
                   "Guild Recruiter: a Guild levels section in the window shows how many members sit in each level bracket (1-9, 10-14, 15-19 and so on), so you can see which levels to recruit. Thin brackets are gold and marked few; hover one to see who is in it, click it to recruit those levels. Only members seen in the last 14 days count (change it on the settings page). /cuirecruit levels prints it in chat.",
