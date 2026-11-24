@@ -413,16 +413,28 @@ end
 --------------------------------------------------------------------------------
 -- Quest announce: when the last objective of a quest is done while you are in a party (not a raid), say so in
 -- party chat. Only a quest seen unfinished first is announced, so nothing fires at login or for a quest picked up
--- already complete. A line that comes up mid-fight is held until the fight ends.
+-- already complete. Sent at once, also mid-fight (held only if the game locks addon chat).
 --------------------------------------------------------------------------------
 local questDone, questSeeded, questQueued = {}, false, false
 local questLines = {}
+-- sent right away, fights included (like Questie); held only while the game locks addon chat (then sent at the end of the fight)
+local function ChatLocked()
+    local f = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    if not f then return false end
+    local ok, locked = pcall(function() return f() == true end)
+    return ok and locked
+end
 local function FlushQuestLines()
-    if InCombatLockdown() then return end
+    if ChatLocked() then return end
+    local keep = {}
     for i = 1, #questLines do
-        if IsInGroup and IsInGroup() and not (IsInRaid and IsInRaid()) then pcall(SendChatMessage, questLines[i], "PARTY") end
+        if IsInGroup and IsInGroup() and not (IsInRaid and IsInRaid()) then
+            -- if the game refuses it mid-fight, try again when the fight ends
+            if not pcall(SendChatMessage, questLines[i], "PARTY") and InCombatLockdown() then keep[#keep + 1] = questLines[i] end
+        end
         questLines[i] = nil
     end
+    for i = 1, #keep do questLines[i] = keep[i] end
 end
 local function ScanQuests()
     questQueued = false
@@ -453,7 +465,7 @@ end
 
 --------------------------------------------------------------------------------
 -- Train all: a button on the trainer window that learns everything you can learn and afford right now, one
--- after another. Point at it for the count and the total cost. Nothing is bought until you click.
+-- after another. Point at it for the count and the total cost. Nothing is bought until you click and say yes.
 --------------------------------------------------------------------------------
 local trainBtn, training
 -- the list differs between clients (name, rank, category... or name, category...): look for the word itself
@@ -482,6 +494,16 @@ local function TrainStep()
     -- the list refreshes after each purchase; carry on a moment later
     C_Timer.After(0.25, function() pcall(TrainStep) end)
 end
+StaticPopupDialogs["CYSUI_TRAIN_ALL"] = {
+    text = "Train all: learn %s for %s?",
+    button1 = "Train",
+    button2 = CANCEL,
+    OnAccept = function() training = true; pcall(TrainStep) end,
+    timeout = 0,
+    whileDead = false,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 local function TrainerButton()
     local host = _G.ClassTrainerFrame
     if not host then return end
@@ -493,8 +515,13 @@ local function TrainerButton()
         trainBtn:SetFrameLevel((anchor and anchor:GetFrameLevel() or host:GetFrameLevel()) + 2)
         trainBtn:SetScript("OnClick", function()
             if training then training = false return end
-            training = true
-            pcall(TrainStep)
+            -- ask first: what it learns and what it costs
+            local n, total = TrainerTally()
+            if n == 0 then CUI:Print("Train all: nothing to learn here right now.") return end
+            local money = GetMoney() or 0
+            local what = n == 1 and "1 spell" or (n .. " spells")
+            if total > money then what = what .. " (as many as you can pay for)" end
+            StaticPopup_Show("CYSUI_TRAIN_ALL", what, GetCoinTextureString(math.min(total, money)))
         end)
         trainBtn:HookScript("OnEnter", function(self)
             local n, total = TrainerTally()
@@ -728,6 +755,7 @@ local function Enable()
             pcall(TrainerButton)
         elseif event == "TRAINER_CLOSED" then
             training = false
+            if StaticPopup_Hide then pcall(StaticPopup_Hide, "CYSUI_TRAIN_ALL") end
         elseif event == "BAG_UPDATE_DELAYED" or event == "LOOT_CLOSED" then
             C_Timer.After(0.3, function() pcall(OpenOne) end)
         elseif OPEN_EVENTS[event] or CLOSE_EVENTS[event] then

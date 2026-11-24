@@ -197,6 +197,27 @@ end
 --------------------------------------------------------------------------------
 -- Button look
 --------------------------------------------------------------------------------
+-- The slot edge color: gold pulse for the attack flash, green for an equipped item (trinkets etc.; Blizzard's own
+-- green border is a fixed-size picture that sits off the button), else the normal edge.
+local EQUIPPED = { 0.25, 0.85, 0.25 }
+local function EdgeColor(b)
+    if b and b.cysFlashOn then return T.accent end
+    if b and b.cysEquipped then return EQUIPPED end
+    return DB().goldBorders and T.border or T.line
+end
+local function PaintEdge(b)
+    local s = b and b.cysSlot
+    if s and s.edges then W.SetBorder(s.edges, EdgeColor(b)) end
+end
+-- Pressed / checked / hover squares stretched over the button (Blizzard's art is a fixed 46x45 at the top-left)
+local function FlatStates(b)
+    local pushed = b.GetPushedTexture and b:GetPushedTexture()
+    if pushed then pushed:SetColorTexture(1, 1, 1, 0.25); pushed:ClearAllPoints(); pushed:SetAllPoints(b) end
+    local checked = b.GetCheckedTexture and b:GetCheckedTexture()
+    if checked then checked:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.3); checked:ClearAllPoints(); checked:SetAllPoints(b) end
+    local highlight = b.GetHighlightTexture and b:GetHighlightTexture()
+    if highlight then highlight:SetColorTexture(1, 1, 1, 0.18); highlight:ClearAllPoints(); highlight:SetAllPoints(b) end
+end
 local function SkinButton(b)
     if b.cysSkinned then return end
     b.cysSkinned = true
@@ -229,24 +250,34 @@ local function SkinButton(b)
     local flash = Part(b, "Flash")
     if flash and hooksecurefunc then
         flash:SetAlpha(0)
-        hooksecurefunc(flash, "Show", function()
-            local s = b.cysSlot
-            if s then W.SetBorder(s.edges, T.accent) end
-        end)
-        hooksecurefunc(flash, "Hide", function()
-            local s = b.cysSlot
-            if s then W.SetBorder(s.edges, DB().goldBorders and T.border or T.line) end
-        end)
+        hooksecurefunc(flash, "Show", function() b.cysFlashOn = true; PaintEdge(b) end)
+        hooksecurefunc(flash, "Hide", function() b.cysFlashOn = false; PaintEdge(b) end)
+    end
+    -- Blizzard's green "equipped item" border becomes a green slot edge
+    local border = Part(b, "Border")
+    if border and hooksecurefunc then
+        border:SetAlpha(0)
+        hooksecurefunc(border, "Show", function() b.cysEquipped = true; PaintEdge(b) end)
+        hooksecurefunc(border, "Hide", function() b.cysEquipped = false; PaintEdge(b) end)
+        b.cysEquipped = border:IsShown() and true or false
+    end
+    -- Newer button art (WoW Forever): the cast fill, target reticle, interrupt and cooldown-done flashes are
+    -- drawn at a fixed 45 px, so they show as a small yellow box on our buttons. Faded out (alpha only).
+    for _, key in ipairs({ "SpellCastAnimFrame", "TargetReticleAnimFrame", "InterruptDisplay", "CooldownFlash" }) do
+        local fx = b[key]
+        if fx and fx.SetAlpha then fx:SetAlpha(0) end
+    end
+    -- same fixed-size pictures for "new action" and the spellbook highlight: stretch them over the button
+    for _, key in ipairs({ "NewActionTexture", "SpellHighlightTexture" }) do
+        local tex = b[key]
+        if tex and tex.ClearAllPoints then tex:ClearAllPoints(); tex:SetAllPoints(b) end
     end
 
     -- Newer button art (WoW Forever) pins these to the top-left at a fixed 46x45, so on smaller buttons the
     -- pressed square spills out past the edge. Stretch them over the button instead.
-    local pushed = b.GetPushedTexture and b:GetPushedTexture()
-    if pushed then pushed:SetColorTexture(1, 1, 1, 0.25); pushed:ClearAllPoints(); pushed:SetAllPoints(b) end
-    local checked = b.GetCheckedTexture and b:GetCheckedTexture()
-    if checked then checked:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.3); checked:ClearAllPoints(); checked:SetAllPoints(b) end
-    local highlight = b.GetHighlightTexture and b:GetHighlightTexture()
-    if highlight then highlight:SetColorTexture(1, 1, 1, 0.18); highlight:ClearAllPoints(); highlight:SetAllPoints(b) end
+    FlatStates(b)
+    -- Blizzard puts its pressed picture back (46x45 at the top-left) whenever the bar's art is refreshed
+    if b.UpdateButtonArt and hooksecurefunc then hooksecurefunc(b, "UpdateButtonArt", function() FlatStates(b) end) end
 
     -- Newer button art only (nil on Classic Era): the stone slot behind empty buttons and the rounded icon
     -- mask. Cys's UI draws its own flat slot and square icons.
@@ -298,7 +329,8 @@ end
 W.OnBorderStyle(function()
     for _, bar in pairs(AB.bars) do
         for _, slot in ipairs(bar.slots or {}) do
-            W.SetBorder(slot.edges, DB().goldBorders and T.border or T.line)
+            local b = slot.cysButton
+            if b and b.cysSlot == slot then PaintEdge(b) else W.SetBorder(slot.edges, DB().goldBorders and T.border or T.line) end
         end
     end
 end)
@@ -379,10 +411,11 @@ function AB:LayoutBar(key)
             bar.slots[i] = slot
         end
         b.cysSlot = slot
+        slot.cysButton = b
         slot:ClearAllPoints()
         slot:SetSize(w, h)
         slot:SetPoint("TOPLEFT", bar.container, "TOPLEFT", col * (w + gap), -row * (h + gap))
-        W.SetBorder(slot.edges, DB().goldBorders and T.border or T.line)
+        W.SetBorder(slot.edges, EdgeColor(b))
         local px = DB().thinBorders and 1 or 2
         local e = slot.edges
         e[1]:SetHeight(px); e[2]:SetHeight(px); e[3]:SetWidth(px); e[4]:SetWidth(px)

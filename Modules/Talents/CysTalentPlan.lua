@@ -4,7 +4,8 @@
 -- A planner mode inside the talents window (Planner button next to Primary / Secondary) where you plan your whole leveling path: click a talent to add its
 -- next point, right-click to take one off. The Level plan underneath lists every pick with the level it
 -- comes at (the first talent point arrives at level 10, then one per level). With "Learn these talents as
--- I level" on, each new point is learned for you as you level (out of combat; in a fight it waits).
+-- I level" on, each new point is learned for you as you level, after a Learn / Not now question that names the
+-- spec (out of combat; in a fight it waits).
 --
 -- Forever's talents are the game's trait system: one tree with three groups (the three specs). The plan is
 -- a list of node IDs in the order the points go in. Our window only reads the tree; the talents window
@@ -41,7 +42,7 @@ CUI.TalentPlan = TP
 
 local Tree           -- built from the game's data, see Build
 local win, opener    -- our frames
-local Paint, Learn, Sync -- defined below
+local Paint, Learn, Sync, QueueLearn -- defined below
 
 --------------------------------------------------------------------------------
 -- Reading the tree
@@ -257,6 +258,42 @@ end
 -- Learning as you level
 --------------------------------------------------------------------------------
 local waitCombat, learnQueued = false, false
+-- Auto learning asks first (dual spec: the plan could be for the other spec). approved = the player said Learn;
+-- declinedKey = "spec:level" the player said Not now to, so it is not asked again until the next level or spec.
+local approved, declinedKey, askText = false, nil, nil
+
+local function SpecGroup()
+    local ok, g = pcall(function() return GetActiveTalentGroup and GetActiveTalentGroup() end)
+    return (ok and type(g) == "number") and g or 1
+end
+local function AskKey() return SpecGroup() .. ":" .. (UnitLevel("player") or 0) end
+
+-- "Name (2)" style list in the order the points go in
+local function Merge(list)
+    local times, order, out = {}, {}, {}
+    for _, name in ipairs(list) do
+        if not times[name] then order[#order + 1] = name end
+        times[name] = (times[name] or 0) + 1
+    end
+    for _, name in ipairs(order) do out[#out + 1] = times[name] > 1 and (name .. " (" .. times[name] .. ")") or name end
+    return out
+end
+
+StaticPopupDialogs["CYSUI_TALENT_LEARN"] = {
+    text = "Talent Planner: learn your planned talents in your %s talents now?\n\n%s",
+    button1 = "Learn",
+    button2 = "Not now",
+    OnAccept = function() approved = true; declinedKey = nil; C_Timer.After(0.1, function() QueueLearn(0) end) end,
+    OnCancel = function() approved = false; declinedKey = AskKey() end,
+    timeout = 0,
+    whileDead = false,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+local function HideAsk()
+    askText = nil
+    if StaticPopup_Hide then pcall(StaticPopup_Hide, "CYSUI_TALENT_LEARN") end
+end
 
 local function Unspent()
     local ok, info = pcall(C_Traits.GetTreeCurrencyInfo, Tree.configID, Tree.treeID, false)
@@ -265,9 +302,9 @@ local function Unspent()
     return 99 -- unknown: let the game decide
 end
 
--- manual = the Learn now button
+-- manual = the Learn now button; otherwise (as you level) it asks first
 function Learn(manual)
-    if not plan.auto and not manual then return end
+    if not plan.auto and not manual and not approved then return end
     if #plan.points == 0 then return end
     if InCombatLockdown() then
         waitCombat = true
@@ -287,6 +324,29 @@ function Learn(manual)
     local free = Unspent()
     if free <= 0 then return end
     local _, _, bad = Simulate(plan.points)
+    if not manual and not approved then
+        -- what would go in, for the question (nothing is learned yet)
+        local have, seen, list = {}, {}, {}
+        for i, id in ipairs(plan.points) do
+            if not bad[i] then
+                if have[id] == nil then have[id] = Learned(id) end
+                seen[id] = (seen[id] or 0) + 1
+                if have[id] < seen[id] then
+                    if #list >= free then break end
+                    have[id] = have[id] + 1
+                    list[#list + 1] = Tree.nodes[id].name
+                end
+            end
+        end
+        if #list == 0 or declinedKey == AskKey() then return end
+        local text = table.concat(Merge(list), ", ")
+        if askText == text and StaticPopup_Visible and StaticPopup_Visible("CYSUI_TALENT_LEARN") then return end
+        HideAsk()
+        askText = text
+        StaticPopup_Show("CYSUI_TALENT_LEARN", SpecGroup() == 2 and "Secondary" or "Primary", text)
+        return
+    end
+    approved, askText = false, nil
     local have, seen, bought = {}, {}, {}
     for i, id in ipairs(plan.points) do
         if not bad[i] then
@@ -303,20 +363,14 @@ function Learn(manual)
     end
     if #bought == 0 then return end
     if C_Traits.CommitConfig(cfg) then
-        local merged, times, order = {}, {}, {}
-        for _, name in ipairs(bought) do
-            if not times[name] then order[#order + 1] = name end
-            times[name] = (times[name] or 0) + 1
-        end
-        for _, name in ipairs(order) do merged[#merged + 1] = times[name] > 1 and (name .. " (" .. times[name] .. ")") or name end
-        CUI:Print("Talent Planner: learned " .. table.concat(merged, ", ") .. ".")
+        CUI:Print("Talent Planner: learned " .. table.concat(Merge(bought), ", ") .. ".")
     else
         C_Traits.RollbackConfig(cfg)
         CUI:Print("Talent Planner: the game did not let the planned talents be learned right now.")
     end
 end
 
-local function QueueLearn(delay)
+function QueueLearn(delay)
     if learnQueued then return end
     learnQueued = true
     C_Timer.After(delay or 1, function()
@@ -823,7 +877,7 @@ local function BuildWindow()
     win.summary:SetWidth(SIDE_W - 20)
     win.auto = W.Checkbox(side, "Learn these talents as I level",
         function() return plan.auto end,
-        function(v) plan.auto = v; if v then QueueLearn(0.2) end end)
+        function(v) plan.auto = v; declinedKey = nil; if v then QueueLearn(0.2) else HideAsk() end end)
     win.auto:SetPoint("TOPLEFT", win.summary, "BOTTOMLEFT", 0, -8)
     local now = W.Button(side, 86, 20, "Learn now")
     now:SetPoint("TOPRIGHT", -10, -8)
@@ -999,6 +1053,7 @@ ev:SetScript("OnEvent", function(_, event, a1)
         if waitCombat then waitCombat = false; QueueLearn(1) end
     elseif event == "ACTIVE_COMBAT_CONFIG_CHANGED" then
         Tree = nil
+        approved = false; HideAsk() -- a new spec gets its own question
         if win and win:IsShown() then Ensure(); LayoutTrees(); Paint() end
         QueueLearn(2)
     elseif event == "CONFIG_COMMIT_FAILED" then
@@ -1022,14 +1077,14 @@ CUI:RegisterPage("Talent Planner", function(page)
     local width = 480
     W.Header(page, "Talent Planner", width):SetPoint("TOPLEFT", 0, -4)
     local auto = W.Checkbox(page, "Learn my planned talents as I level",
-        function() return plan.auto end, function(v) plan.auto = v; if v then QueueLearn(0.2) end end)
+        function() return plan.auto end, function(v) plan.auto = v; declinedKey = nil; if v then QueueLearn(0.2) else HideAsk() end end)
     auto:SetPoint("TOPLEFT", 4, -36)
     local show = W.Checkbox(page, "Open the talents window in planner mode",
         function() return plan.open end, function(v) plan.open = v; Sync() end)
     show:SetPoint("TOPLEFT", 4, -62)
     W.Notes(page, 4, -98, width, "", {
         "Open your talents (N) and click Planner (next to Primary / Secondary): the talents area turns into the planner, and clicking Planner again brings the normal talents back. Click a talent to plan its next point, right-click to take one off. Green means it can take a point now, gold means planned, grey means locked. The Level plan on the right lists every pick with the level it comes at (the first point at level 10, then one per level).",
-        "With Learn these talents as I level on, each new point is learned for you when you level up. In a fight it waits until the fight ends. Learn now uses any points you have left.",
+        "With Learn these talents as I level on, a window asks before anything is learned when you level up (it names your Primary or Secondary talents, so a plan made for your other spec is never spent by mistake). Not now waits until your next level. In a fight it waits until the fight ends. Learn now uses any points you have left.",
         "From my talents starts a plan from what you have learned now. Save and Load keep plans by name for every character of your class (Load shows the points per tree). Export and Import share a plan as text.",
         "A pick that breaks the rules (5 points per tier in that tree, or a talent its arrow comes from not filled yet) shows in red and is skipped until you fix the plan.",
         "/cuitalents switches planner mode on or off.",

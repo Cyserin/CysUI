@@ -2518,13 +2518,18 @@ local function SkinMerchant()
             local name = cell.Name or (cn and _G[cn .. "Name"])
             local plate = cn and _G[cn .. "NameFrame"]
             if name then
+                -- at most two lines, kept above the price row (long names like "Formula: Enchant Weapon -
+                -- Recovery" ran into a token cost)
                 name:ClearAllPoints()
-                name:SetPoint("TOPLEFT", cell, "TOPLEFT", 46, -5)
+                name:SetPoint("TOPLEFT", cell, "TOPLEFT", 46, -3)
+                name:SetSize(104, 24)
                 name:SetJustifyV("TOP")
+                if name.SetMaxLines then name:SetMaxLines(2) end
+                if name.SetWordWrap then name:SetWordWrap(true) end
             end
             if plate then -- the (hidden) name plate is what the price is anchored to
                 plate:ClearAllPoints()
-                plate:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", buyback and 46 or 44, buyback and -21 or -27)
+                plate:SetPoint("BOTTOMLEFT", cell, "BOTTOMLEFT", buyback and 46 or 44, buyback and -21 or -29)
             end
             if cell.ItemButton then
                 cell.ItemButton:ClearAllPoints()

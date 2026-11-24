@@ -756,6 +756,12 @@ end
 --------------------------------------------------------------------------------
 local LINE = Enum and Enum.TooltipDataLineType or {}
 local LINE_OBJECTIVE, LINE_TITLE, LINE_PLAYER = LINE.QuestObjective or 8, LINE.QuestTitle or 17, LINE.QuestPlayer or 18
+-- a group member's name line, cleaned: color codes, spaces and "-Realm" / " Realm" taken off
+local function PlainName(text)
+    if type(text) ~= "string" then return nil end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    return (text:match("^([^%-%s]+)") or text)
+end
 local function QuestNeededRaw(unit)
     if C_TooltipInfo and C_TooltipInfo.GetUnit then
         local data = C_TooltipInfo.GetUnit(unit)
@@ -764,16 +770,23 @@ local function QuestNeededRaw(unit)
             local mine, saw, need = true, false, false
             for _, line in ipairs(data.lines) do
                 local kind = line.type
+                if Secret(kind) then return nil end -- locked mid-fight: keep the last answer
                 if kind == LINE_TITLE then
                     saw, mine = true, true
                 elseif kind == LINE_PLAYER then
-                    mine = line.leftText == me -- in a group the tooltip lists each member's progress
+                    -- in a group the tooltip lists each member's progress under their name; only our own counts
+                    local text = line.leftText
+                    if Secret(text) then return nil end
+                    mine = PlainName(text) == me
                 elseif kind == LINE_OBJECTIVE then
                     saw = true
                     if mine and line.completed ~= true then need = true end
                 end
             end
             if saw then return need end
+            -- the game lists nothing for us on this mob: in a group the fallback below would answer for the
+            -- whole party, so it is only asked when solo
+            if IsInGroup and IsInGroup() then return false end
         end
     end
     if C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest then
