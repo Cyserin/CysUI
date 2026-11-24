@@ -399,6 +399,18 @@ end
 local function UpdateIcon(f)
     local e = f.entry
     if not e then return end
+    if e.buff then
+        -- a buff or debuff added by ID: no cooldown of its own. The picture stays dim; while the effect is up the
+        -- game's aura slot (AttachAuras) lays a full-color copy over it with the time left.
+        local tex = C_Spell.GetSpellTexture(e.spell)
+        if tex then f.tex:SetTexture(tex) end
+        f.cd:Clear()
+        f.count:SetText("")
+        f.tex:SetDesaturation(1)
+        f.tex:SetVertexColor(0.55, 0.55, 0.55)
+        if f.midAura then pcall(f.num.Clear, f.num) end
+        return
+    end
     local item = ItemOf(e)
     if item then return UpdateItemIcon(f, e, item) end
     local spell = e.spell
@@ -641,7 +653,7 @@ local function AuraHost(e, size, mid, font)
     return h
 end
 function AttachAuras(bar, shown, size)
-    local able = db.auraTime and CysUICompat.HasAuraContainers and CysUICompat.HasAuraContainers()
+    local can = CysUICompat.HasAuraContainers and CysUICompat.HasAuraContainers()
     -- where the time goes: in the middle on small icons (no room for two numbers), at the top on big ones
     local mid = db.auraStyle == "middle" or (db.auraStyle ~= "top" and size < 36)
     local font = bar.def.font == "CysCooldownTimerBig" and fontAuraBig or fontAuraSmall
@@ -651,8 +663,10 @@ function AttachAuras(bar, shown, size)
         local e = f.entry
         local base = f:GetFrameLevel()
         local h
-        if able and e and e.aura then
-            local ok, host = pcall(AuraHost, e, size, mid, font)
+        -- a buff / debuff added by ID is only its effect: always shown, always in the middle (the lit picture)
+        local m = mid or (e and e.buff and true) or false
+        if can and e and e.aura and (db.auraTime or e.buff) then
+            local ok, host = pcall(AuraHost, e, size, m, font)
             if ok and host then h = host end
         end
         if h then
@@ -662,7 +676,7 @@ function AttachAuras(bar, shown, size)
             h.frame:ClearAllPoints()
             h.frame:SetAllPoints(f)
         end
-        if h and mid and h.delta then
+        if h and m and h.delta then
             -- Layers, bottom to top: picture, the cooldown's number, the effect's slot (an opaque copy of the
             -- picture, so the number is hidden while the effect runs), the cooldown's sweep, the effect's time
             -- and gold line, the icon's edge. The slot itself is the game's; only our own frames are ordered here.
@@ -753,8 +767,15 @@ local function Compose()
         end
     end
     -- spells you added yourself by ID (racials, talents and anything else the game's list leaves out)
+    mine.kind = mine.kind or {} -- [spellID] = "buff" (on you) or "debuff" (on your target); none = an ability
     for _, id in ipairs(mine.extra or {}) do
-        if type(id) == "number" and not universe[id] then
+        local kind = type(id) == "number" and mine.kind[id]
+        if kind and not universe[id] then
+            local e = { base = id, spell = id, known = true, extra = true, buff = kind,
+                aura = AuraIDs({ selfAura = kind == "buff" }, id, id) }
+            universe[id] = e
+            avail[id] = e
+        elseif type(id) == "number" and not universe[id] then
             local known = true
             if IsPlayerSpell then
                 local ok, k = pcall(IsPlayerSpell, id)
@@ -770,14 +791,57 @@ local function Compose()
                 local ok, c = pcall(C_Spell.GetSpellCharges, id)
                 if ok and type(c) == "table" and type(c.maxCharges) == "number" and not Secret(c.maxCharges) and c.maxCharges > 1 then charges = true end
             end
-            local e = { base = id, spell = id, charges = charges, known = known, extra = true,
-                aura = db.extraAura and AuraIDs({}, id, id) or nil } -- your own buff or your debuff on the target
+            -- the rank you know best of the same spell: its cooldown, usable state and range (the saved ID stays)
+            local spell = id
+            if known then
+                local ok, name = pcall(C_Spell.GetSpellName, id)
+                local ok2, info = pcall(C_Spell.GetSpellInfo, ok and not Secret(name) and name or id)
+                if ok2 and type(info) == "table" and type(info.spellID) == "number" and not Secret(info.spellID) then spell = info.spellID end
+            end
+            local e = { base = id, spell = spell, charges = charges, known = known, extra = true,
+                aura = db.extraAura and AuraIDs({}, id, spell) or nil } -- your own buff or your debuff on the target
             universe[id] = e
             if known then avail[id] = e end
         end
     end
     for _, bar in ipairs(ownBars) do
         for _, e in ipairs(bar.game) do e.known = true; avail[e.base] = e; universe[e.base] = e end
+    end
+    -- New ranks. Classic ranks are separate spells, so when you learn a new rank the game's entry can switch to
+    -- the new rank's ID. Your saved place, "seen" mark and stance hiding move over to the new ID (same name), so
+    -- the spell keeps its spot instead of dropping off and coming back at the end of the bar.
+    local byName = {}
+    for id, e in pairs(avail) do
+        if not e.extra then
+            local ok, name = pcall(C_Spell.GetSpellName, id)
+            if ok and type(name) == "string" and not Secret(name) then
+                if byName[name] == nil then byName[name] = id else byName[name] = false end -- two ranks listed: leave it
+            end
+        end
+    end
+    local function NewRank(old)
+        if type(old) ~= "number" or avail[old] then return end
+        local ok, name = pcall(C_Spell.GetSpellName, old)
+        if not ok or type(name) ~= "string" or Secret(name) then return end
+        local id = byName[name]
+        if id and id ~= old then return id end
+    end
+    local moved = {}
+    for old in pairs(mine.seen) do
+        local id = NewRank(old)
+        if id then moved[id] = true end -- a spell you took off your bars stays off at its new rank too
+    end
+    for id in pairs(moved) do mine.seen[id] = true end
+    for _, def in ipairs(OWN) do
+        local ids = mine[def.key]
+        for i, old in ipairs(ids or {}) do
+            local id = NewRank(old)
+            if id then
+                ids[i] = id
+                mine.seen[id] = true
+                if db.stanceHide[old] and not db.stanceHide[id] then db.stanceHide[id] = db.stanceHide[old] end
+            end
+        end
     end
     for _, bar in ipairs(ownBars) do
         local key = bar.def.key
@@ -868,8 +932,26 @@ end
 
 -- a spell of your own choosing, by its ID: remembered per class (layout[CLASS].extra) and from then on offered
 -- like the spells the game tracks. Returns the entry, or nil and why not.
-function AddExtra(id)
+function AddExtra(id, kind)
     if type(id) ~= "number" or id <= 0 then return nil, "type a spell or item ID (a number) first." end
+    if kind ~= "buff" and kind ~= "debuff" then kind = nil end
+    -- a buff or debuff: the ID is the effect's own spell (the buff on you / debuff on the target), which you may
+    -- never cast yourself (Flurry, Enrage, a trinket's proc), so it is not checked against your spellbook
+    if kind then
+        if not C_Spell.GetSpellName(id) then return nil, "there is no spell with ID " .. id .. "." end
+        if universe[id] and not universe[id].extra then
+            return nil, (C_Spell.GetSpellName(id) or "that spell") .. " is already in the game's list (its icon shows its effect's time on its own). Pick it from the icons above."
+        end
+        mine.kind = mine.kind or {}
+        mine.kind[id] = kind
+        mine.extra = mine.extra or {}
+        local have = false
+        for _, x in ipairs(mine.extra) do if x == id then have = true end end
+        if not have then mine.extra[#mine.extra + 1] = id end
+        Compose()
+        return universe[id]
+    end
+    if mine.kind and mine.kind[id] then mine.kind[id] = nil; Compose() end -- was a buff, now an ability
     -- an item ID (a trinket, other on-use gear, a potion): its use effect goes on the bar, shown as the item.
     -- When the number is also a spell, the item wins only if you carry it.
     local useSpell = ItemSpell(id)
@@ -900,6 +982,7 @@ function DropExtra(id)
         end
     end
     if mine.seen then mine.seen[id] = nil end
+    if mine.kind then mine.kind[id] = nil end
     Compose()
 end
 
@@ -1509,7 +1592,10 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             if not e then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(EntryName(e) or "Spell", 1, 1, 1)
-            if e.extra then GameTooltip:AddLine("Added by ID " .. e.base .. ". Right-click to forget it.", 0.8, 0.8, 0.8) end
+            if e.extra then
+                local as = (e.buff == "buff" and " as a buff on you") or (e.buff == "debuff" and " as a debuff on your target") or ""
+                GameTooltip:AddLine("Added by ID " .. e.base .. as .. ". Right-click to forget it.", 0.8, 0.8, 0.8, true)
+            end
             if e.known then
                 GameTooltip:AddLine("Click to add it to this bar.", T.accent[1], T.accent[2], T.accent[3])
             else
@@ -1565,7 +1651,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         local row = menu.idRow
         if not row then
             row = CreateFrame("Frame", nil, menu)
-            row:SetSize(200, 42)
+            row:SetSize(200, 68)
             row.label = W.Text(row, 11, T.accent)
             row.label:SetPoint("TOPLEFT", 0, 0)
             row.label:SetText("Another spell or item, by its ID")
@@ -1582,6 +1668,12 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             W.Border(row.box, 1, T.line, "BORDER")
             row.add = W.Button(row, 70, 20, "Add")
             row.add:SetPoint("LEFT", row.box, "RIGHT", 6, 0)
+            -- what the ID is: an ability (its cooldown) or an effect (a buff on you / a debuff on your target)
+            row.kind = "ability"
+            row.kindBox = W.Dropdown(row, 198, { { "ability", "Ability (its cooldown)" }, { "buff", "Buff on me" }, { "debuff", "Debuff on my target" } },
+                function() return row.kind end, function(v) row.kind = v end)
+            row.kindBox:SetPoint("TOPLEFT", 0, -44)
+            if row.kindBox.Refresh then row.kindBox:Refresh() end
             row.box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
             row.box:SetScript("OnEnterPressed", function() row.add:Click() end)
             row.box:SetScript("OnEnter", function(self)
@@ -1589,6 +1681,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
                 GameTooltip:SetText("Add a spell or item by its ID", 1, 1, 1)
                 GameTooltip:AddLine("For spells the game's list leaves out, such as racials. The ID is the number at the end of the spell's Wowhead address.", T.accent[1], T.accent[2], T.accent[3], true)
                 GameTooltip:AddLine("With spell ranks, each rank has its own ID: use the rank you cast.", 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine("Buffs and procs (Flurry, Enrage, a trinket's proc): pick Buff on me below and type the buff's own ID. Debuff on my target works the same for your debuffs. The icon stays dim and lights up with the time left while the effect is up.", 0.8, 0.8, 0.8, true)
                 GameTooltip:AddLine("Trinkets and other items with a Use: effect work too - type the item's ID (from its Wowhead address) while you carry it. It shows with the item's icon and cooldown.", 0.8, 0.8, 0.8, true)
                 GameTooltip:Show()
             end)
@@ -1599,7 +1692,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 8, my)
         row.add:SetScript("OnClick", function()
-            local e, why = AddExtra(tonumber(row.box:GetText() or ""))
+            local e, why = AddExtra(tonumber(row.box:GetText() or ""), row.kind)
             if not e then CUI:Print("Cooldown Manager: " .. why) return end
             local placed = false
             for _, def in ipairs(OWN) do
@@ -1616,7 +1709,7 @@ CUI:RegisterPage("Cooldown Manager", function(page)
             Refresh()
         end)
         row:Show()
-        my = my - 42
+        my = my - 68
         ShowMenu(anchor, -my + 8)
     end
 
@@ -1937,6 +2030,8 @@ CUI:RegisterPage("Cooldown Manager", function(page)
         { "Tracked buffs", "to place them, tick the second switch above and drag Cooldowns: buffs in Layout mode. Which buffs are tracked, and their order, is set in the game's own window (Choose spells, Tracked Buffs) - they are the game's icons, so they can't be edited here." },
         { "Bars of your own", "New bar (under Your bars) adds an empty bar: fill it from its + box, set its size beside it, and drag it in Layout mode like the others. Rename it by typing over its name. A spell sits on one bar at a time." },
         { "Buff and debuff time", "while an ability's own effect is running (your Rend on the target, Battle Shout on you) its icon shows the time left in gold with a gold line along the bottom. In the middle: the cooldown's own number steps aside while the effect runs (its sweep stays), so there is one number to read - the default on icons under 36 px. At the top: a small number above the cooldown's. The middle number uses the bar's timer size." },
+        { "Buffs by ID", "in a bar's + box, pick Buff on me (or Debuff on my target) under the ID box and type the effect's own spell ID - for procs and buffs the game's list leaves out, like Flurry. The icon sits dim and lights up with the time left while the effect is up. Addons can't read buffs in a fight, so it can't hide itself while the buff is down." },
+        { "New ranks", "when you learn a new rank, the spell keeps its place on your bar (and its stance hiding)." },
         { "Gap", "uses Gap between icons below." },
     })
     y = y - ((ownNote and ownNote.GetHeight and ownNote:GetHeight() or 96) + 14)

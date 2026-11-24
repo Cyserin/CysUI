@@ -57,6 +57,7 @@ Modules\Bags\CysBank.lua
 Modules\Upgrade\CysUpgrade.lua
 Modules\Armory\CysArmory.lua
 Modules\Armory\CysFlyout.lua
+Modules\BiS\CysBiSWowhead.lua
 Modules\BiS\CysBiS.lua
 Modules\Skills\CysSkills.lua
 Modules\Mail\CysMail.lua

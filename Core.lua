@@ -527,6 +527,10 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.32", date = "2026-11-24",
+              added = {
+                  "Cys's BiS: a dropdown at the top of the window swaps your list for Wowhead's level 60 pre-raid BiS list for any spec of your class (WoW Forever guides, all classes). Each slot shows what you have, where to get the rest, and the gain over what you wear with your Cys's Upgrade weights.",
+                  "Item tooltips say when an item is on Wowhead's pre-raid BiS list for one of your specs.",
+              },
               improved = {
                   "Spell Scout on WoW Forever: classes without a written guide now get a box too, listing every spell their trainer teaches at your level (Shaman keeps its guides with reasons).",
                   "Spell Scout: once you have visited your class trainer, the levels it showed are used over the guide's, so a rank that moved shows at the right level.",

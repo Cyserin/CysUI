@@ -9,8 +9,11 @@
 --   * gear you have seen yourself: loot, roll windows, quest rewards and vendors (remembered)
 -- Only items your class can use and that need no more than "Levels ahead" levels over yours are weighed.
 -- What you wear always competes, so it never asks you to wear something worse.
+-- The dropdown swaps in Wowhead's level 60 pre-raid list for one of your specs (CysBiSWowhead.lua), still
+-- scored with your weights; those items get a "Wowhead pre-raid BiS" line on their tooltips.
 --
 --   /cuibis    open or close the window (it shows with the character panel)
+--   /cuibis wowhead   check every Wowhead item for your class against its name in game
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "bis", name = "Cys's BiS", foreverOnly = true,
@@ -596,7 +599,8 @@ end
 local function EPOf(link) return link and Score(IDOf(link), link) or 0 end
 local function Is2H(id) local i = id and ReadInfo(id) return i and i.loc == "INVTYPE_2HWEAPON" or false end
 
-local function Gain(s, p)
+local function Gain(s, p, from)
+    from = from or picks
     local base, has, val = 0, false, p.ep
     if s.k == "main" then
         local mh, oh = GetInventoryItemLink("player", 16), GetInventoryItemLink("player", 17)
@@ -606,7 +610,7 @@ local function Gain(s, p)
             base = EPOf(mh)
         else -- a two-hander against main hand + off-hand (or the other way round)
             base = worn2H and EPOf(mh) or (EPOf(mh) + EPOf(oh))
-            if not pick2H then local o = picks.off and picks.off[1] val = p.ep + (o and o.ep or 0) end
+            if not pick2H then local o = from.off and from.off[1] val = p.ep + (o and o.ep or 0) end
         end
     elseif s.pair then
         local first = s.pair == "ring" and 11 or 13
@@ -622,6 +626,127 @@ local function Gain(s, p)
     local pct = (val - base) / base * 100
     if pct < 0.5 then return nil end
     return string.format("+%d%%", math.floor(pct + 0.5))
+end
+
+--------------------------------------------------------------------------------
+-- Wowhead's pre-raid lists (CysBiSWowhead.lua): a second list in the same window, picked in the dropdown.
+-- Items are still scored with Cys's Upgrade, so the gain column means the same thing in both lists.
+--------------------------------------------------------------------------------
+db.list = db.list or {} -- per character: "cys" (the scored picks) or a Wowhead spec key
+local FACTION = (UnitFactionGroup and UnitFactionGroup("player")) or "Alliance"
+local WH_KEYS = { "head", "neck", "shoulder", "back", "chest", "wrist", "hands", "waist", "legs", "feet",
+                  "ring1", "ring2", "trinket1", "trinket2", "main", "off", "two", "ranged" }
+local whPicks, whAsked = {}, {}
+
+local function WHData() return type(_G.CysUI_BiSWowhead) == "table" and _G.CysUI_BiSWowhead or nil end
+local function WHSpecs() local d = WHData() return d and d[CLASS] or {} end
+local function WHSpec()
+    local k = db.list[CHARKEY]
+    if not k or k == "cys" then return nil end
+    for _, sp in ipairs(WHSpecs()) do if sp.key == k then return sp end end
+end
+-- one slot's entry, with the Horde item swapped in for Horde characters
+local function WHEntry(sp, key)
+    local e = sp and sp[key]
+    if type(e) ~= "table" then return nil end
+    if e.h and FACTION == "Horde" then return { id = e.h[1], name = e.h[2], src = e[3] } end
+    return { id = e[1], name = e[2], src = e[3] }
+end
+-- Forever re-made some items under new IDs and a guide can still link the old one, so a name match counts too
+-- (a prefix match, for random-suffix items like "Master's Leggings of Shadow Wrath")
+local function SameName(full, short) return full and short and full:find(short, 1, true) == 1 or false end
+local function WHStatus(e)
+    local st = Status(e.id)
+    if st ~= "get" then return st end
+    for inv = 1, 18 do
+        local l = GetInventoryItemLink("player", inv)
+        if SameName(l and l:match("%[(.-)%]"), e.name) then return "worn" end
+    end
+    local ok, c = pcall(GetItemCount, e.name)
+    if ok and (tonumber(c) or 0) > 0 then return "bag" end
+    return "get"
+end
+local function WHPick(e)
+    local i = ReadInfo(e.id)
+    if not (i and i.name) then
+        whAsked[e.id] = true
+        if RequestLoad then pcall(RequestLoad, e.id) end
+    end
+    return { id = e.id, ep = (i and i.name) and Score(e.id, i.link) or 0, wh = e }
+end
+-- the guide's item ID shows another name in game: worth a look before farming it
+local function WHMismatch(p)
+    local i = p and p.wh and info[p.id]
+    return i and i.name and not SameName(i.name, p.wh.name) or false
+end
+
+local function BuildWHView(sp)
+    wipe(view)
+    wipe(whPicks)
+    local counts, done = { 0, 0, 0 }, { 0, 0, 0 }
+    local slotRows = { {}, {}, {} }
+    local two, mainE = WHEntry(sp, "two"), WHEntry(sp, "main")
+    local twoOnly = two ~= nil and mainE == nil
+    local function Shows(st) return db.filter == "all" or (db.filter == "get" and st == "get") or (db.filter == "bag" and st == "bag") end
+    for _, s in ipairs(SLOTS) do
+        local e = WHEntry(sp, s.k)
+        if s.k == "main" and twoOnly then e = two end
+        local p = e and WHPick(e)
+        whPicks[s.k] = p and { p } or {}
+        local st = e and WHStatus(e)
+        local skipOff = s.k == "off" and twoOnly
+        if e then
+            counts[s.group] = counts[s.group] + 1
+            if st == "worn" or st == "bag" then done[s.group] = done[s.group] + 1 end
+        end
+        local g = slotRows[s.group]
+        if skipOff then
+            if db.filter == "all" then g[#g + 1] = { kind = "slot", s = s, skipOff = true, wh = true } end
+        elseif (e and Shows(st)) or (not e and db.filter == "all") then
+            g[#g + 1] = { kind = "slot", s = s, p = p, st = st, wh = true }
+        end
+        if s.k == "main" and two and not twoOnly then -- the guide's two-hander, as the other way to fill both hands
+            local st2 = WHStatus(two)
+            if Shows(st2) then g[#g + 1] = { kind = "alt", s = s, p = WHPick(two), r = "2H", st = st2, wh = true } end
+        end
+    end
+    local yours, all = 0, 0
+    for g = 1, 3 do
+        yours, all = yours + done[g], all + counts[g]
+        if #slotRows[g] > 0 then
+            view[#view + 1] = { kind = "head", text = GROUPS[g], right = done[g] .. " of " .. counts[g] .. " yours" }
+            for _, r in ipairs(slotRows[g]) do view[#view + 1] = r end
+        end
+    end
+    return yours, all
+end
+
+-- item ID / name -> "Enhancement, Elemental" for the tooltip line (your class's lists only)
+local whIndex, whNames
+local function WHFor(id)
+    if not whIndex then
+        whIndex, whNames = {}, {}
+        local function Add(t, k, label)
+            if not k then return end
+            t[k] = t[k] or {}
+            for _, v in ipairs(t[k]) do if v == label then return end end
+            t[k][#t[k] + 1] = label
+        end
+        for _, sp in ipairs(WHSpecs()) do
+            for _, key in ipairs(WH_KEYS) do
+                local e = WHEntry(sp, key)
+                if e then Add(whIndex, e.id, sp.label); Add(whNames, e.name, sp.label) end
+            end
+        end
+    end
+    local l = whIndex[id]
+    if not l then
+        local n = GetItemInfo(id)
+        if n then
+            for name, specs in pairs(whNames) do if SameName(n, name) then l = specs break end end
+        end
+    end
+    return l and table.concat(l, ", ") or nil
 end
 
 --------------------------------------------------------------------------------
@@ -692,7 +817,8 @@ local function PaintRows()
                 row.src:SetText(Hex(GREY) .. v.right .. "|r")
             else
                 local s, p = v.s, v.p
-                row.slot:SetText(v.kind == "alt" and (Hex(GREY) .. "   #" .. v.r .. "|r") or (Hex(GREY) .. s.label .. "|r"))
+                local altLabel = v.r == "2H" and "   or 2H" or ("   #" .. tostring(v.r))
+                row.slot:SetText(v.kind == "alt" and (Hex(GREY) .. altLabel .. "|r") or (Hex(GREY) .. s.label .. "|r"))
                 if v.skipOff then
                     row.icon:SetTexture(QUESTION)
                     row.icon:SetDesaturated(true)
@@ -703,7 +829,7 @@ local function PaintRows()
                 elseif not p then
                     row.icon:SetTexture(QUESTION)
                     row.icon:SetDesaturated(true)
-                    row.name:SetText(Hex(GREY) .. (state.busy and "Weighing items..." or "Nothing found yet") .. "|r")
+                    row.name:SetText(Hex(GREY) .. (v.wh and "Not on Wowhead's list yet" or (state.busy and "Weighing items..." or "Nothing found yet")) .. "|r")
                     row.gain:SetText("")
                     row.src:SetText("")
                     row.more:SetText("")
@@ -712,17 +838,19 @@ local function PaintRows()
                     row.icon:SetTexture(i.icon or QUESTION)
                     row.icon:SetDesaturated(false)
                     local c = QualityColor(i.quality)
-                    row.name:SetText(Hex(c) .. (i.name or ("item " .. p.id)) .. "|r" .. (p.pinned and (" " .. Hex(T.accent) .. "(pinned)|r") or ""))
-                    local g = Gain(s, p)
+                    row.name:SetText(Hex(c) .. (i.name or (p.wh and p.wh.name) or ("item " .. p.id)) .. "|r"
+                        .. (p.pinned and (" " .. Hex(T.accent) .. "(pinned)|r") or "")
+                        .. (WHMismatch(p) and (" " .. Hex(T.danger) .. "?|r") or ""))
+                    local g = Gain(s, p, v.wh and whPicks or nil)
                     if v.st == "worn" then row.gain:SetText(Hex(T.green) .. "worn|r")
                     elseif g then row.gain:SetText(Hex(T.green) .. g .. "|r")
                     else row.gain:SetText("") end
-                    local src = SourceText(p.id)
+                    local src = v.wh and (p.wh.src or "") or SourceText(p.id)
                     if (i.minLevel or 0) > MyLevel() then src = src .. " · " .. Hex(T.danger) .. "Level " .. i.minLevel .. "|r" end
                     if v.st == "bag" and v.kind == "slot" and src ~= "In your bags" then src = Hex(T.green) .. "In bags|r · " .. src end
                     row.src:SetText(Hex(GREY) .. src .. "|r")
                     row.mark:SetShown(v.kind == "slot" and (v.st == "worn" or v.st == "bag"))
-                    if v.kind == "slot" then
+                    if v.kind == "slot" and not v.wh then
                         local n = #(picks[s.k] or {})
                         row.more:SetText(n > 1 and (Hex(GREY) .. (expanded[s.k] and "-" or "+") .. n .. "|r") or "")
                     else
@@ -757,8 +885,23 @@ end
 function Refresh()
     if not win then return end
     if state.sig ~= WeightSig() then QueueRecompute(0.1) end
-    local yours, all = BuildView()
+    local sp = WHSpec()
+    local yours, all
+    if sp then yours, all = BuildWHView(sp) else yours, all = BuildView() end
     for _, b in ipairs(win.tabs) do b:SetPrimary(b.key == db.filter) end
+    if win.list then win.list:Refresh() end
+    if sp then
+        win.sum1:SetText(Hex(T.accent) .. yours .. "/" .. all .. "|r " .. Hex(T.text) .. "Wowhead BiS yours|r   " .. Hex(GREY) .. "pre-raid " .. sp.label .. "|r")
+        win.sum2:SetText("Wowhead's Forever guide (" .. (WHData().date or "?") .. ")" .. (sp.partial and ", still being written" or "") .. " · gain uses your Upgrade weights")
+        win.minus:Hide()
+        win.plus:Hide()
+        local waiting = 0
+        for id in pairs(whAsked) do if info[id] and info[id].name then whAsked[id] = nil else waiting = waiting + 1 end end
+        win.foot:SetText(waiting > 0 and ("Loading " .. waiting .. " items from the game...")
+            or (Hex(T.danger) .. "?|r = the guide's item shows another name in game; check it before farming. Pins work in Cys's picks."))
+        PaintRows()
+        return
+    end
     local prof = ProfileName()
     win.sum1:SetText(Hex(T.accent) .. yours .. "/" .. all .. "|r " .. Hex(T.text) .. "BiS yours|r   " .. Hex(GREY) .. (prof ~= "" and prof or "no Cys's Upgrade profile") .. "|r")
     local text, b = BlendText()
@@ -783,7 +926,18 @@ local function RowTip(self)
     local v = self.v
     if not v or v.kind == "head" then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    if v.p then
+    if v.p and v.wh then
+        local i = info[v.p.id] or {}
+        GameTooltip:SetHyperlink(v.p.link or i.link or ("item:" .. v.p.id))
+        GameTooltip:AddLine(" ")
+        local sp = WHSpec()
+        GameTooltip:AddLine("Wowhead pre-raid BiS" .. (sp and (": " .. sp.label) or ""), T.accent[1], T.accent[2], T.accent[3])
+        GameTooltip:AddLine(v.p.wh.src or "", 1, 1, 1, true)
+        GameTooltip:AddDoubleLine("Cys's Upgrade score", string.format("%.1f EP", v.p.ep or 0), T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
+        if WHMismatch(v.p) then
+            GameTooltip:AddLine("The guide names this " .. v.p.wh.name .. ", but this item ID is " .. (i.name or "?") .. " in game.", T.danger[1], T.danger[2], T.danger[3], true)
+        end
+    elseif v.p then
         local i = info[v.p.id] or {}
         GameTooltip:SetHyperlink(v.p.link or i.link or ("item:" .. v.p.id))
         GameTooltip:AddLine(" ")
@@ -796,6 +950,9 @@ local function RowTip(self)
         if v.kind == "slot" then
             GameTooltip:AddLine("Click: the other picks. Drop an item here to pin it; right-click to unpin.", GREY[1], GREY[2], GREY[3], true)
         end
+    elseif v.wh then
+        GameTooltip:SetText(v.s.label, T.accent[1], T.accent[2], T.accent[3])
+        GameTooltip:AddLine(v.skipOff and "The guide's two-hander fills both hands." or "Wowhead's guide lists nothing here yet.", 1, 1, 1, true)
     else
         GameTooltip:SetText(v.s.label, T.accent[1], T.accent[2], T.accent[3])
         GameTooltip:AddLine("Drop an item here to pin it as this slot's BiS.", 1, 1, 1, true)
@@ -812,7 +969,7 @@ end
 
 local function DropOnRow(self)
     local v = self.v
-    if not (v and v.s) then return end
+    if not (v and v.s) or v.wh then return end
     local kind, id = GetCursorInfo()
     if kind ~= "item" or not id then return end
     ClearCursor()
@@ -891,6 +1048,23 @@ local function BuildWindow()
         win.tabs[n] = b
     end
 
+    -- which list: Cys's picks (scored with your weights) or one of Wowhead's pre-raid guides for your class
+    local lists = { { "cys", "Cys's picks (your weights)" } }
+    for _, sp in ipairs(WHSpecs()) do lists[#lists + 1] = { sp.key, "Wowhead pre-raid: " .. sp.label } end
+    if #lists > 1 then
+        win.list = W.Dropdown(win, 236, lists, function() return db.list[CHARKEY] or "cys" end,
+            function(v) db.list[CHARKEY] = v; offset = 0; Refresh() end)
+        win.list:SetPoint("TOPLEFT", 14, -81)
+        win.list:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine("Which BiS list", T.accent[1], T.accent[2], T.accent[3])
+            GameTooltip:AddLine("Cys's picks: the best items found for you, scored with Cys's Upgrade weights.", 1, 1, 1, true)
+            GameTooltip:AddLine("Wowhead pre-raid: the level 60 list from Wowhead's WoW Forever guide for that spec. The gain column still uses your weights.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        win.list:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
     for n = 1, ROWS do
         local row = CreateFrame("Button", nil, win)
         row:SetHeight(ROW_H)
@@ -941,7 +1115,7 @@ local function BuildWindow()
             if not (v and v.s) then return end
             if GetCursorInfo() then DropOnRow(self) return end
             if button == "RightButton" then
-                if pins[v.s.k] then pins[v.s.k] = nil; QueueRecompute(0.05) end
+                if not v.wh and pins[v.s.k] then pins[v.s.k] = nil; QueueRecompute(0.05) end
                 return
             end
             if IsModifiedClick and IsModifiedClick() and v.p then
@@ -950,7 +1124,7 @@ local function BuildWindow()
                 if link and HandleModifiedItemClick then HandleModifiedItemClick(link) end
                 return
             end
-            if v.kind == "slot" then expanded[v.s.k] = not expanded[v.s.k]; Refresh() end
+            if v.kind == "slot" and not v.wh then expanded[v.s.k] = not expanded[v.s.k]; Refresh() end
         end)
         rows[n] = row
     end
@@ -1050,10 +1224,14 @@ local function OnTip(tooltip, data)
     if not db.tipMark or not (tooltip == GameTooltip or tooltip == ItemRefTooltip) then return end
     if win and tooltip:GetOwner() and tooltip:GetOwner():GetParent() == win then return end
     local id = data and data.id
-    local r = id and pickRank[id]
-    if not r then return end
-    local prof = ProfileName()
-    tooltip:AddLine(string.format("Cys BiS: #%d for %s%s", r.rank, r.label, prof ~= "" and (" (" .. prof .. ")") or ""), T.accent[1], T.accent[2], T.accent[3])
+    if not id then return end
+    local r = pickRank[id]
+    if r then
+        local prof = ProfileName()
+        tooltip:AddLine(string.format("Cys BiS: #%d for %s%s", r.rank, r.label, prof ~= "" and (" (" .. prof .. ")") or ""), T.accent[1], T.accent[2], T.accent[3])
+    end
+    local specs = WHFor(id)
+    if specs then tooltip:AddLine("Wowhead pre-raid BiS: " .. specs, T.accent[1], T.accent[2], T.accent[3], true) end
 end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
     pcall(TooltipDataProcessor.AddTooltipPostCall, Enum.TooltipDataType.Item, function(tooltip, data) pcall(OnTip, tooltip, data) end)
@@ -1085,7 +1263,7 @@ for _, e in ipairs({ "PLAYER_LOGIN", "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED",
                      "ACTIVE_TALENT_GROUP_CHANGED", "AUCTION_HOUSE_CLOSED" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
-local loadQueued
+local loadQueued, whQueued
 ev:SetScript("OnEvent", function(_, event, a1)
     if event == "PLAYER_LOGIN" then
         pcall(LoadSaved)
@@ -1094,6 +1272,10 @@ ev:SetScript("OnEvent", function(_, event, a1)
     elseif event == "ADDON_LOADED" then
         Attach()
     elseif event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT" then
+        if whAsked[a1] and not whQueued and win and win:IsShown() then -- the Wowhead list fills in as its items arrive
+            whQueued = true
+            C_Timer.After(0.5, function() whQueued = false; if win and win:IsShown() then Refresh() end end)
+        end
         if asked[a1] and not loadQueued then
             loadQueued = true
             C_Timer.After(8, function() loadQueued = false; QueueRecompute(0.05, true) end) -- batches of arrivals, not one refresh each
@@ -1139,6 +1321,27 @@ SlashCmdList["CYSBIS"] = function(msg)
             n, state.total, state.loading, JournalDB() and "yes" or "no", srcCount.journal, AH() and "yes" or "no", srcCount.ah,
             srcCount.seen, ProfileName() ~= "" and ProfileName() or "none"))
         return
+    elseif msg == "wowhead" then -- every Wowhead item for your class: does its ID show the guide's name in game?
+        local bad, waiting, total = 0, 0, 0
+        for _, sp in ipairs(WHSpecs()) do
+            for _, key in ipairs(WH_KEYS) do
+                local e = WHEntry(sp, key)
+                if e then
+                    total = total + 1
+                    local n = GetItemInfo(e.id)
+                    if not n then
+                        waiting = waiting + 1
+                        if RequestLoad then pcall(RequestLoad, e.id) end
+                    elseif not SameName(n, e.name) then
+                        bad = bad + 1
+                        CUI:Print(string.format("BiS: %s %s - guide says %s, item %d is %s.", sp.label, key, e.name, e.id, n))
+                    end
+                end
+            end
+        end
+        CUI:Print(string.format("BiS: %d Wowhead items for your class, %d with another name in game, %d still loading%s.",
+            total, bad, waiting, waiting > 0 and " (run it again in a few seconds)" or ""))
+        return
     end
     db.open = not db.open
     if not charUp and db.open and ToggleCharacter then
@@ -1159,7 +1362,7 @@ CUI:RegisterPage("BiS List", function(page)
     intro:SetWidth(width - 8)
     intro:SetJustifyV("TOP")
     intro:SetSpacing(3)
-    intro:SetText("A window beside the character panel with your best item for every slot, scored with Cys's Upgrade's weights for the profile you use, and where each item comes from. Open it with the BiS button on the character panel.")
+    intro:SetText("A window beside the character panel with your best item for every slot, scored with Cys's Upgrade's weights for the profile you use, and where each item comes from. Open it with the BiS button on the character panel. Its dropdown also shows Wowhead's level 60 pre-raid list for each of your specs.")
 
     local y = -100
     local function Box(label, get, set)
