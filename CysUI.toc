@@ -78,6 +78,7 @@ Modules\DamageMeters\CysMeter.lua
 Modules\RollTracker\CysRollTracker.lua
 Modules\Tank\CysTaunt.lua
 Modules\Buffs\CysMissingBuffs.lua
+Modules\Buffs\CysBuffHelper.lua
 Modules\CombatLog\CysCombatLog.lua
 Modules\CombatText\CysCombatText.lua
 Modules\CombatText\CysFrameText.lua

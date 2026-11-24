@@ -538,6 +538,7 @@ if CysChangelog then
                   "Kill Tracker: new Shows option, Kills to level + XP per hour here.",
                   "Experience Bar: the tooltip shows your XP per hour at the farm spot you are at (or over the last 15 minutes).",
                   "PvP Timers: small bars that count down your PvP flag, the time left to enter a battleground once the queue pops (and how long you have waited), the battle start, Arathi Basin bases and Alterac Valley towers and graveyards being taken (colored by the side taking them), and the Spirit Healer's next resurrection. Place them in Layout mode; /cuipvp test shows sample bars. New file: restart the game once.",
+                  "Buff Helper: a small bar with one button per group member missing a buff you can cast. Click it to cast that buff on them. Paladins get PallyPower-style blessings: Wisdom for casters, Might for melee, Kings for tanks, with a dropdown per class. Hidden in combat and when nobody needs anything. /cuibuff tank marks your target as a tank.",
                   "Class Macros: your Character tab macros are shared with every character of the same class. Make or change a macro on one Paladin and your other Paladins get it at their next login, automatically or after asking (your pick on its settings page). The settings page lists them, shows which ones a character is missing, and x takes one off the list. /cuimacros save, load and list. New file: restart the game once.",
               },
               improved = {
