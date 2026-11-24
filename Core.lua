@@ -534,6 +534,9 @@ if CysChangelog then
                   "Cys's Bags: your keyring shows as a Keyring section (and sidebar row) with your keys. The game's keyring button opens the bags on it. Its slots don't count as free space.",
                   "Guild Recruiter: each level bracket shows its share of the guild in %.",
                   "Guild Recruiter: see which guildies are recruiting right now and which levels (Also recruiting, under the replies; their name also shows next to a bracket they recruit). Only guildies running Cys's UI show.",
+                  "Kill Tracker: farm spots. Kills in the open world are grouped by where you make them, with XP per hour, kills per hour and time to level for the spot you are at (only the time you are pulling counts). When you leave the zone or move on, a summary prints in your own chat. /cuifarm shows the spot you are at and your last ones.",
+                  "Kill Tracker: new Shows option, Kills to level + XP per hour here.",
+                  "Experience Bar: the tooltip shows your XP per hour at the farm spot you are at (or over the last 15 minutes).",
               },
               improved = {
                   "Spell Scout on WoW Forever: classes without a written guide now get a box too, listing every spell their trainer teaches at your level (Shaman keeps its guides with reasons).",

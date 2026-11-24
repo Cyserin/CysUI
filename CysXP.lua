@@ -185,6 +185,16 @@ local function ShowTooltip(self)
     elseif KT and KT.Active and KT.Active() then
         GameTooltip:AddDoubleLine("Kills to level:", "after your first kill", 0.8, 0.8, 0.8, 0.6, 0.6, 0.6)
     end
+    -- XP per hour: at the farm spot you are at, else over the last 15 minutes
+    local function K(v) return v >= 10000 and format("%.1fk", v / 1000) or tostring(floor(v)) end
+    local s = KT and KT.Active and KT.Active() and KT.Spot and KT.Spot()
+    if s and s.xpPerHour then
+        GameTooltip:AddDoubleLine("XP per hour here:", format("%s  (level in ~%d min)", K(s.xpPerHour), floor((s.minsToLevel or 0) + 0.5)),
+            0.8, 0.8, 0.8, 0.3, 1, 0.3)
+    elseif KT and KT.Active and KT.Active() and KT.Rate then
+        local r = KT.Rate(900)
+        if r then GameTooltip:AddDoubleLine("XP per hour (15 min):", K(r), 0.8, 0.8, 0.8, 0.3, 1, 0.3) end
+    end
     GameTooltip:Show()
 end
 
