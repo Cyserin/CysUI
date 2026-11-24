@@ -78,6 +78,13 @@ local LAST_NORMAL_BAG = LAST_BAG
 if CysUICompat and CysUICompat.isForever then
     LAST_BAG = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or (LAST_BAG + 1)
 end
+-- The keyring (bag -2): keys sit there and show under a Keyring section of their own. Its slots don't count as
+-- free space (only keys fit). BAG_LIST is every bag we draw: backpack, bags, reagent bag, keyring.
+local KEYRING = (Enum and Enum.BagIndex and Enum.BagIndex.Keyring) or KEYRING_CONTAINER or -2
+local BAG_LIST = {}
+for b = FIRST_BAG, LAST_BAG do BAG_LIST[#BAG_LIST + 1] = b end
+BAG_LIST[#BAG_LIST + 1] = KEYRING
+local function IsOurBag(id) return type(id) == "number" and ((id >= FIRST_BAG and id <= LAST_BAG) or id == KEYRING) end
 
 -- Shown for an equipped bag whose real icon can't be read (see UpdateBagSlots)
 local FALLBACK_BAG_TEXTURE = "Interface\\Icons\\INV_Misc_Bag_08"
@@ -140,6 +147,10 @@ if LAST_BAG > LAST_NORMAL_BAG then
     tinsert(SIDEBAR, #SIDEBAR, { key = "REAGENT", label = "Reagent Bag" })
     tinsert(SECTIONS, #SECTIONS, { key = "REAGENT", title = "Reagent Bag" })
 end
+-- Keyring: its own section and sidebar row, just above Junk (the row hides while the keyring is empty)
+SIDEBAR_ICONS.KEYRING = "Interface\\Icons\\INV_Misc_Key_03"
+tinsert(SIDEBAR, #SIDEBAR, { key = "KEYRING", label = "Keyring" })
+tinsert(SECTIONS, #SECTIONS, { key = "KEYRING", title = "Keyring" })
 
 -- Pinned: items you pin (Alt-click, or drop them on it) sit at the top. New Items: what came into your bags
 -- since you last closed them (shown at the top of All Items; it empties when you close the bags).
@@ -152,7 +163,7 @@ tinsert(SECTIONS, 2, { key = "RECENT", title = "New Items" })
 
 local VALID_CATEGORY, CATEGORY_TITLE = {}, {}
 for _, sec in ipairs(SECTIONS) do
-    VALID_CATEGORY[sec.key] = sec.key ~= "REAGENT" -- a bag, not a category: items can't be dragged into it
+    VALID_CATEGORY[sec.key] = sec.key ~= "REAGENT" and sec.key ~= "KEYRING" -- bags, not categories: items can't be dragged into them
     CATEGORY_TITLE[sec.key] = sec.title
 end
 VALID_CATEGORY.RECENT = false -- filled by the game, not by you
@@ -168,7 +179,12 @@ end
 --------------------------------------------------------------------------------
 local CC = C_Container
 
-local GetNumSlots = (CC and CC.GetContainerNumSlots) or GetContainerNumSlots
+local RawNumSlots = (CC and CC.GetContainerNumSlots) or GetContainerNumSlots
+-- a client without a keyring may refuse bag -2: treat that as 0 slots
+local function GetNumSlots(bag)
+    local ok, n = pcall(RawNumSlots, bag)
+    return ok and n or 0
+end
 local GetItemCooldown = (CC and CC.GetContainerItemCooldown) or GetContainerItemCooldown
 local GetNumFreeSlots = (CC and CC.GetContainerNumFreeSlots) or GetContainerNumFreeSlots
 local PickupItem = (CC and CC.PickupContainerItem) or PickupContainerItem
@@ -238,7 +254,7 @@ end
 -- like the saved sets under Armory Sets. Order: CysBagsDB.order = every sidebar key below All Slots, top to
 -- bottom, written when you drag a row; a sub-category always stays right under its parent.
 local SUB_PARENT, famCounts = {}, {} -- [key] = parent key; [parent key] = items in its sub-categories
-local NO_PARENT = { ALL = true, SLOTS = true, RECENT = true, SETS = true, REAGENT = true, PINNED = true }
+local NO_PARENT = { ALL = true, SLOTS = true, RECENT = true, SETS = true, REAGENT = true, KEYRING = true, PINNED = true }
 local FIXED_ROW = { ALL = true, SLOTS = true }
 local function Fam(key) return (counts[key] or 0) + (famCounts[key] or 0) end
 local function SideLabel(key)
@@ -338,7 +354,7 @@ local seenCounts      -- [itemID] = count at the last look (nil until the first 
 local recent = {}     -- [itemID] = true
 local function CountAll()
     local t, any = {}, false
-    for bag = FIRST_BAG, LAST_BAG do
+    for _, bag in ipairs(BAG_LIST) do
         for slot = 1, (GetNumSlots(bag) or 0) do
             local _, count, _, _, link, itemID = GetSlotItem(bag, slot)
             if link then
@@ -797,9 +813,9 @@ function CysBags:Collect()
     end
 
     local n, used, total = 0, 0, 0
-    for bag = FIRST_BAG, LAST_BAG do
+    for _, bag in ipairs(BAG_LIST) do
         local slots = GetNumSlots(bag) or 0
-        local counted = bag <= LAST_NORMAL_BAG
+        local counted = bag >= FIRST_BAG and bag <= LAST_NORMAL_BAG
         if counted then total = total + slots end
         for slot = 1, slots do
             local icon, count, locked, quality, link, itemID = GetSlotItem(bag, slot)
@@ -823,7 +839,7 @@ function CysBags:Collect()
                     e.isBoE = IsBoE(bag, slot)
                     e.ilvl = GearLevel(link, itemID)
                     
-                    local category = bag > LAST_NORMAL_BAG and "REAGENT" or ResolveCategory(e)
+                    local category = (bag == KEYRING and "KEYRING") or (bag > LAST_NORMAL_BAG and "REAGENT") or ResolveCategory(e)
                     if not lists[category] then lists[category] = {} end
                     lists[category][#lists[category] + 1] = e
                     -- new since the bags were last closed: also listed under New Items (pinned ones stay pinned)
@@ -880,7 +896,7 @@ function CysBags:Collect()
 end
 
 function CysBags:Layout()
-    for bag = FIRST_BAG, LAST_BAG do
+    for _, bag in ipairs(BAG_LIST) do
         for _, btn in pairs(buttons[bag]) do btn:Hide() end
     end
     for _, h in pairs(sectionHeaders) do h:Hide() end
@@ -995,18 +1011,19 @@ function CysBags:Layout()
     -- All Slots: every real slot in bag order, empty ones included
     if filter == "SLOTS" then
         local i, extra = 0, 0
-        for bag = FIRST_BAG, LAST_BAG do
+        for _, bag in ipairs(BAG_LIST) do
             if not self.bagFilter or self.bagFilter == bag then
                 local entries = slotEntries[bag]
                 local slots = GetNumSlots(bag) or 0
-                -- the reagent bag's slots get a block of their own under the ordinary ones
-                if bag > LAST_NORMAL_BAG and slots > 0 and i > 0 then
+                -- the reagent bag's and the keyring's slots get a block of their own under the ordinary ones
+                local special = bag == KEYRING or bag > LAST_NORMAL_BAG
+                if special and slots > 0 and i > 0 then
                     i = ceil(i / COLS) * COLS
                     local top = (i / COLS) * STEP + extra - SLOT_GAP + SECTION_GAP
-                    local h = GetSectionHeader("REAGENT_SLOTS")
+                    local h = GetSectionHeader(bag == KEYRING and "KEYRING_SLOTS" or "REAGENT_SLOTS")
                     h:ClearAllPoints()
                     h:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -top)
-                    h.label:SetText(format("Reagent Bag |cff777777(%d)|r", slots))
+                    h.label:SetText(format("%s |cff777777(%d)|r", bag == KEYRING and "Keyring" or "Reagent Bag", slots))
                     h:Show()
                     extra = extra - SLOT_GAP + SECTION_GAP + SECTION_H + 6
                 end
@@ -1357,6 +1374,23 @@ function CysBags:SetSearch(text)
         pcall(C_Container.SetItemSearch, self.search)
     end
     self:ApplySearch()
+end
+
+-- The keyring key/button: open the bags on the Keyring section (or close them if that's what is showing)
+-- (not saved as your tab: closing the bags puts back the tab you had)
+function CysBags:ToggleKeyring()
+    if not frame then return end
+    if frame:IsShown() and self.filter == "KEYRING" then self:Close(); return end
+    if not self.keyHook then
+        self.keyHook = true
+        frame:HookScript("OnHide", function()
+            if CysBags.filter == "KEYRING" then CysBags.filter = (CysBagsDB and CysBagsDB.filter) or "ALL"; CysBags.dirty = true end
+        end)
+    end
+    self.filter = "KEYRING"
+    scroll:SetVerticalScroll(0)
+    self.dirty = true
+    if frame:IsShown() then self:Refresh() else self:Open() end
 end
 
 -- Footer bag slots: click to show only that bag's items, click again to show everything.
@@ -2455,7 +2489,7 @@ function CysBags:CreateFrames()
     self.emptyText:Hide()
 
     -- Bag "holder" frames: ContainerFrameItemButtonTemplate reads the bag ID from its parent
-    for bag = FIRST_BAG, LAST_BAG do
+    for _, bag in ipairs(BAG_LIST) do
         local holder = CreateFrame("Frame", "CysBagsBagHolder" .. bag, content)
         holder:SetAllPoints(content)
         holder:SetID(bag)
@@ -2613,7 +2647,7 @@ end
 
 function CysBags:PreCreateButtons()
     if not frame or InCombatLockdown() then return end
-    for bag = FIRST_BAG, LAST_BAG do
+    for _, bag in ipairs(BAG_LIST) do
         for slot = 1, (GetNumSlots(bag) or 0) do
             GetItemButton(bag, slot)
         end
@@ -2641,7 +2675,7 @@ local function InstallBagHooks()
         for i = 1, (NUM_CONTAINER_FRAMES or 13) do Tuck(_G["ContainerFrame" .. i]) end
 
         local function BlizzardOpen()
-            for id = FIRST_BAG, LAST_BAG do
+            for _, id in ipairs(BAG_LIST) do
                 local ok, open = pcall(IsBagOpen, id)
                 if ok and open then return true end
             end
@@ -2651,12 +2685,12 @@ local function InstallBagHooks()
         -- A toggle (the bag key) flips ours, whatever Blizzard's hidden bags think; an open or close (bank,
         -- mailbox, vendor, Escape...) makes ours match Blizzard's. Calls in the same frame are handled once,
         -- because Blizzard's toggle runs its own open and close calls inside.
-        local pending, toggled = false, false
+        local pending, toggled, keys = false, false, false
         local function Sync()
             pending = false
             if toggled then
                 toggled = false
-                CysBags:Toggle()
+                if keys then keys = false; CysBags:ToggleKeyring() else CysBags:Toggle() end
             elseif BlizzardOpen() then
                 CysBags:Open()
             else
@@ -2672,8 +2706,9 @@ local function InstallBagHooks()
             if _G[name] then hooksecurefunc(name, Later) end
         end
         local function Toggled(id)
-            if id ~= nil and not (type(id) == "number" and id >= FIRST_BAG and id <= LAST_BAG) then return end
+            if id ~= nil and not IsOurBag(id) then return end
             toggled = true
+            keys = id == KEYRING
             Later()
         end
         for _, name in ipairs({ "ToggleBackpack", "ToggleAllBags", "ToggleBag" }) do
@@ -2684,6 +2719,9 @@ local function InstallBagHooks()
 
     local origToggleBag, origOpenBag, origCloseBag = ToggleBag, OpenBag, CloseBag
     local function Ours(id) return type(id) == "number" and id >= FIRST_BAG and id <= LAST_BAG end
+    -- the keyring button opens our bags on the Keyring section
+    local origToggleKeyRing = ToggleKeyRing
+    if origToggleKeyRing then _G.ToggleKeyRing = function() CysBags:ToggleKeyring() end end
 
     _G.ToggleBackpack = function() CysBags:Toggle() end
     _G.OpenBackpack   = function() CysBags:Open() end
@@ -2693,7 +2731,8 @@ local function InstallBagHooks()
     _G.CloseAllBags   = function() CysBags:Close() end
 
     _G.ToggleBag = function(id)
-        if Ours(id) or not origToggleBag then CysBags:Toggle() else origToggleBag(id) end
+        if id == KEYRING then CysBags:ToggleKeyring()
+        elseif Ours(id) or not origToggleBag then CysBags:Toggle() else origToggleBag(id) end
     end
     _G.OpenBag = function(id)
         if Ours(id) or not origOpenBag then CysBags:Open() else origOpenBag(id) end
@@ -2924,8 +2963,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
         C_Timer.After(3, function() if not seenCounts then CysBags:ClearRecent() end end) -- New Items baseline
 
     elseif event == "BAG_UPDATE" then
-        -- ignore bank / keyring bags; we only draw the player's bags
-        if arg1 == nil or (arg1 >= FIRST_BAG and arg1 <= LAST_BAG) then
+        -- ignore bank bags; we only draw the player's bags and keyring
+        if arg1 == nil or IsOurBag(arg1) then
             CysBags.dirty = true
         end
 

@@ -9,7 +9,8 @@
 -- Left the guild: players who left or were removed show in the window until the days you pick have passed
 -- (also the ones who left while you were offline, found by comparing the guild roster with your last login).
 -- Guild levels: how many members sit in each level bracket (from the same roster snapshot), so thin brackets
--- stand out; click a bracket to recruit those levels.
+-- stand out (with their share of the guild in %); click a bracket to recruit those levels.
+-- Also recruiting: guildies running this recruiter right now, and their levels (guild addon channel).
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "recruit", name = "Guild Recruiter", foreverOnly = true,
@@ -106,6 +107,28 @@ local welcomeTimers = {} -- [lower name] = cancelled flag table
 local lastNote = ""      -- one-line status for the window
 local frame, kb
 
+-- Who else in the guild is recruiting: each Cys's UI tells the guild addon channel "R:lo:hi" while it runs
+-- (again every minute), "X" when it stops; "Q" (sent at login) asks everyone running to answer.
+local others = {}       -- [name] = { lo, hi, t = GetTime() }
+local OTHERS_TTL = 150  -- no word for this long: they stopped (or logged off)
+local announceTicker
+local function Send(msg)
+    if IsInGuild() and C_ChatInfo and C_ChatInfo.SendAddonMessage then pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, "GUILD") end
+end
+local function Announce()
+    if R.running then Send("R:" .. min(db.lo, db.hi) .. ":" .. max(db.lo, db.hi)) else Send("X") end
+end
+local function Others()
+    local out, now = {}, GetTime()
+    for n, o in pairs(others) do
+        if now - o.t > OTHERS_TTL then others[n] = nil
+        else out[#out + 1] = { name = n, lo = o.lo, hi = o.hi } end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+R.Others = Others
+
 local function BuildSearches()
     wipe(searches)
     local lo, hi = max(1, db.lo), min(MaxLevel(), db.hi)
@@ -117,6 +140,7 @@ local function BuildSearches()
         a = b + 1
     end
     searchIdx, foundThisSweep = 0, 0
+    if R.running then Announce() end -- new levels: tell the guild
 end
 
 local function Recent(name)
@@ -363,6 +387,9 @@ function R.Start()
     if session.whispered >= db.cap then session.whispered = 0 end
     BuildSearches()
     R.running = true
+    Announce()
+    if announceTicker then announceTicker:Cancel() end
+    announceTicker = C_Timer.NewTicker(60, Announce)
     nextWho, nextWhisper = 0, 0
     lastNote = "Press any key or click to take the next step"
     UpdateListeners()
@@ -371,7 +398,10 @@ function R.Start()
 end
 
 function R.Stop(reason)
+    local was = R.running
     R.running = false
+    if announceTicker then announceTicker:Cancel(); announceTicker = nil end
+    if was then Announce() end
     wipe(queue); wipe(queued)
     if inFlight then inFlight = nil; Reattach() end
     lastNote = reason or "Stopped"
@@ -843,6 +873,9 @@ local function BuildWindow()
     f.empty:SetPoint("TOP", 0, -(HEADER_H + STRIP_H + 8))
     f.empty:SetText("Players who answer show here.")
     f.more = W.Text(f, 10, T.dim, "CENTER")
+    f.others = W.Text(f, 10, T.desc)
+    f.others:SetPoint("RIGHT", f, "RIGHT", -10, 0)
+    f.others:SetWordWrap(true)
 
     -- Left the guild: header line (click folds it) + small rows
     local lh = CreateFrame("Button", nil, f)
@@ -929,9 +962,24 @@ function R.Refresh(show)
     else
         frame.more:Hide()
     end
+    h = R.PaintOthers(h)
     h = R.PaintLeft(h)
     h = R.PaintLevels(h)
     frame:SetHeight(h)
+end
+
+-- "Also recruiting: Name 10-19, ..." under the replies (guildies running Cys's UI's recruiter right now)
+function R.PaintOthers(y)
+    local list = Others()
+    if #list == 0 then frame.others:Hide(); return y end
+    local parts = {}
+    for _, o in ipairs(list) do parts[#parts + 1] = "|cFFFFFFFF" .. o.name .. "|r " .. o.lo .. "-" .. o.hi end
+    frame.others:ClearAllPoints()
+    frame.others:SetPoint("TOPLEFT", 10, -(y + 2))
+    frame.others:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
+    frame.others:SetText("|cFF33FF66Also recruiting:|r  " .. table.concat(parts, ",  "))
+    frame.others:Show()
+    return y + max(14, frame.others:GetStringHeight()) + 8
 end
 
 -- the Left the guild section under the replies; returns the new window height
@@ -1002,7 +1050,8 @@ local function MakeLevelRow(i)
         local b = s.entry
         if not b then return end
         GameTooltip:SetOwner(s, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Levels " .. (b.lo == b.hi and b.lo or (b.lo .. "-" .. b.hi)) .. ":  " .. b.n .. (b.n == 1 and " member" or " members"), 1, 0.82, 0)
+        GameTooltip:AddLine("Levels " .. (b.lo == b.hi and b.lo or (b.lo .. "-" .. b.hi)) .. ":  " .. b.n .. (b.n == 1 and " member" or " members")
+            .. (b.pct and ("  (" .. b.pct .. "%)") or ""), 1, 0.82, 0)
         table.sort(b.list, function(x, y)
             if (x.l or 0) ~= (y.l or 0) then return (x.l or 0) > (y.l or 0) end
             return (x.n or "") < (y.n or "")
@@ -1012,6 +1061,14 @@ local function MakeLevelRow(i)
             GameTooltip:AddDoubleLine(ClassColored(e.n or "?", e.c), tostring(e.l or ""), 1, 1, 1, 0.7, 0.7, 0.7)
         end
         if #b.list > 15 then GameTooltip:AddLine("+" .. (#b.list - 15) .. " more", 0.6, 0.6, 0.6) end
+        local who = {}
+        for _, o in ipairs(Others()) do
+            if o.lo <= b.hi and o.hi >= b.lo then who[#who + 1] = o.name .. " (" .. o.lo .. "-" .. o.hi .. ")" end
+        end
+        if #who > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Also recruiting these levels: " .. table.concat(who, ", "), 0.2, 1, 0.4, true)
+        end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Click to recruit levels " .. b.lo .. "-" .. b.hi .. ".", T.accent[1], T.accent[2], T.accent[3])
         GameTooltip:Show()
@@ -1040,6 +1097,12 @@ function R.PaintLevels(y)
     end
     local top = 0
     for _, b in ipairs(list) do top = max(top, b.n) end
+    -- who else is recruiting exactly a bracket's levels shows next to it
+    local exact = {}
+    for _, o in ipairs(Others()) do
+        local k = o.lo .. "-" .. o.hi
+        exact[k] = exact[k] and (exact[k] .. ", " .. o.name) or o.name
+    end
     for i = 1, max(n, #lvRows) do
         local b = i <= n and list[i] or nil
         local r = lvRows[i] or (b and MakeLevelRow(i))
@@ -1056,9 +1119,13 @@ function R.PaintLevels(y)
                 r.bar:SetShown(b.n > 0)
                 if b.few then r.bar:SetColorTexture(T.accent[1], T.accent[2], T.accent[3], 0.95)
                 else r.bar:SetColorTexture(0.55, 0.55, 0.55, 0.8) end
-                r.num:SetText(b.n)
+                b.pct = total > 0 and floor(100 * b.n / total + 0.5) or 0
+                r.num:SetText(b.n .. "  |cFF999999" .. b.pct .. "%|r")
                 local here = db.lo == b.lo and db.hi == b.hi
-                r.tag:SetText(here and "|cFF33FF66recruiting|r" or (b.few and "few" or ""))
+                local them = exact[b.lo .. "-" .. b.hi]
+                local tag = here and "|cFF33FF66recruiting|r" or (b.few and "few" or "")
+                if them then tag = (tag ~= "" and (tag .. "  ") or "") .. "|cFF33FF66" .. them .. "|r" end
+                r.tag:SetText(tag)
             end
         end
     end
@@ -1096,6 +1163,19 @@ ev:SetScript("OnEvent", function(_, e, a1, a2, a3, a4)
         if a1 == PREFIX and type(a2) == "string" and not Secret(a2) then
             local k = a2:match("^W:(.+)$")
             if k then welcomeTimers[k] = nil end -- someone else is welcoming them
+            local who = type(a4) == "string" and not Secret(a4) and Short(a4) or nil
+            if who and who ~= "" and Key(who) ~= Key(UnitName("player")) then
+                local lo, hi = a2:match("^R:(%d+):(%d+)$")
+                if lo then
+                    others[who] = { lo = tonumber(lo), hi = tonumber(hi), t = GetTime() }
+                    if R.Refresh then R.Refresh() end
+                elseif a2 == "X" then
+                    others[who] = nil
+                    if R.Refresh then R.Refresh() end
+                elseif a2 == "Q" and R.running then
+                    C_Timer.After(math.random() * 3, Announce)
+                end
+            end
         end
     elseif e == "GUILD_ROSTER_UPDATE" then
         RosterSoon()
@@ -1104,6 +1184,7 @@ ev:SetScript("OnEvent", function(_, e, a1, a2, a3, a4)
             C_Timer.After(8, function()
                 if IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
                 RosterSoon()
+                Send("Q") -- who else is recruiting right now?
             end)
         end
     elseif e == "PLAYER_GUILD_UPDATE" then
@@ -1130,7 +1211,8 @@ SlashCmdList.CYSRECRUIT = function(msg)
         if total == 0 then Print("Guild Recruiter: no guild roster read yet (open the guild window once).") return end
         Print("Guild Recruiter: members per level (seen in the last " .. db.levelsDays .. " days, alts included):")
         for _, b in ipairs(list) do
-            Print("  " .. (b.lo == b.hi and b.lo or (b.lo .. "-" .. b.hi)) .. ": " .. b.n .. (b.few and "  |cFFFFD100few|r" or ""))
+            Print("  " .. (b.lo == b.hi and b.lo or (b.lo .. "-" .. b.hi)) .. ": " .. b.n .. "  |cFF999999(" .. floor(100 * b.n / total + 0.5) .. "%)|r"
+                .. (b.few and "  |cFFFFD100few|r" or ""))
         end
     else R.Toggle() end
 end
@@ -1230,7 +1312,8 @@ CUI:RegisterPage("Guild Recruiter", function(page)
         { "Invites", "The game only lets you invite yourself, never an addon. Players who answer show in the window; Invite shows /ginvite and their name in a small box: Ctrl+C, then Enter, Ctrl+V, Enter (your guild rank must be allowed to invite)." },
         { "Left the guild", "Players who leave or are removed show under the replies in the window, with who removed them. Players who left while you were offline show after your next login. Each name clears by itself after the days above; x takes it off sooner." },
         { "Welcome", "Sent on your next key press or click after someone joins. When several guildies run Cys's UI, only one of them welcomes each new member." },
-        { "Guild levels", "Members per level bracket, from the guild roster (alts count too; members not seen within the days above are left out). Thin brackets are gold and marked few. Click a bracket to recruit those levels; hover it to see who is in it." },
+        { "Guild levels", "Members per level bracket, from the guild roster (alts count too; members not seen within the days above are left out). Each bracket shows its share of the guild in %. Thin brackets are gold and marked few. Click a bracket to recruit those levels; hover it to see who is in it." },
+        { "Also recruiting", "Guildies running Cys's UI's recruiter right now show under the replies with their levels (and next to a bracket when they recruit exactly those levels), so you can pick other levels." },
         "/cuirecruit opens the window; /cuirecruit start, stop, next, left or levels. A key press with the chat box open doesn't count.",
     })
 end, function() end)

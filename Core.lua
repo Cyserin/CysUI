@@ -513,7 +513,7 @@ SlashCmdList["CYSUI"] = function(msg)
         if CUI.ToggleConfig then CUI:ToggleConfig() end
     else
         CUI:Print("Commands: /cui (settings)  /cui layout (move and resize)  /cui debug  /cui reload")
-        CUI:Print("More: /cfriends (friends)  /armory  /cysbags  /cysbank  /cysskills  /crt (rolls)  /cystotems  /cysraid  /cysmap  /way (waypoint)  /cuilevel (Spell Scout)  /cuiscan (trainer scan)  /cuitremor (Tremor alert)  /cuirank (Heal Advisor)  /cuiheal (heal log)")
+        CUI:Print("More: /cfriends (friends)  /armory  /cysbags  /cysbank  /cysskills  /crt (rolls)  /cystotems  /cysraid  /cysmap  /way (waypoint)  /cuilevel (Spell Scout)  /cuiscan (trainer scan)  /cuitremor (Tremor alert)  /cuirank (Heal Advisor)  /cuiheal (heal log)  /cuibugs (caught errors)")
     end
 end
 
@@ -530,6 +530,10 @@ if CysChangelog then
               added = {
                   "Cys's BiS: a dropdown at the top of the window swaps your list for Wowhead's level 60 pre-raid BiS list for any spec of your class (WoW Forever guides, all classes). Each slot shows what you have, where to get the rest, and the gain over what you wear with your Cys's Upgrade weights.",
                   "Item tooltips say when an item is on Wowhead's pre-raid BiS list for one of your specs.",
+                  "Bug Catcher: Lua errors from any addon are caught instead of the game's error popup. Chat tells you once, and /cuibugs shows each error with how often it happened and the full report to copy and send to whoever made the addon (Ctrl+C). /cuibugs clear empties it; /cuibugs off hands errors back to the game. A small icon on the minimap edge is green while all is well and turns red with a count when errors are caught: click it to open, Shift-click to clear, drag to move (/cuibugs icon hides it). Stays off when BugGrabber is installed. New file: restart the game once.",
+                  "Cys's Bags: your keyring shows as a Keyring section (and sidebar row) with your keys. The game's keyring button opens the bags on it. Its slots don't count as free space.",
+                  "Guild Recruiter: each level bracket shows its share of the guild in %.",
+                  "Guild Recruiter: see which guildies are recruiting right now and which levels (Also recruiting, under the replies; their name also shows next to a bracket they recruit). Only guildies running Cys's UI show.",
               },
               improved = {
                   "Spell Scout on WoW Forever: classes without a written guide now get a box too, listing every spell their trainer teaches at your level (Shaman keeps its guides with reasons).",

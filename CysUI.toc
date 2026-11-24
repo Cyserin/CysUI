@@ -11,6 +11,7 @@
 ## X-Wago-ID: x61xeQN1
 
 Compat.lua
+Bugs.lua
 CysChangelog.lua
 Core.lua
 Perf.lua
