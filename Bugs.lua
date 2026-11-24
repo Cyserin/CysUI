@@ -296,12 +296,12 @@ local function PlaceIcon()
     if not icon then return end
     local a = math.rad(db.icon.angle or 225)
     local x, y = math.cos(a), math.sin(a)
-    local w, h = Minimap:GetWidth() / 2, Minimap:GetHeight() / 2
+    -- just inside the map's edge (3 px gap), never sitting on its border
+    local inset = icon:GetWidth() / 2 + 3
+    local w, h = Minimap:GetWidth() / 2 - inset, Minimap:GetHeight() / 2 - inset
     if IsSquare() then
-        local m = max(math.abs(x), math.abs(y)) -- onto the square's edge
+        local m = max(math.abs(x), math.abs(y)) -- along the square's edge
         x, y = x / m, y / m
-    else
-        w, h = w + 6, h + 6
     end
     icon:ClearAllPoints()
     icon:SetPoint("CENTER", Minimap, "CENTER", x * w, y * h)
@@ -314,11 +314,11 @@ function Bugs.UpdateIcon()
     local n = SessionCount()
     if n > 0 then
         icon.dot:SetVertexColor(0.9, 0.15, 0.15)
-        icon.dot:SetSize(16, 16)
+        icon.dot:SetSize(14, 14)
         icon.num:SetText(n > 99 and "99+" or n)
     else
         icon.dot:SetVertexColor(0.25, 0.85, 0.35)
-        icon.dot:SetSize(10, 10)
+        icon.dot:SetSize(8, 8)
         icon.num:SetText("")
     end
 end
@@ -329,16 +329,22 @@ function Bugs.BuildIcon()
     local W = CysUI and CysUI.W
     local T = W and W.T
     icon = CreateFrame("Button", "CysUIBugsMinimapButton", Minimap) -- "CysUI..." names stay out of the button panel
-    icon:SetSize(22, 22)
+    icon:SetSize(18, 18)
     icon:SetFrameStrata("MEDIUM")
     icon:SetFrameLevel(Minimap:GetFrameLevel() + 8)
     icon:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     icon:RegisterForDrag("LeftButton")
-    local bg = icon:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
+    -- a dark round backing with a thin gold ring, the colored dot on top
+    local ring = icon:CreateTexture(nil, "BACKGROUND")
+    ring:SetTexture(CIRCLE)
+    ring:SetAllPoints()
+    local g = T and T.border or { 0.851, 0.643, 0.129 }
+    ring:SetVertexColor(g[1], g[2], g[3], 0.9)
+    local bg = icon:CreateTexture(nil, "BORDER")
+    bg:SetTexture(CIRCLE)
+    bg:SetPoint("TOPLEFT", 1, -1); bg:SetPoint("BOTTOMRIGHT", -1, 1)
     local c = T and T.bg or { 0.067, 0.067, 0.067 }
-    bg:SetColorTexture(c[1], c[2], c[3], 0.92)
-    if W then W.Border(icon, 1, T.border, "BORDER") end
+    bg:SetVertexColor(c[1], c[2], c[3], 0.95)
     icon.dot = icon:CreateTexture(nil, "ARTWORK")
     icon.dot:SetTexture(CIRCLE)
     icon.dot:SetPoint("CENTER")
@@ -347,8 +353,9 @@ function Bugs.BuildIcon()
     icon.num:SetPoint("CENTER", 0, 0)
     icon.num:SetTextColor(1, 1, 1)
     local hl = icon:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetTexture(CIRCLE)
     hl:SetAllPoints()
-    hl:SetColorTexture(1, 1, 1, 0.12)
+    hl:SetVertexColor(1, 1, 1, 0.15)
 
     icon:SetScript("OnClick", function()
         if IsShiftKeyDown() then Bugs.Clear(); Print("Bug Catcher: cleared.")
