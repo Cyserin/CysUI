@@ -37,6 +37,7 @@ table.insert(CUI.LevelGuides.SHAMAN, {
         { level = 20, spell = "Frost Shock",             rank = 1, note = "Nature-immune or fleeing mobs" },
         { level = 20, spell = "Lesser Healing Wave",     rank = 1, note = "Emergency self-heal" },
         { level = 20, spell = "Ghost Wolf" },
+        { level = 20, spell = "Call of the Elements",    note = "WoW Forever: drops your set of totems in one click" },
         { level = 20, spell = "Lightning Bolt",          rank = 4, note = "R4+ all cast in 3.0s. Max rank for packs/elites/bosses; R1 (1.5s) for fast trash pulls" },
         { level = 22, spell = "Poison Cleansing Totem" },
         { level = 24, spell = "Earth Shock",             rank = 4 },
@@ -107,7 +108,7 @@ local ROWS = {
     { 30, D = "Windfury Weapon R1", Q = "Windfury Weapon R1", H = "Healing Stream Totem R2", all = "Astral Recall, Reincarnation",
       skip = { "Searing Totem R3|Windfury replaces it for questing", "Nature Resistance Totem R1|no nature content yet" } },
     { 32, D = "Windfury Totem R1", H = "Healing Wave R6",
-      skip = { "Lightning Bolt R6|pull only", "Fire Nova Totem R3|DPS-only" } },
+      skip = { "Lightning Bolt R6|pull only", "Fire Nova R3|DPS-only" } },
     { 34, skip = { "Sentry Totem|no use" } },
     { 36, H = "Lesser Healing Wave R3, Mana Spring Totem R2", all = "Ancestral Spirit R3",
       skip = { "Magma Totem R2|replaced or rarely useful", "Flametongue Weapon R4|replaced or rarely useful", "Windwall Totem|rarely useful" } },
@@ -116,7 +117,7 @@ local ROWS = {
     { 40, D = "Windfury Weapon R2", Q = "Windfury Weapon R2", H = "Healing Wave R7, Chain Heal R1, Healing Stream Totem R3",
       skip = { "Chain Lightning R2|R1 still tags 3", "Flame Shock R4|unused", "Searing Totem R4|unused" } },
     { 42, D = "Windfury Totem R2",
-      skip = { "Fire Nova Totem R4|DPS-only", "Fire Resistance Totem R2|buy at about level 52 for BRD" } },
+      skip = { "Fire Nova R4|DPS-only", "Fire Resistance Totem R2|buy at about level 52 for BRD" } },
     { 44, H = "Lesser Healing Wave R4",
       skip = { "Lightning Bolt R8|not needed", "Nature Resistance Totem R2|not needed" } },
     { 46, H = "Chain Heal R2, Mana Spring Totem R3", skip = { "Magma Totem R3|AoE only" } },
@@ -124,7 +125,7 @@ local ROWS = {
     { 50, D = "Windfury Weapon R3", Q = "Windfury Weapon R3", H = "Healing Stream Totem R4",
       skip = { "Lightning Bolt R9|not needed", "Searing Totem R5|not needed" } },
     { 52, D = "Strength of Earth R4, Windfury Totem R3", H = "Lesser Healing Wave R5",
-      skip = { "Fire Nova Totem R5|not needed", "Flame Shock R5|not needed" } },
+      skip = { "Fire Nova R5|not needed", "Flame Shock R5|not needed" } },
     { 54, H = "Chain Heal R3", skip = { "Frost Resistance Totem R3|not needed" } },
     { 56, H = "Healing Wave R9, Mana Spring Totem R4",
       skip = { "Chain Lightning R4|buy at 60 if gold allows", "Magma Totem R4|buy at 60 if gold allows", "Lightning Bolt R10|buy at 60 if gold allows" } },
@@ -215,6 +216,7 @@ local function Base(key, name, spec)
     One(g, "Frost Shock", 20, "First rank only, for the slow. Higher ranks are for PvP", false)
     g.spells[#g.spells].rank = 1
     One(g, "Ghost Wolf", 20, "Cheap: buy it as soon as you can; it cuts travel time")
+    One(g, "Call of the Elements", 20, "WoW Forever: drops your set of totems in one click")
     One(g, "Water Breathing", 22, "Cheap: buy it as soon as you can")
     One(g, "Water Walking", 28, "Cheap: buy it as soon as you can")
     One(g, "Reincarnation", 30, "Cheap, and it saves a death")
@@ -254,6 +256,13 @@ do
     Add(g, "Healing Wave", { note = "Main heal: always buy the new rank, and downrank to rank 5 for small heals" })
     Add(g, "Lesser Healing Wave", { note = "Emergency quick heal" })
     Add(g, "Chain Heal", { note = "Group heal: buy every rank for dungeons" })
+    -- WoW Forever talent spells: the higher ranks only show once you have the talent
+    for rank, level in ipairs({ 40, 50, 60 }) do
+        if rank > 1 then g.spells[#g.spells + 1] = { level = level, spell = "Riptide", rank = rank, talent = true } end
+    end
+    for rank, level in ipairs({ 25, 38, 48, 58 }) do
+        if rank > 1 then g.spells[#g.spells + 1] = { level = level, spell = "Mana Tide Totem", rank = rank, talent = true } end
+    end
     Add(g, "Healing Stream Totem")
     Add(g, "Mana Spring Totem")
     Add(g, "Lightning Bolt", { note = "Main damage while leveling" })
@@ -280,7 +289,7 @@ end
 local TIPS = {
     earthwarden = {
         { "Threat", "Earth Shock (double threat) is your main threat button. Frost Shock if the target is immune or heavily resistant to nature, or fleeing." },
-        { "Rotation", "Keep Lightning Shield up and Earth Shock on cooldown. From 40, Stormstrike on cooldown, then Earth Shock in its 20% nature bonus window. Use max-rank Earth Shock until you're safely ahead on threat, then downrank to save mana." },
+        { "Rotation", "Keep Lightning Shield up and Earth Shock on cooldown. Once you have Stormstrike (talent), use it on cooldown, then Earth Shock in its 20% nature bonus window. Use max-rank Earth Shock until you're safely ahead on threat, then downrank to save mana." },
         { "Weapon imbue", "Rockbiter at every level. It adds bonus threat to every auto-attack on top of normal damage threat. Never swap it out while tanking." },
         { "Pull", "Lightning Bolt. Rank 1 for fast trash pulls; max rank for packs, elites and bosses (every rank from 4 up casts in 3 seconds). Chain Lightning from 32 to tag 2-3 mobs." },
         { "Loose mob", "Earth Shock it. If two or more mobs are on the healer, drop Stoneclaw Totem, then put Stoneskin back once things settle." },
@@ -292,14 +301,14 @@ local TIPS = {
     },
     enhancement = {
         { "Weapon imbue", "Rockbiter solo from 1 to 29; Flametongue against heavily armored mobs, since fire damage ignores armor. Flametongue in dungeons from 10 to 29, because Rockbiter adds threat to every swing. Windfury Weapon from 30, solo and in dungeons." },
-        { "Rotation, solo", "Lightning Shield up. Earth Shock on cooldown for damage and interrupts. From 40, Stormstrike on cooldown, then Earth Shock in its nature bonus window. Frost Shock on fleeing humanoids. Let auto-attacks and Windfury procs do the rest to save mana." },
+        { "Rotation, solo", "Lightning Shield up. Earth Shock on cooldown for damage and interrupts. Once you have Stormstrike (talent), use it on cooldown, then Earth Shock in its nature bonus window. Frost Shock on fleeing humanoids. Let auto-attacks and Windfury procs do the rest to save mana." },
         { "Rotation, dungeons", "Stormstrike on cooldown and Flame Shock for damage. Earth Shock only to interrupt casters, since it deals double threat. Drop Lightning Shield if you're close to pulling aggro." },
         { "Totems, solo", "Strength of Earth always. Searing on tough mobs or 2+ pulls. Grace of Air from 42 on long fights." },
         { "Totems, groups", "Windfury Totem with other melee, but ask rogues first since it replaces their main-hand poison. It also overwrites your own Windfury Weapon with the totem's version. Strength of Earth or Grace of Air otherwise. Stoneskin if the tank is struggling, Mana Spring for casters, Tremor on fear, charm or sleep pulls." },
         { "Weapons", "Highest damage-per-second weapon at any speed before 30. From 30, the slowest strong two-hander you can get, ideally 3.5 speed or slower. Two-handed axes and maces need the Two-Handed Axes and Maces talent." },
         { "Stats", "Strength > Agility > Hit > Stamina > Intellect." },
         { "Level 30", "Windfury Weapon, the biggest power spike Enhancement gets. Train it immediately." },
-        { "Level 40", "Stormstrike, mail armor and Windfury Weapon rank 2." },
+        { "Level 40", "Mail armor and Windfury Weapon rank 2. Stormstrike comes from your talents." },
     },
     elemental = {
         { "Weapon imbue", "Rockbiter from 1 to 9, then Flametongue from 10 on, solo and in dungeons. Your spell damage gear may add a little to Flametongue but does nothing for Rockbiter. Fire also ignores armor, and Flametongue never adds threat in groups." },
@@ -323,3 +332,24 @@ local TIPS = {
     },
 }
 for _, g in ipairs(CUI.LevelGuides.SHAMAN) do g.tips = TIPS[g.key] end
+
+--------------------------------------------------------------------------------
+-- WoW Forever (checked against its trainer list, game build 1.60.1): the levels match Classic, but a few ranks are
+-- not sold by the trainer. Quest rewards come from your class quests; tomes drop at 60.
+--------------------------------------------------------------------------------
+local NOT_TRAINER = {
+    ["Stoneskin Totem:1"] = "Quest reward (class quest), not bought",
+    ["Searing Totem:1"] = "Quest reward (class quest), not bought",
+    ["Healing Stream Totem:1"] = "Quest reward (class quest) on WoW Forever, not bought",
+    ["Healing Wave:10"] = "WoW Forever: from a tome at 60, not the trainer",
+    ["Flame Shock:6"] = "WoW Forever: from a tome at 60, not the trainer",
+    ["Strength of Earth Totem:5"] = "WoW Forever: from a tome at 60, not the trainer",
+    ["Grace of Air Totem:3"] = "WoW Forever: from a tome at 60, not the trainer",
+}
+for _, g in ipairs(CUI.LevelGuides.SHAMAN) do
+    g.client = "Era + Forever"
+    for _, e in ipairs(g.spells) do
+        local why = NOT_TRAINER[e.spell .. ":" .. (e.rank or 1)]
+        if why then e.note = e.note and (e.note .. ". " .. why) or why end
+    end
+end

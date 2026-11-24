@@ -527,7 +527,16 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.32", date = "2026-11-24",
+              improved = {
+                  "Spell Scout on WoW Forever: classes without a written guide now get a box too, listing every spell their trainer teaches at your level (Shaman keeps its guides with reasons).",
+                  "Spell Scout: once you have visited your class trainer, the levels it showed are used over the guide's, so a rank that moved shows at the right level.",
+                  "Shaman guides checked against WoW Forever: Call of the Elements added, Fire Nova (no longer a totem) named right, quest-reward and tome ranks marked as not sold by the trainer, and Riptide and Mana Tide Totem ranks listed for Restoration once you have the talent.",
+              },
               fixed = {
+                  "Consumables on WoW Forever: food, water, potions, bandages and healthstones from about level 35 on are picked up again (the game writes 1,392 with a comma, which the macros could not read), and a drink is no longer read as restoring a fraction of its mana.",
+                  "Missing Buffs on WoW Forever: a buff the game keeps hidden no longer makes the next buffs read as missing, so people stop being flagged for Fortitude or Mark of the Wild they already have.",
+                  "Spell Scout on WoW Forever: spells you have not learned yet no longer count as learned (the spellbook lists them), so they show in the box again.",
+                  "Dispels: checked against WoW Forever's trainer list (they were right); the learned-spell check now uses the game's newer spellbook call, also for the Felhunter's Devour Magic.",
                   "Talent Planner: with Learn these talents as I level on, a window now asks before any talent is learned and names your Primary or Secondary talents, so a plan made for your other spec is never spent by mistake. Not now waits until your next level.",
                   "Train all asks first: it says how many spells it will learn and what they cost before anything is bought.",
                   "No more invisible \"Professions (K)\" tooltip between the right-hand action bars: Blizzard's hidden micro buttons no longer take the mouse.",

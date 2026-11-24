@@ -83,6 +83,19 @@ end
 local scan = CreateFrame("GameTooltip", "CysConsumablesScan", nil, "GameTooltipTemplate")
 scan:SetOwner(UIParent, "ANCHOR_NONE")
 
+-- The WoW Forever client writes big numbers with a separator ("Restores 1,392 health"), so the patterns below
+-- missed every food, drink, potion and bandage from about level 35 on (and read "4,200 mana" as 200). Take the
+-- separators out between digits first; lowercase copy for the Well Fed check.
+local SEP = (LARGE_NUMBER_SEPARATOR and LARGE_NUMBER_SEPARATOR ~= "") and LARGE_NUMBER_SEPARATOR or ","
+local SEP_PAT = "(%d)" .. SEP:gsub("%p", "%%%0") .. "(%d%d%d)"
+local function Plain(t)
+    if not t then return t end
+    local n
+    repeat t, n = t:gsub(SEP_PAT, "%1%2") until n == 0
+    return t
+end
+local function WellFed(t) return t:lower():find("well fed", 1, true) ~= nil end
+
 local function IsRed(fs)
     if not (fs and fs:IsShown()) then return false end
     local text = fs:GetText()
@@ -132,7 +145,7 @@ local function Read(bag, slot, itemID)
         local left = _G[name .. "TextLeft" .. i]
         local right = _G[name .. "TextRight" .. i]
         if IsRed(left) or IsRed(right) then info.usable = false end
-        local t = left and left:GetText()
+        local t = Plain(left and left:GetText())
         if t then
             if t == "Conjured Item" then info.conjured = true end
             if t:find("Only usable in") and not (zone ~= "" and t:find(zone, 1, true)) then info.usable = false end
@@ -143,7 +156,7 @@ local function Read(bag, slot, itemID)
                 if hpOver and t:find("health") and (t:find("eating") or t:find("seated")) then info.food = tonumber(hpOver) end
                 if mpOver then info.drink = tonumber(mpOver) end
             end
-            if t:find("well fed") then info.buff = true end
+            if WellFed(t) then info.buff = true end
             local h1, h2 = t:match("Restores (%d+) to (%d+) health")
             if h1 then info.hp = (tonumber(h1) + tonumber(h2)) / 2 end
             local m1, m2 = t:match("Restores (%d+) to (%d+) mana")
@@ -337,13 +350,13 @@ local function ReadMerchant(i)
         local left = _G[name .. "TextLeft" .. l]
         local right = _G[name .. "TextRight" .. l]
         if IsRed(left) or IsRed(right) then return nil end
-        local t = left and left:GetText()
+        local t = Plain(left and left:GetText())
         if t then
             local hpOver = t:match("Restores (%d+) health")
             local mpOver = t:match("(%d+) mana over")
             if hpOver and (t:find("eating") or t:find("seated")) then food = tonumber(hpOver) end
             if mpOver and (t:find("drinking") or t:find("seated")) then drink = tonumber(mpOver) end
-            if t:find("well fed") then buff = true end
+            if WellFed(t) then buff = true end
         end
     end
     return food, drink, buff

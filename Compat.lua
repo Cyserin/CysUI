@@ -638,7 +638,15 @@ local DISPEL_SPELLS = {
 }
 Compat.dispelTypes = {}
 
+-- Checked against the WoW Forever 1.60.1 trainer data (levels): Purify 8, Cure Poison 14 (Druid, quest) / 16 (Shaman),
+-- Cure Disease 14 (Priest) / 22 (Shaman), Dispel Magic 18 / 36, Remove Lesser Curse 18, Remove Curse 24, Abolish Poison 26,
+-- Abolish Disease 32, Cleanse 42. Racials that only clear yourself (Shatter Curse, Stoneform) don't count here.
 local function KnownDispel(id, pet)
+    local book = C_SpellBook and Enum and Enum.SpellBookSpellBank
+    if book and C_SpellBook.IsSpellKnown then
+        local ok, yes = pcall(C_SpellBook.IsSpellKnown, id, pet and book.Pet or book.Player)
+        if ok and yes then return true end
+    end
     if pet then
         if IsSpellKnown then return IsSpellKnown(id, true) and true or false end
         return false

@@ -41,7 +41,37 @@ end
 
 local frame, icons = nil, {}
 
+-- true = has it, false = doesn't, nil = can't tell (treated as "has it", so nobody is flagged by mistake).
+-- On WoW Forever a single locked aura used to end the scan early, so anyone with one ended up "missing" every buff
+-- after it: now the buff is looked up by name first, and the scan goes past locked auras.
+local function HasAuraForever(unit, names)
+    local unknown = false
+    if C_UnitAuras.GetAuraDataBySpellName then
+        for _, n in ipairs(names) do
+            local ok, found = pcall(function() return C_UnitAuras.GetAuraDataBySpellName(unit, n, "HELPFUL") ~= nil end)
+            if not ok then unknown = true elseif found then return true end
+        end
+    end
+    local Compat = CysUICompat
+    if Compat and Compat.AuraEntry then
+        for i = 1, 40 do
+            local a = Compat.AuraEntry(unit, i, "HELPFUL")
+            if not a then break end
+            if a.locked then
+                unknown = true
+            else
+                for _, n in ipairs(names) do
+                    if a.name == n then return true end
+                end
+            end
+        end
+    end
+    if unknown then return nil end
+    return false
+end
+
 local function HasAura(unit, names)
+    if CysUICompat and CysUICompat.isForever and C_UnitAuras then return HasAuraForever(unit, names) end
     for i = 1, 40 do
         local name = UnitBuff(unit, i)
         if not name then return false end
@@ -125,13 +155,13 @@ local function Update()
                     for _, u in ipairs(units) do
                         local _, c = UnitClass(u)
                         if c and b.needs[c] and UnitIsConnected(u) and not UnitIsDeadOrGhost(u)
-                            and UnitIsVisible(u) and not HasAura(u, b.auras) then
+                            and UnitIsVisible(u) and HasAura(u, b.auras) == false then
                             names[#names + 1] = UnitName(u)
                         end
                     end
                     if #names > 0 then ic.names = names; ic.count:SetText(#names) end
                 else
-                    if b.needs[myClass] and not HasAura("player", b.auras) then
+                    if b.needs[myClass] and HasAura("player", b.auras) == false then
                         ic.names = nil; ic.count:SetText("!")
                         names[1] = "me"
                     end

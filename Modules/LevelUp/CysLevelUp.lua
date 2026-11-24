@@ -30,9 +30,48 @@ end
 --------------------------------------------------------------------------------
 -- Guides
 --------------------------------------------------------------------------------
+-- A class with no written guide yet (WoW Forever): every spell its trainer teaches, from the spell ranks the
+-- class trainer showed (Cys's Spell Ranks saves them) plus the spells the spellbook lists as still to come.
+-- No reasons and no skips, but the right levels for every class.
+local function TrainerGuide(cls)
+    local g = { key = "trainer", name = "Every trainer spell", spec = "All", client = "Forever", spells = {}, skips = {},
+                generated = true }
+    local seen = {}
+    local function Add(name, rank, level)
+        if not name or not level or level < 1 then return end
+        local k = name .. ":" .. (rank or 0)
+        if seen[k] then return end
+        seen[k] = true
+        g.spells[#g.spells + 1] = { level = level, spell = name, rank = rank }
+    end
+    local saved = CysUIDB and CysUIDB.ranks and CysUIDB.ranks.trainer and CysUIDB.ranks.trainer[cls]
+    for _, row in pairs(saved and saved.rows or {}) do
+        if type(row) == "table" then Add(row.n, row.r, tonumber(row.l)) end
+    end
+    if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookItemLevelLearned
+        and Enum and Enum.SpellBookSpellBank and Enum.SpellBookItemType then
+        local bank, FUTURE = Enum.SpellBookSpellBank.Player, Enum.SpellBookItemType.FutureSpell
+        for s = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+            local line = C_SpellBook.GetSpellBookSkillLineInfo(s)
+            if line and not line.isGuild and not line.offSpecID then
+                for i = line.itemIndexOffset + 1, line.itemIndexOffset + line.numSpellBookItems do
+                    local ok, info = pcall(C_SpellBook.GetSpellBookItemInfo, i, bank)
+                    if ok and info and info.itemType == FUTURE and info.name and info.name ~= "" then
+                        local okL, lvl = pcall(C_SpellBook.GetSpellBookItemLevelLearned, i, bank)
+                        Add(info.name, tonumber((info.subName or ""):match("(%d+)")), okL and tonumber(lvl))
+                    end
+                end
+            end
+        end
+    end
+    return g
+end
+
 local function ClassGuides()
     local _, cls = UnitClass("player")
-    return (CUI.LevelGuides and CUI.LevelGuides[cls]) or {}, cls
+    local list = (CUI.LevelGuides and CUI.LevelGuides[cls]) or {}
+    if #list == 0 and CysUICompat and CysUICompat.isForever then list = { TrainerGuide(cls) } end
+    return list, cls
 end
 
 local function CharKey()
@@ -57,6 +96,24 @@ end
 -- name -> highest rank you have (rankless spells count as 1)
 local function KnownSpells()
     local known = {}
+    -- WoW Forever's spellbook also lists spells you have not learned yet ("future" spells): only learned ones count
+    if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookItemInfo
+        and Enum and Enum.SpellBookSpellBank and Enum.SpellBookItemType then
+        local bank, SPELL = Enum.SpellBookSpellBank.Player, Enum.SpellBookItemType.Spell
+        for s = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+            local line = C_SpellBook.GetSpellBookSkillLineInfo(s)
+            if line and not line.isGuild then
+                for i = line.itemIndexOffset + 1, line.itemIndexOffset + line.numSpellBookItems do
+                    local ok, info = pcall(C_SpellBook.GetSpellBookItemInfo, i, bank)
+                    if ok and info and info.itemType == SPELL and info.name and info.name ~= "" then
+                        local rank = tonumber((info.subName or ""):match("(%d+)")) or 1
+                        if (known[info.name] or 0) < rank then known[info.name] = rank end
+                    end
+                end
+            end
+        end
+        return known
+    end
     local getName = GetSpellBookItemName
     local bank = "spell"
     if not getName and C_SpellBook and C_SpellBook.GetSpellBookItemName then
@@ -73,14 +130,27 @@ local function KnownSpells()
     return known
 end
 
-local function EffLevel(e) return e.buyAt or e.level end
+-- the level the class trainer really teaches a rank at, once Cys's Spell Ranks has seen it there (guides are a fallback)
+local function EffLevel(e) return e.buyAt or e.real or e.level end
+
+local function TrainerLevels()
+    local _, cls = UnitClass("player")
+    local saved = CysUIDB and CysUIDB.ranks and CysUIDB.ranks.trainer and CysUIDB.ranks.trainer[cls]
+    return saved and saved.rows or {}
+end
 
 -- buy = worth buying at `level` and not yet learned; later = still ahead of you
 local function Evaluate(guide, level)
     local known = KnownSpells()
+    local rows = TrainerLevels()
     local buy, later = {}, {}
     for _, e in ipairs(guide.spells) do
+        local row = rows[e.spell .. ":" .. (e.rank or 0)]
+        local real = type(row) == "table" and tonumber(row.l)
+        e.real = (real and real > 0 and real ~= e.level) and real or nil
         local have = known[e.spell] and (not e.rank or known[e.spell] >= e.rank)
+        -- higher ranks of a talent spell only count once you have the talent (rank 1)
+        if e.talent and not known[e.spell] then have = true end
         if not have then
             if EffLevel(e) <= level then buy[#buy + 1] = e else later[#later + 1] = e end
         end
@@ -190,8 +260,9 @@ local function Render(level, override)
     Build()
     shownLevel = level
 
-    box.title:SetText("Level " .. level .. ": spells worth buying")
-    box.sub:SetText(override and (guide.name .. " - preview") or guide.name)
+    box.title:SetText("Level " .. level .. (guide.generated and ": spells to train" or ": spells worth buying"))
+    local sub = guide.generated and "No guide for your class yet: everything your trainer teaches" or guide.name
+    box.sub:SetText(override and (guide.name .. " - preview") or sub)
 
     local y = -54
     local shown = math.min(#buy, MAXROWS)
@@ -671,7 +742,7 @@ CUI:RegisterPage("Level-Up Spells", function(page)
     else
         local none = W.Text(page, 12, T.desc)
         none:SetPoint("TOPLEFT", 4, y - 26)
-        none:SetText("Cys's Spell Scout doesn't support your class yet. Shaman is first; the lists below show what is covered.")
+        none:SetText("Cys's Spell Scout doesn't have a guide for your class yet. On WoW Forever the box lists every spell your trainer teaches instead.")
         none:SetWidth(width - 8)
         none:SetJustifyH("LEFT")
     end
@@ -697,7 +768,8 @@ CUI:RegisterPage("Level-Up Spells", function(page)
         { "/cuilevel", "show the box now; /cuilevel 30 previews level 30; /cuilevel 24 restoration previews another guide (yours is not changed); /cuilevel list names the guides" },
         { "/cuiscan", "at your class trainer: saves the trainer's spells and checks the guide's levels (helps fix the guides)" },
         "Earth Warden is a community tank build; Enhancement, Elemental and Restoration follow Wowhead's Classic Era leveling guides. At level 10, and again when you get a second talent spec (or reach level 40 on a client that can't say), Spell Scout asks which guide to follow, once per character.",
-        "Other classes and specs, and WoW Forever, are being added as guides become available.",
+        "The Shaman guides are checked against WoW Forever's trainer levels. Once you have visited your class trainer, the levels it showed are used over the guide's.",
+        "Other classes on WoW Forever get every spell their trainer teaches (no reasons yet) until their own guides are written.",
     }
 
     -- Which spell to use sits first (it is what you look at most); the lists below it move down
