@@ -118,26 +118,6 @@ function CUI:ToggleWindow(frame)
 end
 
 -- Blizzard's windows opening or closing move ours along (post-hooks only: nothing of Blizzard's is changed)
--- The professions window is wide enough to reach the right-hand action bars and the damage meter, which sit at
--- a higher level in the same layer and covered it. It is lifted one layer up when it loads (strata only, out of
--- combat; nothing of Blizzard's is called or replaced).
-local lifted = {}
-local function LiftProfessions()
-    if InCombatLockdown() then return end
-    for _, n in ipairs({ "ProfessionsFrame", "TradeSkillFrame" }) do
-        local f = _G[n]
-        if f and not lifted[f] and pcall(f.SetFrameStrata, f, "HIGH") then lifted[f] = true end
-    end
-end
-do
-    local lift = CreateFrame("Frame")
-    lift:RegisterEvent("ADDON_LOADED")
-    lift:RegisterEvent("PLAYER_REGEN_ENABLED")
-    lift:RegisterEvent("TRADE_SKILL_SHOW")
-    lift:SetScript("OnEvent", function() pcall(LiftProfessions) end)
-    pcall(LiftProfessions)
-end
-
 if hooksecurefunc then
     if ShowUIPanel then hooksecurefunc("ShowUIPanel", Later) end
     if HideUIPanel then hooksecurefunc("HideUIPanel", Later) end

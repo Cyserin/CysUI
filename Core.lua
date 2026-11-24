@@ -530,7 +530,7 @@ if CysChangelog then
               fixed = {
                   "Talent Planner: with Learn these talents as I level on, a window now asks before any talent is learned and names your Primary or Secondary talents, so a plan made for your other spec is never spent by mistake. Not now waits until your next level.",
                   "Train all asks first: it says how many spells it will learn and what they cost before anything is bought.",
-                  "The professions window no longer sits behind the right-hand action bars and the damage meter.",
+                  "No more invisible \"Professions (K)\" tooltip between the right-hand action bars: Blizzard's hidden micro buttons no longer take the mouse.",
                   "Action bars: the small yellow box that showed when you pressed a button is gone, and an equipped item (like a trinket) now gets a green edge that sits on the button instead of a green frame off to the side.",
                   "Nameplate quest swords in a group: only mobs you still need show a sword, not mobs only a group member needs.",
                   "Quest complete in party chat is sent right away, also in a fight, instead of waiting for the fight to end.",

@@ -257,8 +257,10 @@ local function SkinButton(b)
     local border = Part(b, "Border")
     if border and hooksecurefunc then
         border:SetAlpha(0)
-        hooksecurefunc(border, "Show", function() b.cysEquipped = true; PaintEdge(b) end)
+        hooksecurefunc(border, "Show", function(self) self:SetAlpha(0); b.cysEquipped = true; PaintEdge(b) end)
         hooksecurefunc(border, "Hide", function() b.cysEquipped = false; PaintEdge(b) end)
+        -- Blizzard tints it green with SetVertexColor(0, 1, 0, 0.35), and that alpha overrides ours: fade it again
+        hooksecurefunc(border, "SetVertexColor", function(self) self:SetAlpha(0) end)
         b.cysEquipped = border:IsShown() and true or false
     end
     -- Newer button art (WoW Forever): the cast fill, target reticle, interrupt and cooldown-done flashes are

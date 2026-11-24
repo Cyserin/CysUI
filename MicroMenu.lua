@@ -95,6 +95,7 @@ local BLIZZ_MICRO = {
     "QuestLogMicroButton", "SocialsMicroButton", "GuildMicroButton", "WorldMapMicroButton", "LFGMicroButton",
     "CollectionsMicroButton", "EJMicroButton", "StoreMicroButton", "MainMenuMicroButton", "HelpMicroButton",
     "PVPMicroButton", "LFDMicroButton", "RaidMicroButton", "QuickJoinToastButton",
+    "ProfessionMicroButton", "PlayerSpellsMicroButton", "HousingMicroButton",
     "MicroButtonAndBagsBar", "MicroMenu", "MicroMenuContainer",
 }
 
@@ -113,6 +114,16 @@ function MM:HideBlizzard()
         for _, name in ipairs(BLIZZ_MICRO) do Fade(_G[name]) end
         if type(MICRO_BUTTONS) == "table" then
             for _, name in ipairs(MICRO_BUTTONS) do Fade(_G[name]) end
+        end
+        -- every button on Blizzard's micro bar, also ones not named above (like Professions): a faded button
+        -- that still takes the mouse shows its tooltip over whatever sits there (our right-hand bars)
+        for _, name in ipairs({ "MicroMenu", "MicroMenuContainer", "MicroButtonAndBagsBar" }) do
+            local bar = _G[name]
+            if bar and bar.GetChildren then
+                for _, child in ipairs({ bar:GetChildren() }) do
+                    if child ~= _G.QueueStatusButton then Fade(child) end -- keep the queue (LFG) eye
+                end
+            end
         end
         return
     end
@@ -257,6 +268,8 @@ function MM.Enable()
     ev:RegisterEvent("PLAYER_REGEN_ENABLED")
     ev:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_ENABLED" and holder.cysPending then Relayout() end
+        -- Blizzard can add micro buttons after we load: fade them too (alpha/mouse only, out of combat)
+        if event == "PLAYER_ENTERING_WORLD" and db.hideBlizz and not InCombatLockdown() then MM:HideBlizzard() end
         C_Timer.After(0, SyncSecure)
     end)
 end
