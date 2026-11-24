@@ -244,7 +244,8 @@ function CUI:RegisterMovable(frame, key, label, opts)
     self.movers[key] = m
     self.moverOrder[#self.moverOrder + 1] = key
 
-    local mover = CreateFrame("Frame", "CysUIMover_" .. key, UIParent)
+    -- reuse a frame made early under the same name (chat makes one at load for the game's Edit Mode)
+    local mover = _G["CysUIMover_" .. key] or CreateFrame("Frame", "CysUIMover_" .. key, UIParent)
     m.mover = mover
     mover:SetFrameStrata("DIALOG")
     mover:SetFrameLevel(50)

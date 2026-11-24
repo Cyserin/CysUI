@@ -100,6 +100,7 @@ ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
 ev:RegisterEvent("ADDON_ACTION_BLOCKED")
 ev:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+pcall(ev.RegisterEvent, ev, "LUA_WARNING") -- warnings (bad anchors, etc.) never reach the error handler
 ev:SetScript("OnEvent", function(_, e, a1, a2)
     if e == "ADDON_LOADED" then
         if a1 ~= "CysUI" then return end
@@ -134,6 +135,15 @@ ev:SetScript("OnEvent", function(_, e, a1, a2)
         local msg = string.format("%s %s the protected function %s.", tostring(a1 or "An addon"), what, tostring(a2 or "?"))
         local _, new = Store(Tidy(msg), debugstack and Tidy(debugstack(2)) or "", "")
         if new then Announce({ msg = tostring(a1 or "") .. "/" }) end
+    elseif e == "LUA_WARNING" then
+        if db and db.off then return end
+        -- newer clients pass (type, text), older ones just the text; the text may carry its own stack
+        local text = type(a2) == "string" and a2 or (type(a1) == "string" and a1) or nil
+        if not text or text == "" then return end
+        local msg, stack = text:match("^(.-)\n[Ss]tack:?\n?(.*)$")
+        msg, stack = Tidy(msg or text), Tidy(stack or "")
+        local _, new = Store("Warning: " .. msg, stack, "")
+        if new then Announce({ msg = msg, stack = stack }) end
     end
 end)
 

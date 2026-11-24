@@ -40,7 +40,20 @@ local function Seen()
     return CysUICharDB.macroSeen
 end
 
-local function Key(icon, body) return tostring(icon or "") .. "\1" .. (body or "") end
+-- How two copies of a macro are compared. The text is tidied first (line endings, trailing spaces and blank
+-- lines) so tiny differences the game adds don't count. A macro with #show or #showtooltip gets its icon from
+-- the spell, so the game reports that icon instead of the saved one and the icon is left out of the compare;
+-- otherwise those macros would look "changed" on every login even right after adding them.
+local function Tidy(body)
+    body = (body or ""):gsub("\r\n?", "\n"):gsub("[ \t]+\n", "\n"):gsub("%s+$", "")
+    return body
+end
+local function Key(icon, body)
+    body = Tidy(body)
+    local lower = body:lower()
+    if lower:find("^#show") or lower:find("\n#show") then return "\1" .. body end
+    return tostring(icon or "") .. "\1" .. body
+end
 
 -- this character's macros: name -> { index, icon, body }
 local function Mine()

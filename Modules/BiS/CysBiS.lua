@@ -14,6 +14,7 @@
 --
 --   /cuibis    open or close the window (it shows with the character panel)
 --   /cuibis wowhead   check every Wowhead item for your class against its name in game
+--   /cuibis testdrop  show a sample BiS drop pop-up (also shown in Layout mode, to place it)
 --------------------------------------------------------------------------------
 CysUI:RegisterModule({
     key = "bis", name = "Cys's BiS", foreverOnly = true,
@@ -30,6 +31,10 @@ local db = CysUIDB.bis
 if db.ahead == nil or not db.aheadV then db.ahead = 0; db.aheadV = 1 end -- levels over yours an item may need (0 = wearable now)
 if db.tipMark == nil then db.tipMark = true end  -- "Cys BiS: #1 Head" on item tooltips
 if db.alert == nil then db.alert = true end      -- a BiS item in a loot or roll window (a message on your screen only)
+if db.toast == nil then db.toast = true end      -- ...shown as a pop-up that slides in (Layout mode: "BiS drop alerts")
+if db.alertWH == nil then db.alertWH = true end  -- ...also for items on Wowhead's sets for your class
+if db.alertOthers == nil then db.alertOthers = true end -- ...also when someone in your group loots one
+if db.alertAlts == nil then db.alertAlts = false end    -- ...also for Wowhead's other ranked picks (Great, Good...), off by default
 if db.journal == nil then db.journal = true end
 if db.ah == nil then db.ah = true end
 db.filter = db.filter or "all"
@@ -639,7 +644,24 @@ local WH_KEYS = { "head", "neck", "shoulder", "back", "chest", "wrist", "hands",
 local whPicks, whAsked = {}, {}
 
 local function WHData() return type(_G.CysUI_BiSWowhead) == "table" and _G.CysUI_BiSWowhead or nil end
-local function WHSpecs() local d = WHData() return d and d[CLASS] or {} end
+-- a variant with base = "<key>" borrows every slot it doesn't list from that entry (set up once)
+local whLinked
+local function WHSpecs()
+    local d = WHData()
+    local list = d and d[CLASS] or {}
+    if not whLinked then
+        whLinked = true
+        local byKey = {}
+        for _, sp in ipairs(list) do byKey[sp.key] = sp end
+        for _, sp in ipairs(list) do
+            local b = sp.base and byKey[sp.base]
+            if b and b ~= sp and not getmetatable(sp) then setmetatable(sp, { __index = b }) end
+        end
+    end
+    return list
+end
+-- "Protection (Offensive)" for a set variant, just the spec name otherwise
+local function WHName(sp) return sp and (sp.label .. (sp.variant and (" (" .. sp.variant .. ")") or "")) or "" end
 local function WHSpec()
     local k = db.list[CHARKEY]
     if not k or k == "cys" then return nil end
@@ -680,6 +702,35 @@ local function WHMismatch(p)
     return i and i.name and not SameName(i.name, p.wh.name) or false
 end
 
+-- Wowhead's other ranked picks for a slot (sp.alts, what Wowhead shows under each slot), opened by a click.
+-- Rings and trinkets have one list each, opened from the first slot of the pair.
+local whOpen = {}
+local RANK_COLOR = { BiS = T.accent, Offensive = { 1, 0.55, 0.25 }, Great = { 0.35, 0.85, 0.35 }, Good = { 0.45, 0.7, 1 } }
+local function RankHex(rank) return Hex(RANK_COLOR[rank] or GREY) end
+local function WHAltEntry(a)
+    if a.fac and a.fac ~= FACTION then return nil end
+    if a.h and FACTION == "Horde" then return { id = a.h[1], name = a.h[2], src = a[4] } end
+    return { id = a[2], name = a[3], src = a[4] }
+end
+-- list of { e = entry, rank = "Great", note = ..., two = true for the two-hander list under a dual main hand }
+local function WHAlts(sp, key, twoOnly, skip)
+    local alts = sp and sp.alts
+    if type(alts) ~= "table" then return {} end
+    local out = {}
+    local function Add(list, two)
+        for _, a in ipairs(list or {}) do
+            local e = WHAltEntry(a)
+            if e and not skip[e.id] then out[#out + 1] = { e = e, rank = a[1], note = a.note, two = two } end
+        end
+    end
+    if key == "ring1" then Add(alts.ring)
+    elseif key == "trinket1" then Add(alts.trinket)
+    elseif key == "main" then
+        if twoOnly then Add(alts.two) else Add(alts.main); Add(alts.two, true) end
+    elseif key ~= "ring2" and key ~= "trinket2" then Add(alts[key]) end
+    return out
+end
+
 local function BuildWHView(sp)
     wipe(view)
     wipe(whPicks)
@@ -703,7 +754,20 @@ local function BuildWHView(sp)
         if skipOff then
             if db.filter == "all" then g[#g + 1] = { kind = "slot", s = s, skipOff = true, wh = true } end
         elseif (e and Shows(st)) or (not e and db.filter == "all") then
-            g[#g + 1] = { kind = "slot", s = s, p = p, st = st, wh = true }
+            -- leave out what the list already shows in this slot (both rings / trinkets for the pair)
+            local skip = {}
+            if e then skip[e.id] = true end
+            local pair = (s.k == "ring1" and "ring2") or (s.k == "trinket1" and "trinket2") or (s.k == "main" and not twoOnly and "two")
+            local pe = pair and WHEntry(sp, pair)
+            if pe then skip[pe.id] = true end
+            local alts = WHAlts(sp, s.k, twoOnly, skip)
+            g[#g + 1] = { kind = "slot", s = s, p = p, st = st, wh = true, nAlts = #alts }
+            if whOpen[s.k] then
+                for _, a in ipairs(alts) do
+                    g[#g + 1] = { kind = "alt", s = s, p = WHPick(a.e), st = WHStatus(a.e), wh = true,
+                                  rank = a.rank, note = a.note, two = a.two }
+                end
+            end
         end
         if s.k == "main" and two and not twoOnly then -- the guide's two-hander, as the other way to fill both hands
             local st2 = WHStatus(two)
@@ -817,8 +881,9 @@ local function PaintRows()
                 row.src:SetText(Hex(GREY) .. v.right .. "|r")
             else
                 local s, p = v.s, v.p
-                local altLabel = v.r == "2H" and "   or 2H" or ("   #" .. tostring(v.r))
-                row.slot:SetText(v.kind == "alt" and (Hex(GREY) .. altLabel .. "|r") or (Hex(GREY) .. s.label .. "|r"))
+                local altLabel = v.rank and ("  " .. (v.two and (Hex(GREY) .. "2H |r") or "") .. RankHex(v.rank) .. v.rank .. "|r")
+                    or (v.r == "2H" and "   or 2H" or ("   #" .. tostring(v.r)))
+                row.slot:SetText(v.kind == "alt" and (v.rank and altLabel or (Hex(GREY) .. altLabel .. "|r")) or (Hex(GREY) .. s.label .. "|r"))
                 if v.skipOff then
                     row.icon:SetTexture(QUESTION)
                     row.icon:SetDesaturated(true)
@@ -850,7 +915,10 @@ local function PaintRows()
                     if v.st == "bag" and v.kind == "slot" and src ~= "In your bags" then src = Hex(T.green) .. "In bags|r · " .. src end
                     row.src:SetText(Hex(GREY) .. src .. "|r")
                     row.mark:SetShown(v.kind == "slot" and (v.st == "worn" or v.st == "bag"))
-                    if v.kind == "slot" and not v.wh then
+                    if v.kind == "slot" and v.wh then
+                        local n = v.nAlts or 0
+                        row.more:SetText(n > 0 and (Hex(GREY) .. (whOpen[s.k] and "-" or "+") .. n .. "|r") or "")
+                    elseif v.kind == "slot" then
                         local n = #(picks[s.k] or {})
                         row.more:SetText(n > 1 and (Hex(GREY) .. (expanded[s.k] and "-" or "+") .. n .. "|r") or "")
                     else
@@ -891,7 +959,7 @@ function Refresh()
     for _, b in ipairs(win.tabs) do b:SetPrimary(b.key == db.filter) end
     if win.list then win.list:Refresh() end
     if sp then
-        win.sum1:SetText(Hex(T.accent) .. yours .. "/" .. all .. "|r " .. Hex(T.text) .. "Wowhead BiS yours|r   " .. Hex(GREY) .. "pre-raid " .. sp.label .. "|r")
+        win.sum1:SetText(Hex(T.accent) .. yours .. "/" .. all .. "|r " .. Hex(T.text) .. "Wowhead BiS yours|r   " .. Hex(GREY) .. "pre-raid " .. WHName(sp) .. "|r")
         win.sum2:SetText("Wowhead's Forever guide (" .. (WHData().date or "?") .. ")" .. (sp.partial and ", still being written" or "") .. " · gain uses your Upgrade weights")
         win.minus:Hide()
         win.plus:Hide()
@@ -931,11 +999,20 @@ local function RowTip(self)
         GameTooltip:SetHyperlink(v.p.link or i.link or ("item:" .. v.p.id))
         GameTooltip:AddLine(" ")
         local sp = WHSpec()
-        GameTooltip:AddLine("Wowhead pre-raid BiS" .. (sp and (": " .. sp.label) or ""), T.accent[1], T.accent[2], T.accent[3])
+        if v.rank then
+            local c = RANK_COLOR[v.rank] or GREY
+            GameTooltip:AddLine("Wowhead: " .. v.rank .. (v.note and (", " .. v.note) or "") .. (v.two and " (two-hander)" or "")
+                .. (sp and (" for " .. sp.label) or ""), c[1], c[2], c[3], true)
+        else
+            GameTooltip:AddLine("Wowhead pre-raid BiS" .. (sp and (": " .. WHName(sp)) or ""), T.accent[1], T.accent[2], T.accent[3])
+        end
         GameTooltip:AddLine(v.p.wh.src or "", 1, 1, 1, true)
         GameTooltip:AddDoubleLine("Cys's Upgrade score", string.format("%.1f EP", v.p.ep or 0), T.accent[1], T.accent[2], T.accent[3], 1, 1, 1)
         if WHMismatch(v.p) then
             GameTooltip:AddLine("The guide names this " .. v.p.wh.name .. ", but this item ID is " .. (i.name or "?") .. " in game.", T.danger[1], T.danger[2], T.danger[3], true)
+        end
+        if v.kind == "slot" and (v.nAlts or 0) > 0 then
+            GameTooltip:AddLine((whOpen[v.s.k] and "Click: hide" or "Click: show") .. " Wowhead's other picks for this slot (BiS, Great, Good, Option).", GREY[1], GREY[2], GREY[3], true)
         end
     elseif v.p then
         local i = info[v.p.id] or {}
@@ -1050,16 +1127,17 @@ local function BuildWindow()
 
     -- which list: Cys's picks (scored with your weights) or one of Wowhead's pre-raid guides for your class
     local lists = { { "cys", "Cys's picks (your weights)" } }
-    for _, sp in ipairs(WHSpecs()) do lists[#lists + 1] = { sp.key, "Wowhead pre-raid: " .. sp.label } end
+    for _, sp in ipairs(WHSpecs()) do lists[#lists + 1] = { sp.key, "Wowhead: " .. WHName(sp) } end
     if #lists > 1 then
-        win.list = W.Dropdown(win, 236, lists, function() return db.list[CHARKEY] or "cys" end,
+        win.list = W.Dropdown(win, 300, lists, function() return db.list[CHARKEY] or "cys" end,
             function(v) db.list[CHARKEY] = v; offset = 0; Refresh() end)
         win.list:SetPoint("TOPLEFT", 14, -81)
         win.list:HookScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:AddLine("Which BiS list", T.accent[1], T.accent[2], T.accent[3])
             GameTooltip:AddLine("Cys's picks: the best items found for you, scored with Cys's Upgrade weights.", 1, 1, 1, true)
-            GameTooltip:AddLine("Wowhead pre-raid: the level 60 list from Wowhead's WoW Forever guide for that spec. The gain column still uses your weights.", 1, 1, 1, true)
+            GameTooltip:AddLine("Wowhead: the level 60 pre-raid list from Wowhead's WoW Forever guide for that spec. The gain column still uses your weights. Click a slot with +n to see Wowhead's other picks for it.", 1, 1, 1, true)
+            GameTooltip:AddLine("Where a guide offers more than one set (for example Balanced and Offensive), each set has its own entry.", 1, 1, 1, true)
             GameTooltip:Show()
         end)
         win.list:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1124,7 +1202,9 @@ local function BuildWindow()
                 if link and HandleModifiedItemClick then HandleModifiedItemClick(link) end
                 return
             end
-            if v.kind == "slot" and not v.wh then expanded[v.s.k] = not expanded[v.s.k]; Refresh() end
+            if v.kind == "slot" and v.wh then
+                if (v.nAlts or 0) > 0 then whOpen[v.s.k] = not whOpen[v.s.k]; Refresh() end
+            elseif v.kind == "slot" then expanded[v.s.k] = not expanded[v.s.k]; Refresh() end
         end)
         rows[n] = row
     end
@@ -1237,20 +1317,302 @@ if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and
     pcall(TooltipDataProcessor.AddTooltipPostCall, Enum.TooltipDataType.Item, function(tooltip, data) pcall(OnTip, tooltip, data) end)
 end
 
-local alerted = {}
-local function Alert(link, how)
-    local id = IDOf(link)
-    local r = id and pickRank[id]
-    if not (db.alert and r) then return end
-    if Status(id) ~= "get" then return end
-    local now = GetTime()
-    if alerted[id] and now - alerted[id] < 60 then return end
-    alerted[id] = now
-    CUI:Print(string.format("BiS %s: %s - #%d for %s.", how, link, r.rank, r.label))
-    if RaidNotice_AddMessage and RaidWarningFrame then
-        pcall(RaidNotice_AddMessage, RaidWarningFrame, "BiS " .. how .. ": " .. link, { r = 1, g = 0.82, b = 0 })
+-- item ID / name -> the Wowhead sets (not the alternatives) it is in, for the drop alert
+local whSetIndex, whSetNames
+local function WHSetsFor(id, name)
+    if not whSetIndex then
+        whSetIndex, whSetNames = {}, {}
+        for _, sp in ipairs(WHSpecs()) do
+            for _, key in ipairs(WH_KEYS) do
+                local e = WHEntry(sp, key)
+                if e then
+                    local hit = { sp = sp, key = key, e = e }
+                    whSetIndex[e.id] = whSetIndex[e.id] or {}
+                    table.insert(whSetIndex[e.id], hit)
+                    whSetNames[e.name] = whSetNames[e.name] or {}
+                    table.insert(whSetNames[e.name], hit)
+                end
+            end
+        end
     end
-    PlaySound(SOUNDKIT and SOUNDKIT.RAID_WARNING or 8959)
+    local l = whSetIndex[id]
+    if not l and name then
+        for n, hits in pairs(whSetNames) do if SameName(name, n) then l = hits break end end
+    end
+    return l
+end
+-- item ID / name -> Wowhead's other ranked picks it is in (sp.alts), for the drop alert when db.alertAlts is on
+local whAltIndex, whAltNames
+local RANK_ORDER = { BiS = 1, Offensive = 2, Great = 3, Good = 4, Option = 5, Situational = 6, Decent = 7 }
+local ALT_SLOT = { ring = "ring1", trinket = "trinket1", two = "main" } -- the row that opens that list
+local function WHAltsFor(id, name)
+    if not whAltIndex then
+        whAltIndex, whAltNames = {}, {}
+        for _, sp in ipairs(WHSpecs()) do
+            for key, list in pairs(rawget(sp, "alts") or {}) do -- base entries only; variants share them
+                for _, a in ipairs(list) do
+                    local e = WHAltEntry(a)
+                    if e then
+                        local hit = { sp = sp, key = key, rank = a[1], e = e }
+                        whAltIndex[e.id] = whAltIndex[e.id] or {}
+                        table.insert(whAltIndex[e.id], hit)
+                        whAltNames[e.name] = whAltNames[e.name] or {}
+                        table.insert(whAltNames[e.name], hit)
+                    end
+                end
+            end
+        end
+    end
+    local l = whAltIndex[id]
+    if not l and name then
+        for n, hits in pairs(whAltNames) do if SameName(name, n) then l = hits break end end
+    end
+    return l
+end
+-- "Great for Protection, Good for Fury" (best rank per spec), and the best hit to open
+local function AltText(hits)
+    local best, order = {}, {}
+    for _, h in ipairs(hits) do
+        local lab = h.sp.label
+        if not best[lab] then order[#order + 1] = lab end
+        if not best[lab] or (RANK_ORDER[h.rank] or 9) < (RANK_ORDER[best[lab].rank] or 9) then best[lab] = h end
+    end
+    local parts, top = {}, nil
+    for _, lab in ipairs(order) do
+        local h = best[lab]
+        parts[#parts + 1] = h.rank .. " for " .. lab
+        if not top or (RANK_ORDER[h.rank] or 9) < (RANK_ORDER[top.rank] or 9) then top = h end
+    end
+    return table.concat(parts, ", "), top
+end
+
+-- "Protection (Balanced, Defensive), Arms"
+local function SetText(hits)
+    local order, byLabel = {}, {}
+    for _, h in ipairs(hits) do
+        local lab = h.sp.label
+        if not byLabel[lab] then byLabel[lab] = {}; order[#order + 1] = lab end
+        if h.sp.variant then
+            local dup
+            for _, v in ipairs(byLabel[lab]) do if v == h.sp.variant then dup = true end end
+            if not dup then table.insert(byLabel[lab], h.sp.variant) end
+        end
+    end
+    local parts = {}
+    for _, lab in ipairs(order) do
+        parts[#parts + 1] = #byLabel[lab] > 0 and (lab .. " (" .. table.concat(byLabel[lab], ", ") .. ")") or lab
+    end
+    return table.concat(parts, ", ")
+end
+local SLOT_LABEL = { ring1 = "Ring", ring2 = "Ring", trinket1 = "Trinket", trinket2 = "Trinket", two = "Two-Hand",
+                     ring = "Ring", trinket = "Trinket" }
+local function SlotLabel(key)
+    if SLOT_LABEL[key] then return SLOT_LABEL[key] end
+    for _, s in ipairs(SLOTS) do if s.k == key then return s.label end end
+    return key
+end
+
+-- the pop-up: slides in at the top, up to 3 stacked, 10 s each (the mouse over one keeps it)
+-- click: open the BiS window on that list  ·  shift-click: link it in chat  ·  right-click: close
+local TOAST_W, TOAST_H, TOAST_GAP, TOAST_MAX, TOAST_TIME = 340, 58, 6, 3, 10
+local toastHolder, toasts = nil, {}
+local function OpenOn(listKey, openSlot)
+    if listKey then db.list[CHARKEY] = listKey; offset = 0 end
+    if openSlot then whOpen[openSlot] = true end -- show the slot's alternatives, where the item is
+    db.open = true
+    if not charUp and ToggleCharacter then pcall(ToggleCharacter, "PaperDollFrame") end
+    Sync()
+end
+local function LayoutToasts()
+    local y = 0
+    for _, t in ipairs(toasts) do
+        t.targetY = y
+        y = y - (TOAST_H + TOAST_GAP)
+    end
+end
+local function DropToast(t)
+    for n, o in ipairs(toasts) do if o == t then table.remove(toasts, n) break end end
+    t:Hide()
+    t.free = true
+    LayoutToasts()
+end
+local pool = {}
+local function ToastFrame()
+    for _, t in ipairs(pool) do if t.free then t.free = false; return t end end
+    local t = CreateFrame("Button", nil, toastHolder)
+    t:SetSize(TOAST_W, TOAST_H)
+    t:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    W.Texture(t, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.95 }):SetAllPoints()
+    W.Border(t, 1, T.border, "BORDER")
+    t.bar = W.Texture(t, "ARTWORK", T.accent)
+    t.bar:SetPoint("TOPLEFT", 1, -1)
+    t.bar:SetPoint("BOTTOMLEFT", 1, 1)
+    t.bar:SetWidth(3)
+    t.icon = t:CreateTexture(nil, "ARTWORK")
+    t.icon:SetSize(40, 40)
+    t.icon:SetPoint("LEFT", 10, 0)
+    t.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    t.title = W.Text(t, 10, T.accent)
+    t.title:SetPoint("TOPLEFT", t.icon, "TOPRIGHT", 8, 1)
+    t.title:SetPoint("RIGHT", -8, 0)
+    t.title:SetWordWrap(false)
+    t.item = W.Text(t, 13, T.text)
+    t.item:SetPoint("TOPLEFT", t.title, "BOTTOMLEFT", 0, -3)
+    t.item:SetPoint("RIGHT", -8, 0)
+    t.item:SetWordWrap(false)
+    t.sets = W.Text(t, 10, T.desc)
+    t.sets:SetPoint("TOPLEFT", t.item, "BOTTOMLEFT", 0, -3)
+    t.sets:SetPoint("RIGHT", -8, 0)
+    t.sets:SetWordWrap(false)
+    t:SetScript("OnEnter", function(self)
+        self.hover = true
+        if self.link and self.link:find("|H") then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetHyperlink(self.link)
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Click: open Cys's BiS on this list. Shift-click: link it. Right-click: close.", GREY[1], GREY[2], GREY[3], true)
+            GameTooltip:Show()
+        end
+    end)
+    t:SetScript("OnLeave", function(self) self.hover = false; GameTooltip:Hide() end)
+    t:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then DropToast(self) return end
+        if IsModifiedClick and IsModifiedClick() and self.link and self.link:find("|H") and HandleModifiedItemClick then
+            HandleModifiedItemClick(self.link) return
+        end
+        OpenOn(self.listKey, self.openSlot)
+        DropToast(self)
+    end)
+    -- slide in from the right, glide to its place in the stack, fade out at the end
+    t:SetScript("OnUpdate", function(self, el)
+        self.age = self.age + el
+        local slide = math.min(1, self.age / 0.25)
+        local x = (1 - slide) * (1 - slide) * 60
+        self.curY = self.curY + (self.targetY - self.curY) * math.min(1, el * 12)
+        self:ClearAllPoints()
+        self:SetPoint("TOP", toastHolder, "TOP", x, self.curY)
+        if self.hover then self.left = math.max(self.left, 1) end
+        self.left = self.left - el
+        if self.left <= 0 then DropToast(self) return end
+        self:SetAlpha(math.min(slide, self.left < 0.5 and self.left / 0.5 or 1))
+    end)
+    pool[#pool + 1] = t
+    return t
+end
+local function BuildToastHolder()
+    if toastHolder then return end
+    toastHolder = CreateFrame("Frame", "CysBiSToasts", UIParent)
+    toastHolder:SetSize(TOAST_W, TOAST_H)
+    toastHolder:SetFrameStrata("HIGH")
+    toastHolder:SetPoint("TOP", UIParent, "TOP", 0, -150)
+    if CUI.RegisterMovable then CUI:RegisterMovable(toastHolder, "bistoast", "BiS drop alerts", { point = "TOP", x = 0, y = -150 }) end
+end
+local function ShowToast(link, title, sets, listKey, tint, openSlot)
+    BuildToastHolder()
+    while #toasts >= TOAST_MAX do DropToast(toasts[#toasts]) end
+    local t = ToastFrame()
+    local _, _, q, _, _, _, _, _, _, icon = GetItemInfo(link)
+    t.link, t.listKey, t.openSlot = link, listKey, openSlot
+    t.icon:SetTexture(icon or QUESTION)
+    t.title:SetText(title)
+    t.item:SetText(link:find("|H") and link or (Hex(QualityColor(q)) .. link .. "|r"))
+    t.sets:SetText(sets)
+    local c = tint or T.accent
+    t.bar:SetColorTexture(c[1], c[2], c[3], 1)
+    t.age, t.left, t.hover = 0, TOAST_TIME, false
+    table.insert(toasts, 1, t)
+    t.curY = 0
+    LayoutToasts()
+    for n = 2, #toasts do toasts[n].curY = toasts[n].curY or toasts[n].targetY end
+    t:SetAlpha(0)
+    t:Show()
+end
+
+local alerted = {}
+-- how: "drop" (in your loot window), "roll" (a roll window), or another player's name (they looted it)
+local function Alert(link, how)
+    if not db.alert then return end
+    local id = IDOf(link)
+    if not id then return end
+    local name = link:match("%[(.-)%]")
+    local lines, listKey = {}, nil
+    local r = pickRank[id]
+    if r and Status(id) == "get" then
+        lines[#lines + 1] = string.format("Cys's pick #%d for %s", r.rank, r.label)
+        listKey = "cys"
+    end
+    local hits = db.alertWH and WHSetsFor(id, name)
+    if hits and WHStatus(hits[1].e) == "get" then
+        -- open the set you are looking at if the item is in it, else the first set it is in
+        local cur = db.list[CHARKEY]
+        local pick = hits[1].sp.key
+        for _, h in ipairs(hits) do if h.sp.key == cur then pick = cur end end
+        lines[#lines + 1] = "Wowhead " .. SlotLabel(hits[1].key) .. ": " .. SetText(hits)
+        if not listKey or cur ~= "cys" then listKey = pick end
+    end
+    local openSlot
+    if db.alertWH and db.alertAlts and not hits then -- not in a set: maybe one of Wowhead's other ranked picks
+        local alts = WHAltsFor(id, name)
+        if alts and WHStatus(alts[1].e) == "get" then
+            local text, top = AltText(alts)
+            lines[#lines + 1] = "Wowhead " .. SlotLabel(top.key) .. ": " .. text
+            if not listKey then
+                listKey = top.sp.key
+                local cur = db.list[CHARKEY]
+                for _, sp in ipairs(WHSpecs()) do -- stay on the set you're viewing if it's this spec's
+                    if sp.key == cur and sp.label == top.sp.label then listKey = cur end
+                end
+                openSlot = ALT_SLOT[top.key] or top.key
+            end
+        end
+    end
+    if #lines == 0 then return end
+    local other = how ~= "drop" and how ~= "roll"
+    local now = GetTime()
+    local akey = id .. (other and "o" or "")
+    if alerted[akey] and now - alerted[akey] < 60 then return end
+    alerted[akey] = now
+    local head = (how == "drop" and "BiS DROP") or (how == "roll" and "BiS ROLL") or ("BiS LOOTED BY " .. how:upper())
+    CUI:Print(string.format("%s: %s - %s.", head:sub(1, 1) .. head:sub(2):lower(), link, table.concat(lines, "; ")))
+    if db.toast then
+        ShowToast(link, head, table.concat(lines, "  ·  "), listKey, other and { 0.45, 0.7, 1 } or nil, openSlot)
+    elseif RaidNotice_AddMessage and RaidWarningFrame then
+        pcall(RaidNotice_AddMessage, RaidWarningFrame, head .. ": " .. link, { r = 1, g = 0.82, b = 0 })
+    end
+    pcall(PlaySound, other and (SOUNDKIT and SOUNDKIT.TELL_MESSAGE or 3081) or (SOUNDKIT and SOUNDKIT.RAID_WARNING or 8959))
+end
+
+-- "Name receives loot: [item]." (others in your group). Built from the game's own strings.
+local LOOT_PATTERNS = {}
+for _, g in ipairs({ "LOOT_ITEM", "LOOT_ITEM_MULTIPLE" }) do
+    local fmt = _G[g]
+    if type(fmt) == "string" then
+        local pat = fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)"):gsub("%%%%d", "%%d+")
+        LOOT_PATTERNS[#LOOT_PATTERNS + 1] = "^" .. pat
+    end
+end
+local function OtherLoot(msg)
+    if not (db.alert and db.alertOthers) or type(msg) ~= "string" then return end
+    for _, pat in ipairs(LOOT_PATTERNS) do
+        local who, link = msg:match(pat)
+        if who and link then
+            link = link:match("|c%x+|Hitem:.-|h%[.-%]|h|r") or link:match("|Hitem:.-|h%[.-%]|h")
+            if link then Alert(link, (who:gsub("%-.*", ""))) end
+            return
+        end
+    end
+end
+
+-- a sample pop-up to see it and place it (/cuibis testdrop, and Layout mode)
+local function TestToast()
+    local sp = WHSpec() or WHSpecs()[1]
+    local e = sp and (WHEntry(sp, "chest") or WHEntry(sp, "head"))
+    local link = e and select(2, GetItemInfo(e.id)) or (e and e.name) or "Sample item"
+    ShowToast(link, "BiS DROP (sample)", sp and ("Wowhead Chest: " .. WHName(sp)) or "Cys's pick #1 for Chest", sp and sp.key or "cys")
+end
+BuildToastHolder() -- now, so Layout mode lists it from the start
+if CUI.SetLayoutMode then
+    hooksecurefunc(CUI, "SetLayoutMode", function(_, on) if on and db.alert and db.toast then BuildToastHolder(); TestToast() end end)
 end
 
 --------------------------------------------------------------------------------
@@ -1260,7 +1622,7 @@ local ev = CreateFrame("Frame")
 for _, e in ipairs({ "PLAYER_LOGIN", "ADDON_LOADED", "PLAYER_EQUIPMENT_CHANGED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP",
                      "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT", "LOOT_OPENED", "START_LOOT_ROLL",
                      "QUEST_DETAIL", "QUEST_COMPLETE", "MERCHANT_SHOW", "CHARACTER_POINTS_CHANGED",
-                     "ACTIVE_TALENT_GROUP_CHANGED", "AUCTION_HOUSE_CLOSED" }) do
+                     "ACTIVE_TALENT_GROUP_CHANGED", "AUCTION_HOUSE_CLOSED", "CHAT_MSG_LOOT" }) do
     pcall(ev.RegisterEvent, ev, e)
 end
 local loadQueued, whQueued
@@ -1289,6 +1651,8 @@ ev:SetScript("OnEvent", function(_, event, a1)
             local link = GetLootSlotLink(slot)
             if link then Remember(link, "loot", nil, zone); Alert(link, "drop") end
         end
+    elseif event == "CHAT_MSG_LOOT" then
+        OtherLoot(a1)
     elseif event == "START_LOOT_ROLL" then
         local link = GetLootRollItemLink and GetLootRollItemLink(a1)
         if link then Remember(link, "roll", nil, ZoneName()); Alert(link, "roll") end
@@ -1321,12 +1685,16 @@ SlashCmdList["CYSBIS"] = function(msg)
             n, state.total, state.loading, JournalDB() and "yes" or "no", srcCount.journal, AH() and "yes" or "no", srcCount.ah,
             srcCount.seen, ProfileName() ~= "" and ProfileName() or "none"))
         return
+    elseif msg == "testdrop" then
+        TestToast()
+        return
     elseif msg == "wowhead" then -- every Wowhead item for your class: does its ID show the guide's name in game?
-        local bad, waiting, total = 0, 0, 0
+        local bad, waiting, total, seenID = 0, 0, 0, {}
         for _, sp in ipairs(WHSpecs()) do
             for _, key in ipairs(WH_KEYS) do
                 local e = WHEntry(sp, key)
-                if e then
+                if e and not seenID[e.id] then
+                    seenID[e.id] = true
                     total = total + 1
                     local n = GetItemInfo(e.id)
                     if not n then
@@ -1334,7 +1702,24 @@ SlashCmdList["CYSBIS"] = function(msg)
                         if RequestLoad then pcall(RequestLoad, e.id) end
                     elseif not SameName(n, e.name) then
                         bad = bad + 1
-                        CUI:Print(string.format("BiS: %s %s - guide says %s, item %d is %s.", sp.label, key, e.name, e.id, n))
+                        CUI:Print(string.format("BiS: %s %s - guide says %s, item %d is %s.", WHName(sp), key, e.name, e.id, n))
+                    end
+                end
+            end
+            for key, list in pairs(rawget(sp, "alts") or {}) do -- Wowhead's other ranked picks
+                for _, a in ipairs(list) do
+                    local e = WHAltEntry(a)
+                    if e and not seenID[e.id] then
+                        seenID[e.id] = true
+                        total = total + 1
+                        local n = GetItemInfo(e.id)
+                        if not n then
+                            waiting = waiting + 1
+                            if RequestLoad then pcall(RequestLoad, e.id) end
+                        elseif not SameName(n, e.name) then
+                            bad = bad + 1
+                            CUI:Print(string.format("BiS: %s %s (%s) - guide says %s, item %d is %s.", WHName(sp), key, a[1], e.name, e.id, n))
+                        end
                     end
                 end
             end
@@ -1373,6 +1758,10 @@ CUI:RegisterPage("BiS List", function(page)
     end
     Box("Mark BiS items on their tooltips", function() return db.tipMark end, function(on) db.tipMark = on end)
     Box("Tell me when a BiS item is in a loot or roll window", function() return db.alert end, function(on) db.alert = on end)
+    Box("   As a pop-up that slides in (move it in Layout mode: BiS drop alerts)", function() return db.toast end, function(on) db.toast = on end)
+    Box("   Also for items in Wowhead's sets for my class (says which sets)", function() return db.alertWH end, function(on) db.alertWH = on end)
+    Box("   Also when someone in my group loots one (says who)", function() return db.alertOthers end, function(on) db.alertOthers = on end)
+    Box("   Also Wowhead's other ranked picks (Great, Good, Option...)", function() return db.alertAlts end, function(on) db.alertAlts = on end)
     Box("Use DungeonJournal's dungeon loot (when it is installed)", function() return db.journal end,
         function(on) db.journal = on; QueueRecompute(0.1) end)
     Box("Use the items Cys's Auction House has seen", function() return db.ah end,

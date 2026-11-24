@@ -27,6 +27,16 @@ local COPY_LINES = 250 -- how many recent lines the Copy window keeps per chat w
 
 local function DB() return CysUIDB.chat end
 
+-- The game's Edit Mode remembers chat window 1 as "anchored to CysUIMover_chat" and puts it back there
+-- the moment it loads its layouts, which can be before this module builds its mover. Make that name
+-- exist from the start (at the default chat spot) so the game finds it; RegisterMovable reuses it.
+if not _G.CysUIMover_chat then
+    local early = CreateFrame("Frame", "CysUIMover_chat", UIParent)
+    early:SetSize(430, 120)
+    early:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 30, 110)
+    early:Hide()
+end
+
 local hidden = CreateFrame("Frame")
 hidden:Hide()
 
