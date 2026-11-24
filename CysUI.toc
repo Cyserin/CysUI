@@ -97,3 +97,5 @@ Modules\ClickCast\CysClickCast.lua
 Modules\Recruit\CysRecruit.lua
 Modules\Quests\CysQuests.lua
 Modules\Runs\CysRuns.lua
+Modules\PvP\CysPvPTimers.lua
+Modules\Macros\CysClassMacros.lua

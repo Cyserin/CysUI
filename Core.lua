@@ -537,6 +537,8 @@ if CysChangelog then
                   "Kill Tracker: farm spots. Kills in the open world are grouped by where you make them, with XP per hour, kills per hour and time to level for the spot you are at (only the time you are pulling counts). When you leave the zone or move on, a summary prints in your own chat. /cuifarm shows the spot you are at and your last ones.",
                   "Kill Tracker: new Shows option, Kills to level + XP per hour here.",
                   "Experience Bar: the tooltip shows your XP per hour at the farm spot you are at (or over the last 15 minutes).",
+                  "PvP Timers: small bars that count down your PvP flag, the time left to enter a battleground once the queue pops (and how long you have waited), the battle start, Arathi Basin bases and Alterac Valley towers and graveyards being taken (colored by the side taking them), and the Spirit Healer's next resurrection. Place them in Layout mode; /cuipvp test shows sample bars. New file: restart the game once.",
+                  "Class Macros: your Character tab macros are shared with every character of the same class. Make or change a macro on one Paladin and your other Paladins get it at their next login, automatically or after asking (your pick on its settings page). The settings page lists them, shows which ones a character is missing, and x takes one off the list. /cuimacros save, load and list. New file: restart the game once.",
               },
               improved = {
                   "Spell Scout on WoW Forever: classes without a written guide now get a box too, listing every spell their trainer teaches at your level (Shaman keeps its guides with reasons).",
