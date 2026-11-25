@@ -1,17 +1,17 @@
 --------------------------------------------------------------------------------
--- Cys's UI - Bug Catcher (built-in BugGrabber / BugSack)
+-- CysBugs - Cys's UI bug catcher (built-in BugGrabber / BugSack)
 --
 -- Catches Lua errors (and "addon tried to call a protected function" blocks) from every addon instead of the
 -- game's error popup, keeps the last 50 with how often each happened, and shows them in a small window where
 -- the whole report can be copied (Ctrl+A, Ctrl+C) and pasted to whoever made the addon.
 -- Loaded right after Compat.lua so it catches errors in the rest of Cys's UI too.
--- Stands down when BugGrabber is installed (it catches them already).
+-- With BugGrabber installed it takes over the game's error handler, so CysBugs listens to BugGrabber instead
+-- and still shows everything here.
 -- Minimap icon (like BugSack's): green = no errors this session, red with a count = errors caught. Click opens
 -- the window, Shift-click clears, drag moves it around the map's edge.
--- /cuibugs opens the window; /cuibugs clear empties it; /cuibugs off | on turns catching off or on;
--- /cuibugs icon shows or hides the minimap icon.
+-- /cysbugs (or /cuibugs) opens the window; /cuibugs clear empties it; /cuibugs off | on turns catching off or on;
+-- /cysbugs icon shows or hides the minimap icon.
 --------------------------------------------------------------------------------
-if _G.BugGrabber then return end -- the real BugGrabber (!BugGrabber loads first) already catches errors
 
 local MAX_BUGS, CHAT_GAP = 50, 10
 local floor, max, min = math.floor, math.max, math.min
@@ -26,7 +26,7 @@ local busy = false
 local lastChat = 0
 local origHandler = geterrorhandler and geterrorhandler()
 
-local function Print(msg) DEFAULT_CHAT_FRAME:AddMessage("|cFFFFD100Cys's UI|r " .. msg) end
+local function Print(msg) DEFAULT_CHAT_FRAME:AddMessage("|cFFFFD100CysBugs|r " .. msg) end
 
 -- shorter paths: "Interface/AddOns/CysUI/Core.lua" -> "CysUI/Core.lua"
 local function Tidy(s)
@@ -67,7 +67,7 @@ local function Announce(e)
     local now = GetTime and GetTime() or 0
     if now - lastChat < CHAT_GAP then return end
     lastChat = now
-    Print("caught a Lua error from " .. AddonOf(e) .. ". Type |cFFFFD100/cuibugs|r to see it.")
+    Print("caught a Lua error from " .. AddonOf(e) .. ". Type |cFFFFD100/cysbugs|r to see it.")
 end
 
 local function Catch(err)
@@ -90,7 +90,36 @@ local function Catch(err)
     busy = false
 end
 
-if seterrorhandler then seterrorhandler(Catch) end
+-- BugGrabber (if installed) owns the error handler; otherwise CysBugs does
+if seterrorhandler and not _G.BugGrabber then seterrorhandler(Catch) end
+
+-- a note from Cys's own addons (not a Lua error, but worth seeing in the list)
+function Bugs.Note(msg, stack)
+    local _, new = Store(Tidy(msg), Tidy(stack), "")
+    if new then Announce({ msg = Tidy(msg), stack = Tidy(stack) }) end
+end
+
+-- BugGrabber installed: copy each error it grabs into CysBugs
+local function HookBugGrabber()
+    local BG = _G.BugGrabber
+    if not BG or Bugs.bgHooked then return end
+    if BG.setupCallbacks then pcall(BG.setupCallbacks) end
+    if not BG.RegisterCallback then return end
+    Bugs.bgHooked = true
+    BG.RegisterCallback(Bugs, "BugGrabber_BugGrabbed", function(_, err)
+        if type(err) ~= "table" or (db and db.off) then return end
+        local _, new = Store(Tidy(err.message), Tidy(err.stack), Tidy(err.locals):sub(1, 3000))
+        if new then Announce({ msg = Tidy(err.message), stack = Tidy(err.stack) }) end
+    end)
+    -- errors BugGrabber caught while the addons were loading
+    local list = BG.GetDB and BG:GetDB()
+    local cur = BG.GetSessionId and BG:GetSessionId()
+    if type(list) == "table" then
+        for _, err in ipairs(list) do
+            if err.session == cur then Store(Tidy(err.message), Tidy(err.stack), Tidy(err.locals):sub(1, 3000)) end
+        end
+    end
+end
 
 --------------------------------------------------------------------------------
 -- Saved variables, blocked actions
@@ -122,6 +151,7 @@ ev:SetScript("OnEvent", function(_, e, a1, a2)
         end
         wipe(pending)
     elseif e == "PLAYER_LOGIN" then
+        pcall(HookBugGrabber)
         if Bugs.BuildIcon then pcall(Bugs.BuildIcon) end
         -- tell once at login when this session already caught something (errors while loading)
         if db and not db.off then
@@ -258,7 +288,7 @@ function Bugs.Refresh()
     if not e and #list > 0 then index = 1; e = list[1] end
     local here = 0
     for _, b in ipairs(list) do if b.session == session then here = here + 1 end end
-    frame.title:SetText("Bug Catcher  |cFF999999" .. #list .. (#list == 1 and " error" or " errors")
+    frame.title:SetText("CysBugs  |cFF999999" .. #list .. (#list == 1 and " error" or " errors")
         .. ", " .. here .. " this session|r")
     local text = e and Report(e) or "No errors caught. Nice."
     frame.box.report = text
@@ -368,7 +398,7 @@ function Bugs.BuildIcon()
     hl:SetVertexColor(1, 1, 1, 0.15)
 
     icon:SetScript("OnClick", function()
-        if IsShiftKeyDown() then Bugs.Clear(); Print("Bug Catcher: cleared.")
+        if IsShiftKeyDown() then Bugs.Clear(); Print("cleared.")
         elseif frame and frame:IsShown() then frame:Hide()
         else Bugs.Show() end
     end)
@@ -384,7 +414,7 @@ function Bugs.BuildIcon()
     icon:SetScript("OnDragStop", function(s) s:SetScript("OnUpdate", nil) end)
     icon:SetScript("OnEnter", function(s)
         GameTooltip:SetOwner(s, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Bug Catcher", 1, 0.82, 0)
+        GameTooltip:AddLine("CysBugs", 1, 0.82, 0)
         local n, list = SessionCount(), db.list
         if n > 0 then
             GameTooltip:AddLine(n .. (n == 1 and " error" or " errors") .. " this session", 1, 0.3, 0.3)
@@ -395,7 +425,7 @@ function Bugs.BuildIcon()
             GameTooltip:AddLine("No errors this session", 0.3, 0.9, 0.4)
         end
         if #list > n then GameTooltip:AddLine(#list .. " saved in all", 0.6, 0.6, 0.6) end
-        if db.off then GameTooltip:AddLine("Catching is off (/cuibugs on)", 1, 0.6, 0.2) end
+        if db.off then GameTooltip:AddLine("Catching is off (/cysbugs on)", 1, 0.6, 0.2) end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Click: open   Shift-click: clear   Drag: move", 1, 0.82, 0)
         GameTooltip:Show()
@@ -407,18 +437,19 @@ function Bugs.BuildIcon()
     Bugs.UpdateIcon()
 end
 
-SLASH_CYSUIBUGS1 = "/cuibugs"
+SLASH_CYSUIBUGS1 = "/cysbugs"
+SLASH_CYSUIBUGS2 = "/cuibugs"
 SlashCmdList.CYSUIBUGS = function(msg)
     msg = strtrim(string.lower(msg or ""))
-    if msg == "clear" then Bugs.Clear(); Print("Bug Catcher: cleared.")
-    elseif msg == "off" then if db then db.off = true end; Print("Bug Catcher: off (the game handles errors again).")
-    elseif msg == "on" then if db then db.off = nil end; Print("Bug Catcher: on.")
+    if msg == "clear" then Bugs.Clear(); Print("cleared.")
+    elseif msg == "off" then if db then db.off = true end; Print("off (the game handles errors again).")
+    elseif msg == "on" then if db then db.off = nil end; Print("on.")
     elseif msg == "icon" then
         if db then
             db.icon = db.icon or {}
             db.icon.hide = not db.icon.hide or nil
             Bugs.UpdateIcon()
-            Print("Bug Catcher: minimap icon " .. (db.icon.hide and "hidden (/cuibugs icon brings it back)." or "shown."))
+            Print("minimap icon " .. (db.icon.hide and "hidden (/cysbugs icon brings it back)." or "shown."))
         end
     else Bugs.Show() end
 end

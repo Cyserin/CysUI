@@ -1102,15 +1102,21 @@ local function AutoSize()
 end
 
 -- Set the window height for the content; the top edge stays where it is (the window grows downwards)
-function CysBags:FitHeight(contentH)
-    if not (frame and AutoSize()) or self.fitting then return end
-    local want = HEADER_H + FOOTER_H + PAD * 2 + 2 + contentH + 6 -- a few pixels spare so the list never scrolls
+-- minOnly: only grow when the sidebar rows no longer fit (also with Auto-size off)
+function CysBags:FitHeight(contentH, minOnly)
+    if not frame or self.fitting or not (minOnly or AutoSize()) then return end
     local minH = max(HEADER_H + FOOTER_H + (self.sidebarH or 320), 200) -- the sidebar's rows must still fit
-    -- grow to fit, but only up to the tallest height chosen on the Automation page; more items than that scroll
-    local auto = CysUIDB and CysUIDB.automation
-    local tallest = (auto and tonumber(auto.bagsMaxH)) or 650
-    local maxH = floor(min((UIParent:GetHeight() or 900) * 0.85, tallest))
-    want = floor(max(minH, min(want, maxH)) + 0.5)
+    local want
+    if minOnly then
+        want = floor(max(minH, frame:GetHeight() or 0) + 0.5)
+    else
+        want = HEADER_H + FOOTER_H + PAD * 2 + 2 + contentH + 6 -- a few pixels spare so the list never scrolls
+        -- grow to fit, but only up to the tallest height chosen on the Automation page; more items than that scroll
+        local auto = CysUIDB and CysUIDB.automation
+        local tallest = (auto and tonumber(auto.bagsMaxH)) or 650
+        local maxH = floor(min((UIParent:GetHeight() or 900) * 0.85, tallest))
+        want = floor(max(minH, min(want, maxH)) + 0.5)
+    end
     if math.abs((frame:GetHeight() or 0) - want) < 1 then return end
     self.fitting = true
     local s = (frame:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
@@ -1257,6 +1263,12 @@ function CysBags:UpdateSidebar()
         y = y + 26
     end
     self.sidebarH = y + 34 -- the rows plus room for the collapse button (used by auto-size)
+    -- more rows than room (a new category, a set showing): grow the window so "+ New category" never ends up
+    -- under the footer
+    if frame and frame:IsShown() and not self.fitting
+        and (frame:GetHeight() or 0) + 0.5 < HEADER_H + FOOTER_H + self.sidebarH then
+        self:FitHeight(nil, true)
+    end
     for _, sb in ipairs(sidebarButtons) do
         -- Check if this sidebar button is selected OR if it's the Armory Sets tab and a dynamic set is filtered
         local selected = (sb.key == self.filter) or (sb.key == "SETS" and self.filter and self.filter:find("^SET_"))
@@ -2016,6 +2028,19 @@ function CysBags:CreateFrames()
     frame:Hide()
     SolidTexture(frame, "BACKGROUND", C.bg):SetAllPoints()
     CreateBorder(frame, 1, C.border, "BORDER")
+    -- another addon was fading the whole window in and out (things behind showed through): keep it solid,
+    -- and drop one note in CysBugs with the stack, so /cysbugs shows which addon it was
+    hooksecurefunc(frame, "SetAlpha", function(f, a)
+        if f.cysAlphaFix or type(a) ~= "number" or a >= 0.99 then return end
+        f.cysAlphaFix = true
+        if not CysBags.alphaNoted and CysUIBugs and CysUIBugs.Note then
+            CysBags.alphaNoted = true
+            CysUIBugs.Note(("CysBags: another addon faded the bag window to %d%% (kept it at 100%%)"):format(floor(a * 100)),
+                debugstack and debugstack(2) or "")
+        end
+        f:SetAlpha(1)
+        f.cysAlphaFix = nil
+    end)
     self:RestorePosition()
     -- With Cys's UI, position and scale come from layout mode (/cui layout)
     if CysUI and CysUI.RegisterMovable then
@@ -2254,6 +2279,7 @@ function CysBags:CreateFrames()
     sidebar = CreateFrame("Frame", nil, frame)
     sidebar:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
     sidebar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, FOOTER_H + 1)
+    if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end -- rows never draw over the footer
     sidebar:SetWidth(SideW())
     SolidTexture(sidebar, "BACKGROUND", C.sidebar):SetAllPoints()
     local sline = SolidTexture(sidebar, "BORDER", C.border)
