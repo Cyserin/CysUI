@@ -155,6 +155,17 @@ local function Evaluate(guide, level)
             if EffLevel(e) <= level then buy[#buy + 1] = e else later[#later + 1] = e end
         end
     end
+    -- a lower rank is not needed to train a higher one, so only the top rank to buy is listed
+    -- (a guide entry with keep = true stays, e.g. a rank kept on purpose for downranking)
+    local top = {}
+    for _, e in ipairs(buy) do
+        if e.rank and (not top[e.spell] or e.rank > top[e.spell]) then top[e.spell] = e.rank end
+    end
+    local kept = {}
+    for _, e in ipairs(buy) do
+        if e.keep or not e.rank or e.rank == top[e.spell] then kept[#kept + 1] = e end
+    end
+    buy = kept
     table.sort(buy, function(a, b)
         local la, lb = EffLevel(a), EffLevel(b)
         if la ~= lb then return la > lb end -- this level's spells first, older misses after
@@ -202,6 +213,9 @@ local function Build()
     box.title:SetPoint("TOPLEFT", 10, -32)
     box.sub = W.Text(box, 10, T.desc, "RIGHT") -- the loaded guide, in the header strip
     box.sub:SetPoint("TOPRIGHT", -28, -8)
+    box.sub:SetPoint("TOPLEFT", box.header, "TOPRIGHT", 8, -1) -- never runs over the module name
+    box.sub:SetWordWrap(false)
+    box.sub:SetHeight(12)
 
     local close = W.Button(box, 18, 18, "x")
     close:SetPoint("TOPRIGHT", -5, -4)
@@ -261,7 +275,7 @@ local function Render(level, override)
     shownLevel = level
 
     box.title:SetText("Level " .. level .. (guide.generated and ": spells to train" or ": spells worth buying"))
-    local sub = guide.generated and "No guide for your class yet: everything your trainer teaches" or guide.name
+    local sub = guide.generated and "All trainer spells" or guide.name
     box.sub:SetText(override and (guide.name .. " - preview") or sub)
 
     local y = -54

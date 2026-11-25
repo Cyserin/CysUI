@@ -553,6 +553,7 @@ if CysChangelog then
                   "Consumables on WoW Forever: food, water, potions, bandages and healthstones from about level 35 on are picked up again (the game writes 1,392 with a comma, which the macros could not read), and a drink is no longer read as restoring a fraction of its mana.",
                   "Missing Buffs on WoW Forever: a buff the game keeps hidden no longer makes the next buffs read as missing, so people stop being flagged for Fortitude or Mark of the Wild they already have.",
                   "Spell Scout on WoW Forever: spells you have not learned yet no longer count as learned (the spellbook lists them), so they show in the box again.",
+                  "Spell Scout box: only the highest rank of each spell is listed (you don't need the lower ranks to train it), so the box is no longer filled with old ranks. The note in the header no longer runs over the box's name.",
                   "Dispels: checked against WoW Forever's trainer list (they were right); the learned-spell check now uses the game's newer spellbook call, also for the Felhunter's Devour Magic.",
                   "Talent Planner: with Learn these talents as I level on, a window now asks before any talent is learned and names your Primary or Secondary talents, so a plan made for your other spec is never spent by mistake. Not now waits until your next level.",
                   "Train all asks first: it says how many spells it will learn and what they cost before anything is bought.",
