@@ -19,6 +19,7 @@ Widgets.lua
 Movers.lua
 Panels.lua
 Config.lua
+Dev.lua
 Welcome.lua
 Profile.lua
 Update.lua
