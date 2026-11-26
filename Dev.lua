@@ -191,7 +191,7 @@ local function Build()
     local db = DB()
     local WIDTH = 460
     win = CreateFrame("Frame", "CysDevWindow", UIParent)
-    win:SetSize(WIDTH, 352)
+    win:SetSize(WIDTH, 380)
     win:SetFrameStrata("HIGH")
     win:SetClampedToScreen(true)
     win:SetMovable(true)
@@ -232,6 +232,12 @@ local function Build()
     local h2 = W.Text(win, 11, T.accent); h2:SetPoint("TOPLEFT", 8, -196); h2:SetText("Busiest add-ons right now")
     busyRows = {}
     for i = 1, BUSY_ROWS do busyRows[i] = Row(-212 - (i - 1) * 15) end
+
+    local tip = W.Text(win, 11, T.desc)
+    tip:SetPoint("TOPLEFT", 8, -304)
+    tip:SetWidth(WIDTH - 16)
+    tip:SetJustifyH("LEFT")
+    tip:SetText("|cFFFFD100If CysUI is the cause:|r type |cFFFFD100/cui cpu on|r, then |cFFFFD100/reload|r, play a bit where it stutters, then type |cFFFFD100/cui cpu|r to see which part of CysUI it is. |cFFFFD100/cui cpu off|r when done.")
 
     local dd = W.Dropdown(win, 170, { { 50, "Stutter at: 50 ms+" }, { 100, "Stutter at: 100 ms+" }, { 200, "Stutter at: 200 ms+" } },
         function() return db.threshold end, function(v) db.threshold = v end)

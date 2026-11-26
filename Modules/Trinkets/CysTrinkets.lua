@@ -274,12 +274,13 @@ local function PaintMenu()
     local db = DB()
     local list = Collect(menu.slot)
     local S, GAP, PAD = db.size, 3, 4
-    local cols, rowsN = max(1, #list), 1 -- one straight row
+    local cols, rowsN = 1, max(1, #list) -- one straight column, first trinket next to the button
     for i, it in ipairs(list) do
         local b = menuButtons[i] or MenuButton(i)
         b:SetSize(S, S)
         b:ClearAllPoints()
-        b:SetPoint("TOPLEFT", PAD + (i - 1) * (S + GAP), -PAD)
+        if menu.up then b:SetPoint("BOTTOMLEFT", PAD, PAD + (i - 1) * (S + GAP))
+        else b:SetPoint("TOPLEFT", PAD, -PAD - (i - 1) * (S + GAP)) end
         b.item = it
         b.icon:SetTexture(IconOf(it.id))
         b.icon:SetDesaturated(not HasUse(it.id))
@@ -300,11 +301,12 @@ function TR.OpenMenu(slot, anchor)
     BuildMenu()
     menu.slot = slot
     menu:ClearAllPoints()
-    -- one straight row right above the trinket you point at (below it when the buttons sit near the top
-    -- of the screen); the first trinket in the list lines up with that slot
+    -- one straight column going up from the trinket you point at (down when the buttons sit near the top
+    -- of the screen), lined up over that button
     local _, y = anchor:GetCenter()
-    if y and y > UIParent:GetHeight() * 0.75 then menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -4, -6)
-    else menu:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", -4, 6) end
+    menu.up = not (y and y > UIParent:GetHeight() * 0.75)
+    if menu.up then menu:SetPoint("BOTTOM", anchor, "TOP", 0, 2)
+    else menu:SetPoint("TOP", anchor, "BOTTOM", 0, -2) end
     hideAt = nil
     menu:Show()
     PaintMenu()
