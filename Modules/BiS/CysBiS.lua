@@ -496,42 +496,59 @@ function Recompute(force)
     if sig ~= state.sig then wipe(scores) end
     state.sig = sig
     wipe(cand)
-    pcall(GatherJournal)
-    pcall(GatherAH)
-    pcall(GatherSeen)
-    pcall(GatherOwn)
-    -- keep what can fit a slot and my class can use; ask the game to load anything it has not yet
-    local todo, loading, total, askedNow = {}, 0, 0, 0
     wipe(asked)
-    for id, c in pairs(cand) do
-        local i = ReadInfo(id)
-        if i and ANY_LOC[i.loc] and Usable(i.classID, i.subID, i.loc, i.minLevel) then
-            total = total + 1
-            local cached = IsCached and IsCached(id)
-            if IsCached == nil then cached = i.minLevel ~= nil end
-            if cached and i.minLevel then
-                if i.minLevel <= MyLevel() + (tonumber(db.ahead) or 0) then todo[#todo + 1] = { id = id, link = c.link } end
-            elseif (tries[id] or 0) < 3 then
-                loading = loading + 1
-                if askedNow < MAX_ASK then
-                    askedNow = askedNow + 1
-                    tries[id] = (tries[id] or 0) + 1
-                    asked[id] = true
-                    if RequestLoad then pcall(RequestLoad, id) end
-                end
-            end
-        end
-    end
-    state.loading, state.total, state.busy = loading, total, true
+    state.busy = true
+    -- Everything below runs in small steps (about 3 ms a frame) so a rebuild never hitches the game:
+    -- 1) gather sources, 2) sort out what my class can use / ask the game to load, 3) weigh each item.
+    local GATHER = { GatherJournal, GatherAH, GatherSeen, GatherOwn }
+    local phase, ids, idx, sorted = 1, nil, 1, false
+    local todo, loading, total, askedNow = {}, 0, 0, 0
     local list, i = {}, 1
+    local function Clock() return debugprofilestop and debugprofilestop() or 0 end
     local function Step()
         if token ~= runToken then return end
-        local t0 = debugprofilestop and debugprofilestop() or 0
-        while i <= #todo do -- about 3 ms a frame: reading an item's tooltip the first time is the slow part
+        local t0 = Clock()
+        while phase <= #GATHER do
+            pcall(GATHER[phase])
+            phase = phase + 1
+            if Clock() - t0 > 3 then C_Timer.After(0, Step) return end
+        end
+        if not ids then
+            ids = {}
+            for id in pairs(cand) do ids[#ids + 1] = id end
+        end
+        while idx <= #ids do
+            local id = ids[idx]
+            idx = idx + 1
+            local c = cand[id]
+            local inf = c and ReadInfo(id)
+            if inf and ANY_LOC[inf.loc] and Usable(inf.classID, inf.subID, inf.loc, inf.minLevel) then
+                total = total + 1
+                local cached = IsCached and IsCached(id)
+                if IsCached == nil then cached = inf.minLevel ~= nil end
+                if cached and inf.minLevel then
+                    if inf.minLevel <= MyLevel() + (tonumber(db.ahead) or 0) then todo[#todo + 1] = { id = id, link = c.link } end
+                elseif (tries[id] or 0) < 3 then
+                    loading = loading + 1
+                    if askedNow < MAX_ASK then
+                        askedNow = askedNow + 1
+                        tries[id] = (tries[id] or 0) + 1
+                        asked[id] = true
+                        if RequestLoad then pcall(RequestLoad, id) end
+                    end
+                end
+            end
+            if Clock() - t0 > 3 then C_Timer.After(0, Step) return end
+        end
+        if not sorted then
+            sorted = true
+            state.loading, state.total = loading, total
+        end
+        while i <= #todo do -- reading an item's tooltip the first time is the slow part
             local e = todo[i]
             list[#list + 1] = { id = e.id, ep = Score(e.id, e.link), link = e.link }
             i = i + 1
-            if debugprofilestop and debugprofilestop() - t0 > 3 then break end
+            if Clock() - t0 > 3 then break end
         end
         if i <= #todo then C_Timer.After(0, Step) return end
         BuildPicks(list)
@@ -1640,7 +1657,8 @@ ev:SetScript("OnEvent", function(_, event, a1)
         end
         if asked[a1] and not loadQueued then
             loadQueued = true
-            C_Timer.After(8, function() loadQueued = false; QueueRecompute(0.05, true) end) -- batches of arrivals, not one refresh each
+            -- batches of arrivals, not one refresh each; quicker while the BiS window is open, slower in the background
+            C_Timer.After((win and win:IsShown()) and 8 or 30, function() loadQueued = false; QueueRecompute(0.05, true) end)
         end
     elseif event == "AUCTION_HOUSE_CLOSED" then
         ahList = nil

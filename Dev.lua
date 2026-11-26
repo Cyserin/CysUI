@@ -153,35 +153,73 @@ local function LogText()
     return table.concat(out, "\n")
 end
 
-local function ShowCopy()
+-- a text box you can copy from (Ctrl+C), with a close button; used for the stutter log and the CPU report
+local function CopyWindow(name, w, h, heading)
     local W = CUI.W
-    if not copyBox then
-        local f = CreateFrame("Frame", "CysDevCopy", UIParent)
-        f:SetSize(460, 260)
-        f:SetPoint("CENTER")
-        f:SetFrameStrata("DIALOG")
-        W.Texture(f, "BACKGROUND", { W.T.bg[1], W.T.bg[2], W.T.bg[3], 0.97 }):SetAllPoints()
-        W.Border(f, 1, W.T.border, "BORDER")
-        local t = W.Text(f, 11, W.T.accent)
-        t:SetPoint("TOPLEFT", 8, -7)
-        t:SetText("Ctrl+C to copy, Esc to close")
-        local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-        sf:SetPoint("TOPLEFT", 8, -26)
-        sf:SetPoint("BOTTOMRIGHT", -28, 8)
-        local eb = CreateFrame("EditBox", nil, sf)
-        eb:SetMultiLine(true)
-        eb:SetAutoFocus(false)
-        eb:SetFontObject(ChatFontNormal)
-        eb:SetWidth(420)
-        eb:SetScript("OnEscapePressed", function() f:Hide() end)
-        sf:SetScrollChild(eb)
-        f.eb = eb
-        copyBox = f
-    end
+    local f = CreateFrame("Frame", name, UIParent)
+    f:SetSize(w, h)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetClampedToScreen(true)
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    W.Texture(f, "BACKGROUND", { W.T.bg[1], W.T.bg[2], W.T.bg[3], 0.97 }):SetAllPoints()
+    W.Border(f, 1, W.T.border, "BORDER")
+    local t = W.Text(f, 11, W.T.accent)
+    t:SetPoint("TOPLEFT", 8, -7)
+    t:SetText(heading)
+    f.heading = t
+    local close = W.Button(f, 22, 18, "X")
+    close:SetPoint("TOPRIGHT", -5, -5)
+    close:SetScript("OnClick", function() f:Hide() end)
+    local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT", 8, -28)
+    sf:SetPoint("BOTTOMRIGHT", -28, 8)
+    local eb = CreateFrame("EditBox", nil, sf)
+    eb:SetMultiLine(true)
+    eb:SetAutoFocus(false)
+    eb:SetFontObject(ChatFontNormal)
+    eb:SetWidth(w - 40)
+    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    sf:SetScrollChild(eb)
+    f.eb = eb
+    return f
+end
+
+local function ShowCopy()
+    if not copyBox then copyBox = CopyWindow("CysDevCopy", 460, 260, "Ctrl+C to copy, Esc to close") end
     copyBox.eb:SetText(LogText())
     copyBox:Show()
     copyBox.eb:SetFocus()
     copyBox.eb:HighlightText()
+end
+
+-- /cui cpu also lands here, so the report can be copied without digging through chat
+local reportBox
+function D.ShowReport(lines)
+    if type(lines) ~= "table" or #lines == 0 then return end
+    if not reportBox then reportBox = CopyWindow("CysDevReport", 560, 330, "CPU report  (Ctrl+C to copy, Esc to close)") end
+    local out = { "Cys's UI CPU report - " .. date("%Y-%m-%d %H:%M:%S") }
+    for _, l in ipairs(lines) do
+        out[#out + 1] = (tostring(l):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+    end
+    reportBox:ClearAllPoints()
+    if win and win:IsShown() then -- right beside Stutter Watch (or on its left if there is no room)
+        if (win:GetRight() or 0) + 570 < (UIParent:GetRight() or 0) then
+            reportBox:SetPoint("TOPLEFT", win, "TOPRIGHT", 6, 0)
+        else
+            reportBox:SetPoint("TOPRIGHT", win, "TOPLEFT", -6, 0)
+        end
+    else
+        reportBox:SetPoint("CENTER")
+    end
+    reportBox.eb:SetText(table.concat(out, "\n"))
+    reportBox:Show()
+    reportBox.eb:SetFocus()
+    reportBox.eb:HighlightText()
 end
 
 local function Build()
@@ -189,7 +227,7 @@ local function Build()
     local W = CUI.W
     local T = W.T
     local db = DB()
-    local WIDTH = 460
+    local WIDTH = 600
     win = CreateFrame("Frame", "CysDevWindow", UIParent)
     win:SetSize(WIDTH, 380)
     win:SetFrameStrata("HIGH")
@@ -221,7 +259,7 @@ local function Build()
     local function Row(y)
         local r = W.Text(win, 11, T.text)
         r:SetPoint("TOPLEFT", 8, y)
-        r:SetWidth(WIDTH - 16)
+        r:SetPoint("RIGHT", win, "RIGHT", -8, 0)
         r:SetJustifyH("LEFT")
         r:SetWordWrap(false)
         return r
@@ -235,9 +273,9 @@ local function Build()
 
     local tip = W.Text(win, 11, T.desc)
     tip:SetPoint("TOPLEFT", 8, -304)
-    tip:SetWidth(WIDTH - 16)
+    tip:SetPoint("RIGHT", win, "RIGHT", -8, 0)
     tip:SetJustifyH("LEFT")
-    tip:SetText("|cFFFFD100If CysUI is the cause:|r type |cFFFFD100/cui cpu on|r, then |cFFFFD100/reload|r, play a bit where it stutters, then type |cFFFFD100/cui cpu|r to see which part of CysUI it is. |cFFFFD100/cui cpu off|r when done.")
+    tip:SetText("|cFFFFD100If CysUI is the cause:|r type |cFFFFD100/cui cpu on|r, then |cFFFFD100/reload|r, play a bit where it stutters, then press |cFFFFD100CPU report|r (or type |cFFFFD100/cui cpu|r) to see which part of CysUI it is. |cFFFFD100/cui cpu off|r when done.")
 
     local dd = W.Dropdown(win, 170, { { 50, "Stutter at: 50 ms+" }, { 100, "Stutter at: 100 ms+" }, { 200, "Stutter at: 200 ms+" } },
         function() return db.threshold end, function(v) db.threshold = v end)
@@ -248,6 +286,9 @@ local function Build()
     local copy = W.Button(win, 70, 22, "Copy", true)
     copy:SetPoint("BOTTOMRIGHT", -8, 8)
     copy:SetScript("OnClick", ShowCopy)
+    local cpu = W.Button(win, 96, 22, "CPU report")
+    cpu:SetPoint("RIGHT", reset, "LEFT", -6, 0)
+    cpu:SetScript("OnClick", function() SlashCmdList.CYSUI("cpu") end)
 
     -- frame timing
     local frames, acc, slowest, tick = 0, 0, 0, 0
@@ -269,6 +310,8 @@ local function Build()
             if grow < 0 then grow = 0 end
             statsText:SetText(format("|cFFFFD100%d|r fps   |cFFFFD100%.1f|r ms a frame (slowest %d)   Lua memory |cFFFFD100%.1f MB|r (+%d KB/s)   stutters: |cFFFFD100%d|r",
                 floor(frames / acc + 0.5), acc / frames * 1000, floor(slowest + 0.5), mem / 1024, floor(grow + 0.5), #log))
+            local need = math.ceil(statsText:GetStringWidth() + 20)
+            if need > win:GetWidth() then win:SetWidth(need) end
             frames, acc, slowest, tick = 0, 0, 0, 0
             memAt, memStart = GetTime(), mem
             TakeSnapshot()

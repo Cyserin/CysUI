@@ -465,33 +465,41 @@ SlashCmdList["CYSUI"] = function(msg)
         if CUI.Perf then CUI.Perf.Reset() end
         CUI:Print("Measurements cleared.")
     elseif msg == "cpu" then
-        if CysUIDB.perf and CUI.Perf then CUI.Perf.Report() end
-        -- which add-ons cost the most time per frame (the game's own add-on profiler, WoW Forever)
-        local P, M = C_AddOnProfiler, Enum and Enum.AddOnProfilerMetric
-        if not (P and P.GetTopKAddOnsForMetric and M) then
-            CUI:Print("This client has no add-on profiler.")
-            return
-        end
-        if P.IsEnabled and not P.IsEnabled() then CUI:Print("The game's add-on profiler is switched off, so there is nothing to show.") return end
-        local function Top(metric, label, fmt)
-            local ok, list = pcall(P.GetTopKAddOnsForMetric, metric, 6)
-            if not ok or type(list) ~= "table" or #list == 0 then return end
-            local parts = {}
-            for _, r in ipairs(list) do
-                if r.metricValue and r.metricValue > 0 then
-                    local name = r.addOnName == "CysUI" and "|cFFFFD100CysUI|r" or r.addOnName
-                    parts[#parts + 1] = name .. " " .. string.format(fmt, r.metricValue)
-                end
+        -- everything the report prints also goes to a copyable pop-up (next to Stutter Watch when it is open)
+        local captured, realPrint = {}, CUI.Print
+        CUI.Print = function(self, text, ...) captured[#captured + 1] = tostring(text); return realPrint(self, text, ...) end
+        local ok, err = pcall(function()
+            if CysUIDB.perf and CUI.Perf then CUI.Perf.Report() end
+            -- which add-ons cost the most time per frame (the game's own add-on profiler, WoW Forever)
+            local P, M = C_AddOnProfiler, Enum and Enum.AddOnProfilerMetric
+            if not (P and P.GetTopKAddOnsForMetric and M) then
+                CUI:Print("This client has no add-on profiler.")
+                return
             end
-            if #parts > 0 then CUI:Print("|cFFFFD100" .. label .. ":|r " .. table.concat(parts, ",  ")) end
-        end
-        local function Mine(metric) local ok, v = pcall(P.GetAddOnMetric, "CysUI", metric); return ok and v or 0 end
-        CUI:Print(string.format("CysUI: %.2f ms per frame now, %.2f ms on average this session, %d frames over 10 ms, %d over 50 ms.",
-            Mine(M.RecentAverageTime), Mine(M.SessionAverageTime), Mine(M.CountTimeOver10Ms), Mine(M.CountTimeOver50Ms)))
-        Top(M.RecentAverageTime, "Busiest right now (ms per frame)", "%.2f")
-        Top(M.CountTimeOver10Ms, "Most frames over 10 ms (stutters)", "%d")
-        Top(M.PeakTime, "Biggest single spike (ms)", "%.0f")
-        if not CysUIDB.perf then CUI:Print("To see which part of CysUI it is: /cui cpu on, then /reload.") end
+            if P.IsEnabled and not P.IsEnabled() then CUI:Print("The game's add-on profiler is switched off, so there is nothing to show.") return end
+            local function Top(metric, label, fmt)
+                local ok, list = pcall(P.GetTopKAddOnsForMetric, metric, 6)
+                if not ok or type(list) ~= "table" or #list == 0 then return end
+                local parts = {}
+                for _, r in ipairs(list) do
+                    if r.metricValue and r.metricValue > 0 then
+                        local name = r.addOnName == "CysUI" and "|cFFFFD100CysUI|r" or r.addOnName
+                        parts[#parts + 1] = name .. " " .. string.format(fmt, r.metricValue)
+                    end
+                end
+                if #parts > 0 then CUI:Print("|cFFFFD100" .. label .. ":|r " .. table.concat(parts, ",  ")) end
+            end
+            local function Mine(metric) local ok, v = pcall(P.GetAddOnMetric, "CysUI", metric); return ok and v or 0 end
+            CUI:Print(string.format("CysUI: %.2f ms per frame now, %.2f ms on average this session, %d frames over 10 ms, %d over 50 ms.",
+                Mine(M.RecentAverageTime), Mine(M.SessionAverageTime), Mine(M.CountTimeOver10Ms), Mine(M.CountTimeOver50Ms)))
+            Top(M.RecentAverageTime, "Busiest right now (ms per frame)", "%.2f")
+            Top(M.CountTimeOver10Ms, "Most frames over 10 ms (stutters)", "%d")
+            Top(M.PeakTime, "Biggest single spike (ms)", "%.0f")
+            if not CysUIDB.perf then CUI:Print("To see which part of CysUI it is: /cui cpu on, then /reload.") end
+        end)
+        CUI.Print = realPrint
+        if not ok then CUI:Print("CPU report error: " .. tostring(err)) end
+        if CUI.Dev and CUI.Dev.ShowReport then CUI.Dev.ShowReport(captured) end
     elseif msg == "offers" then
         -- what the game will tell an addon about quest givers on this map (Forever's world map draws quest lines only)
         local map = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
