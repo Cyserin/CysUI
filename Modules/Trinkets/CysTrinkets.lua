@@ -25,7 +25,6 @@ local DEFAULTS = {
     open = "hover",     -- hover / click: how the list opens
     layout = "row",     -- row (side by side) / column (stacked)
     size = 34,          -- button size
-    perRow = 5,         -- trinkets per row in the list
     useOnly = false,    -- list only trinkets with a Use: effect
     numbers = true,     -- cooldown numbers on the buttons
     -- key13, key14: keys that use each trinket
@@ -262,7 +261,7 @@ local function BuildMenu()
     menu:Hide()
     menu:SetScript("OnUpdate", function(self)
         -- close a moment after the mouse leaves both the list and the slot buttons
-        if MouseIsOver(self) or (TR.bar and MouseIsOver(TR.bar)) then hideAt = nil return end
+        if self:IsMouseOver() or (TR.bar and TR.bar:IsMouseOver()) then hideAt = nil return end
         if DB().open == "click" and not hideAt then hideAt = GetTime() + 1.5 end
         hideAt = hideAt or (GetTime() + 0.35)
         if GetTime() >= hideAt then self:Hide() end
@@ -275,14 +274,12 @@ local function PaintMenu()
     local db = DB()
     local list = Collect(menu.slot)
     local S, GAP, PAD = db.size, 3, 4
-    local cols = max(1, min(#list, db.perRow))
-    local rowsN = max(1, math.ceil(#list / db.perRow))
+    local cols, rowsN = max(1, #list), 1 -- one straight row
     for i, it in ipairs(list) do
         local b = menuButtons[i] or MenuButton(i)
         b:SetSize(S, S)
         b:ClearAllPoints()
-        local c, r = (i - 1) % db.perRow, floor((i - 1) / db.perRow)
-        b:SetPoint("TOPLEFT", PAD + c * (S + GAP), -PAD - r * (S + GAP))
+        b:SetPoint("TOPLEFT", PAD + (i - 1) * (S + GAP), -PAD)
         b.item = it
         b.icon:SetTexture(IconOf(it.id))
         b.icon:SetDesaturated(not HasUse(it.id))
@@ -303,11 +300,11 @@ function TR.OpenMenu(slot, anchor)
     BuildMenu()
     menu.slot = slot
     menu:ClearAllPoints()
-    -- open away from the screen edge the bar is nearest to
-    local bar = TR.bar
-    local below = bar and bar:GetBottom() and bar:GetBottom() > UIParent:GetHeight() / 2
-    if below then menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
-    else menu:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4) end
+    -- one straight row right above the trinket you point at (below it when the buttons sit near the top
+    -- of the screen); the first trinket in the list lines up with that slot
+    local _, y = anchor:GetCenter()
+    if y and y > UIParent:GetHeight() * 0.75 then menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -4, -6)
+    else menu:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", -4, 6) end
     hideAt = nil
     menu:Show()
     PaintMenu()
@@ -525,7 +522,7 @@ CUI:RegisterPage("Trinkets", function(page)
     local width = 480
     W.Header(page, "Trinkets", width):SetPoint("TOPLEFT", 0, -4)
     local y = -40
-    W.Dropdown(page, 260, { { "hover", "Open the list: When I point at a trinket" }, { "click", "Open the list: When I right-click a trinket" } },
+    W.Dropdown(page, 260, { { "hover", "List opens: On mouseover" }, { "click", "List opens: On right-click" } },
         function() return db.open end, function(v) db.open = v end):SetPoint("TOPLEFT", 4, y)
     y = y - 36
     W.Dropdown(page, 260, { { "row", "Buttons: Side by side" }, { "column", "Buttons: Stacked" } },
@@ -534,9 +531,7 @@ CUI:RegisterPage("Trinkets", function(page)
     W.Stepper(page, "Button size", function() return db.size end, function(v) db.size = v; TR.Layout(); PaintMenu() end, 24, 48, 2)
         :SetPoint("TOPLEFT", 4, y)
     y = y - 36
-    W.Stepper(page, "Trinkets per row in the list", function() return db.perRow end, function(v) db.perRow = v; PaintMenu() end, 2, 10, 1)
-        :SetPoint("TOPLEFT", 4, y)
-    y = y - 38
+    y = y - 2
     local function Check(label, key)
         local c = W.Checkbox(page, label, function() return db[key] end, function(on) db[key] = on; Paint() end)
         c:SetPoint("TOPLEFT", 4, y); y = y - 26

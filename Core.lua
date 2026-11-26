@@ -533,7 +533,7 @@ if CysChangelog then
                   "Cys's Alerts: zeroes the XP. WoW Forever gives the whole group no kill XP once its highest member is 13+ levels above the mob. Cys's UI now learns each dungeon's mob levels as you see them (saved for all your characters), and when you enter a dungeon or the group changes, a box like the Group level check says 'Name (40) will zero out the XP here'. Close it with the X, move it in Layout mode. /cuialerts xp shows what has been learned.",
               },
               improved = {
-                  "Threat Bar is now the Threat List: the bar, the pull warning and the threat % beside the target frame are gone; only the group threat list is left (same spot, same settings). Settings: /cui -> Threat List.",
+                  "Threat: the threat bar is gone (the nameplates already show the same thing). The group threat list, pull warning and your threat % beside the target frame stay. The page is now called Threat (/cui -> Threat).",
               },
               fixed = {
                   "Cast bar: no longer weaves in and out of a Cooldown Manager bar placed on top of it (like a new bar of racials and trinkets). The cast bar now always draws above the cooldown bars.",
