@@ -64,6 +64,7 @@ local function MakeRow(kind)
     top:SetFrameLevel(r.bar:GetFrameLevel() + 1)
     W.Border(top, 1, T.border, "OVERLAY") -- follows the Border color setting
     r.text = top:CreateFontString(nil, "OVERLAY")
+    r.text:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE") -- a font from the start: a line not laid out yet can still be cleared
     r.text:SetPoint("RIGHT", -3, 0)
     r:Hide()
     rows[kind] = r

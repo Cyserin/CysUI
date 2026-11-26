@@ -204,22 +204,22 @@ CysUpgrade.LEVEL_SETS = LEVEL_SETS
 local TANK_SURVIVAL = {
     ITEM_MOD_STAMINA_SHORT = 1, ITEM_MOD_HEALTH_SHORT = 0.1, ITEM_MOD_AGILITY_SHORT = 0.91, ITEM_MOD_STRENGTH_SHORT = 0.02,
     RESISTANCE0_NAME = 0.05, ITEM_MOD_DODGE_RATING_SHORT = 16.29, ITEM_MOD_PARRY_RATING_SHORT = 16.29,
-    ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 2.61, ITEM_MOD_BLOCK_VALUE_SHORT = 0.43,
+    ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 2.61, ITEM_MOD_BLOCK_VALUE_SHORT = 0.43, ITEM_MOD_BLOCK_VALUE_BONUS = 0.43,
 }
 local TANK_THREAT = {
     ITEM_MOD_ATTACK_POWER_SHORT = 1, ITEM_MOD_AGILITY_SHORT = 1.05, ITEM_MOD_STRENGTH_SHORT = 2,
-    ITEM_MOD_PARRY_RATING_SHORT = 7.47, ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 0.22, ITEM_MOD_BLOCK_VALUE_SHORT = 0.9,
+    ITEM_MOD_PARRY_RATING_SHORT = 7.47, ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 0.22, ITEM_MOD_BLOCK_VALUE_SHORT = 0.9, ITEM_MOD_BLOCK_VALUE_BONUS = 0.9,
     ITEM_MOD_CRIT_RATING_SHORT = 22, ITEM_MOD_HIT_RATING_SHORT = 27, ITEM_MOD_WEAPON_DPS = 7.5,
 }
 local TANK_EXTRA = {
     PALADIN = { threat = { ITEM_MOD_INTELLECT_SHORT = 1, ITEM_MOD_SPELL_POWER_SHORT = 0.8 } },
     DRUID = { threat = { ITEM_MOD_FERAL_ATTACK_POWER_SHORT = 1 },
-              drop = { ITEM_MOD_PARRY_RATING_SHORT = true, ITEM_MOD_BLOCK_VALUE_SHORT = true, ITEM_MOD_WEAPON_DPS = true } },
+              drop = { ITEM_MOD_PARRY_RATING_SHORT = true, ITEM_MOD_BLOCK_VALUE_SHORT = true, ITEM_MOD_BLOCK_VALUE_BONUS = true, ITEM_MOD_WEAPON_DPS = true } },
 }
 local TANK_ROW_ORDER = {
     "ITEM_MOD_STAMINA_SHORT", "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT", "ITEM_MOD_DODGE_RATING_SHORT", "ITEM_MOD_PARRY_RATING_SHORT",
     "RESISTANCE0_NAME", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_HIT_RATING_SHORT", "ITEM_MOD_CRIT_RATING_SHORT",
-    "ITEM_MOD_WEAPON_DPS", "ITEM_MOD_ATTACK_POWER_SHORT", "ITEM_MOD_FERAL_ATTACK_POWER_SHORT", "ITEM_MOD_BLOCK_VALUE_SHORT",
+    "ITEM_MOD_WEAPON_DPS", "ITEM_MOD_ATTACK_POWER_SHORT", "ITEM_MOD_FERAL_ATTACK_POWER_SHORT", "ITEM_MOD_BLOCK_VALUE_SHORT", "ITEM_MOD_BLOCK_VALUE_BONUS",
     "ITEM_MOD_HEALTH_SHORT", "ITEM_MOD_INTELLECT_SHORT", "ITEM_MOD_SPELL_POWER_SHORT",
 }
 -- the profile names the leveling sets give tanks, and the classes they belong to
@@ -327,7 +327,7 @@ local EQUIP_LINES = {
     { "^increases your chance to dodge an attack by (%d+)", "ITEM_MOD_DODGE_RATING" },
     { "^increases your chance to parry an attack by (%d+)", "ITEM_MOD_PARRY_RATING" },
     { "^increases your chance to block attacks with a shield by (%d+)", "ITEM_MOD_BLOCK_RATING" },
-    { "^increases the block value of your shield by (%d+)", "ITEM_MOD_BLOCK_VALUE" },
+    { "^increases the block value of your shield by (%d+)", "ITEM_MOD_BLOCK_VALUE_BONUS" },
     { "^increased defense %+(%d+)", "ITEM_MOD_DEFENSE_SKILL_RATING" },
     { "^decreases the magical resistances of your spell targets by (%d+)", "ITEM_MOD_SPELL_PENETRATION" },
     -- WoW Forever stats (wording not confirmed yet; the game's own GetItemStats also fills these in)
@@ -473,7 +473,9 @@ local function GetDetailedItemStats(itemLink)
     for k, v in pairs(GetItemStats(itemLink) or {}) do
         local key = NormalizeStatKey(k)
         -- the game's own damage-per-second entry duplicates the weapon DPS read above
-        if stats[key] == nil and key ~= "ITEM_MOD_DAMAGE_PER_SECOND" then stats[key] = v end
+        -- the game lists an Equip: block value bonus as plain Block Value; the tooltip reading already has it as Bonus
+        local dupBlock = key == "ITEM_MOD_BLOCK_VALUE" and stats["ITEM_MOD_BLOCK_VALUE_BONUS"] ~= nil
+        if stats[key] == nil and key ~= "ITEM_MOD_DAMAGE_PER_SECOND" and not dupBlock then stats[key] = v end
     end
 
     -- only keep it once the game has really loaded the item (an empty first read would stick otherwise)
@@ -506,6 +508,15 @@ local function GetBaseStats(itemLink)
     return out
 end
 
+-- Profiles made before Block Value was split into Base and Bonus have one Block Value weight: it covers both
+-- until the profile gets its own Block Value (Bonus) row.
+local function BlockBonusFallback(w)
+    if w["ITEM_MOD_BLOCK_VALUE_BONUS"] == nil and w["ITEM_MOD_BLOCK_VALUE"] ~= nil then
+        w["ITEM_MOD_BLOCK_VALUE_BONUS"] = w["ITEM_MOD_BLOCK_VALUE"]
+    end
+    return w
+end
+
 UpdateWeightsFromRows = function()
     CysUpgrade.weights = {}
     if CysUpgrade.statRows then
@@ -515,6 +526,7 @@ UpdateWeightsFromRows = function()
             end
         end
     end
+    BlockBonusFallback(CysUpgrade.weights)
 end
 
 local function IsItemValidForClass(itemLink)
@@ -570,6 +582,7 @@ function CysUpgrade:GetItemEP(itemLink, customWeights)
     local rawWeights = (type(customWeights) == "table") and customWeights or CysUpgrade.weights
     local weights = {}
     for k, v in pairs(rawWeights) do weights[NormalizeStatKey(k)] = v end
+    BlockBonusFallback(weights)
 
     local totalScore = 0
     
@@ -875,6 +888,7 @@ local FRIENDLY = {
     ITEM_MOD_EXPERTISE_RATING = "Expertise", ITEM_MOD_ARMOR_PENETRATION_RATING = "Armor Penetration",
     ITEM_MOD_DEFENSE_SKILL_RATING = "Defense", ITEM_MOD_DODGE_RATING = "Dodge Chance",
     ITEM_MOD_PARRY_RATING = "Parry Chance", ITEM_MOD_BLOCK_RATING = "Block Chance", ITEM_MOD_BLOCK_VALUE = "Block Value (Base)",
+    ITEM_MOD_BLOCK_VALUE_BONUS = "Block Value (Bonus)",
     ITEM_MOD_WEAPON_DAMAGE_MIN = "Weapon Damage (Min)", ITEM_MOD_WEAPON_DAMAGE_MAX = "Weapon Damage (Max)",
     ITEM_MOD_RANGED_DAMAGE_MIN = "Ranged Damage (Min)", ITEM_MOD_RANGED_DAMAGE_MAX = "Ranged Damage (Max)",
     ITEM_MOD_SPELL_ARCANE_DAMAGE = "Arcane Damage", ITEM_MOD_SPELL_FIRE_DAMAGE = "Fire Damage",
@@ -1251,6 +1265,7 @@ local STAT_REGISTRY = {
 { name = "Parry Chance", key = "ITEM_MOD_PARRY_RATING_SHORT" },
 { name = "Block Chance", key = "ITEM_MOD_BLOCK_RATING_SHORT" },
 { name = "Block Value", key = "ITEM_MOD_BLOCK_VALUE_SHORT" },
+{ name = "Block Value (Bonus)", key = "ITEM_MOD_BLOCK_VALUE_BONUS" },
 { name = "Arcane Resistance", key = "RESISTANCE6_NAME" },
 { name = "Fire Resistance", key = "RESISTANCE2_NAME" },
 { name = "Nature Resistance", key = "RESISTANCE3_NAME" },
@@ -1296,7 +1311,8 @@ defense = "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT",
 dodge = "ITEM_MOD_DODGE_RATING_SHORT", dodgechance = "ITEM_MOD_DODGE_RATING_SHORT",
 parry = "ITEM_MOD_PARRY_RATING_SHORT", parrychance = "ITEM_MOD_PARRY_RATING_SHORT",
 block = "ITEM_MOD_BLOCK_RATING_SHORT", blockchance = "ITEM_MOD_BLOCK_RATING_SHORT",
-blockvalue = "ITEM_MOD_BLOCK_VALUE_SHORT",
+blockvalue = "ITEM_MOD_BLOCK_VALUE_SHORT", blockvaluebase = "ITEM_MOD_BLOCK_VALUE_SHORT",
+blockvaluebonus = "ITEM_MOD_BLOCK_VALUE_BONUS", bonusblockvalue = "ITEM_MOD_BLOCK_VALUE_BONUS",
 arcaneresistance = "RESISTANCE6_NAME", arcaneres = "RESISTANCE6_NAME",
 fireresistance = "RESISTANCE2_NAME", fireres = "RESISTANCE2_NAME",
 natureresistance = "RESISTANCE3_NAME", natureres = "RESISTANCE3_NAME",
@@ -1363,7 +1379,7 @@ local SITE_NAMES = {
     ITEM_MOD_POWER_REGEN0_SHORT = "mp5", ITEM_MOD_HASTE_RATING_SHORT = "haste",
     ITEM_MOD_EXPERTISE_RATING_SHORT = "expertise", ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = "armorPenetration",
     ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = "defense", ITEM_MOD_DODGE_RATING_SHORT = "dodge",
-    ITEM_MOD_PARRY_RATING_SHORT = "parry", ITEM_MOD_BLOCK_RATING_SHORT = "block", ITEM_MOD_BLOCK_VALUE_SHORT = "blockValue",
+    ITEM_MOD_PARRY_RATING_SHORT = "parry", ITEM_MOD_BLOCK_RATING_SHORT = "block", ITEM_MOD_BLOCK_VALUE_SHORT = "blockValue", ITEM_MOD_BLOCK_VALUE_BONUS = "blockValueBonus",
     ITEM_MOD_HEALTH_SHORT = "health", ITEM_MOD_MANA_SHORT = "mana", ITEM_MOD_HEALTH_REGEN_SHORT = "hp5",
     ITEM_MOD_RANGED_ATTACK_POWER_SHORT = "rangedAttackPower", ITEM_MOD_FERAL_ATTACK_POWER_SHORT = "feralAttackPower",
 }
@@ -1660,6 +1676,7 @@ local STAT_CATEGORIES = {
 { text = "Parry Chance", key = "ITEM_MOD_PARRY_RATING_SHORT" },
 { text = "Block Chance", key = "ITEM_MOD_BLOCK_RATING_SHORT" },
 { text = "Block Value", key = "ITEM_MOD_BLOCK_VALUE_SHORT" },
+{ text = "Block Value (Bonus)", key = "ITEM_MOD_BLOCK_VALUE_BONUS" },
 }},
 { category = "RESISTANCES", stats = {
 { text = "Arcane Resistance", key = "RESISTANCE6_NAME" },

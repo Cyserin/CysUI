@@ -179,6 +179,9 @@ local function Create(key, unit, label, w, h, point, x, y)
     f.unit = unit
     f:SetSize(w, h)
     f:SetFrameStrata("MEDIUM")
+    -- sits well above the cooldown bars (also MEDIUM, their icons climb a few levels for timers and borders), so a
+    -- cooldown bar parked under or over the cast bar never weaves through it; set before the child frames are made
+    f:SetFrameLevel(100)
     f:Hide()
     W.Texture(f, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.9 }):SetAllPoints()
     W.Border(f, 1, T.border, "BORDER")

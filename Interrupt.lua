@@ -47,6 +47,19 @@ local function Format(db, target, spell, mine)
     return out
 end
 
+local function ChatBlocked(ch)
+    local f = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    if f then
+        local ok, locked = pcall(f)
+        if ok and locked == true then return true end
+    end
+    if ch == "SAY" or ch == "YELL" then
+        local inInst = IsInInstance()
+        if not inInst then return true end
+    end
+    return false
+end
+
 local function Deliver(db, text)
     local ch = db.channel
     if ch == "auto" then
@@ -63,6 +76,10 @@ local function Deliver(db, text)
         else ch = "RAID" end
     elseif ch == "say" then ch = "SAY"
     elseif ch == "yell" then ch = "YELL" end
+    -- The game blocks addon chat at times: Say and Yell need a key press outside instances, and while it locks
+    -- addon chat (C_ChatInfo.InChatMessagingLockdown, mid-fight in instances on newer clients) every channel is
+    -- refused with a "protected function" error that pcall can't catch. Then the line is shown only to you.
+    if ch and ChatBlocked(ch) then ch = nil end
     if ch then
         pcall(SendChatMessage, text, ch)
     else

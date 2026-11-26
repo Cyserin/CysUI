@@ -523,9 +523,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.32",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.33",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.33", date = "2026-11-25",
+              added = {
+                  "Cys's Alerts: healer low on mana. When a group healer drops under 30% mana (your pick on the Alerts page), a line like 'Healer low mana: Name 25%' shows in the same spot as Potion ready, and 'Healer out of mana' under 15%. Once per drop: it shows again only after they climb back 10% above the line. Healers go by the group's Healer role, or by class when nobody has one. By default only in dungeons and raids.",
+                  "Cys's Alerts: zeroes the XP. WoW Forever gives the whole group no kill XP once its highest member is 13+ levels above the mob. Cys's UI now learns each dungeon's mob levels as you see them (saved for all your characters), and when you enter a dungeon or the group changes, a box like the Group level check says 'Name (40) will zero out the XP here'. Close it with the X, move it in Layout mode. /cuialerts xp shows what has been learned.",
+              },
+              fixed = {
+                  "Cast bar: no longer weaves in and out of a Cooldown Manager bar placed on top of it (like a new bar of racials and trinkets). The cast bar now always draws above the cooldown bars.",
+                  "Upgrade weights: blockValueBonus from a SixtyUpgrades CSV is now read (it was skipped as not recognised). Block Value is split like on the site: Block Value is the shield's own block, Block Value (Bonus) is the +block value on gear. Profiles with only Block Value keep counting both.",
+              },
+            },
             { version = "0.58.32", date = "2026-11-24",
               added = {
                   "Cys's BiS: a dropdown at the top of the window swaps your list for Wowhead's level 60 pre-raid BiS list for any spec of your class (WoW Forever guides, all classes). Each slot shows what you have, where to get the rest, and the gain over what you wear with your Cys's Upgrade weights.",
