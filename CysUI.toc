@@ -46,6 +46,7 @@ Modules\Characters\CysCharacters.lua
 Modules\Hello\CysHello.lua
 Modules\MarkWheel\CysMarkWheel.lua
 Modules\WeaponSwap\CysWeaponSwap.lua
+Modules\Trinkets\CysTrinkets.lua
 Spotlight.lua
 GroupLoot.lua
 MicroMenu.lua

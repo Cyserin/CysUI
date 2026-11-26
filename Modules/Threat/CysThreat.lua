@@ -1,9 +1,7 @@
 --------------------------------------------------------------------------------
--- Cys's UI - threat bar, group threat list and pull warning
+-- Cys's UI - group threat list, pull warning and target threat %
+-- (The old threat bar is gone: the nameplates already show the same thing.)
 --
--- Threat bar: a flat bar under the middle of your screen that shows how much threat you have on your target.
---   * Damage dealer: green when you are safe, yellow when you are close to pulling it, red when it is on you.
---   * Tank: the colors flip - red when you are about to lose it, green when you hold it.
 -- Group threat list: everyone in your group (or raid) on your target's threat list, highest first, in class
 --   colors. Your own line is always shown. Only while you are in a group and fighting.
 -- Pull warning: a note in the Alerts box (or big red text) and a sound when your threat passes a set percent of
@@ -14,7 +12,7 @@
 -- still fill a bar and show as text, so the list keeps working there, but it can't be sorted (it stays in
 -- group order, tanks first). The pull warning then uses the game's own threat step instead ("you have more
 -- threat than the tank"), which stays readable for you on your own target.
--- Settings: /cui -> Threat Bar. Move the pieces in /cui layout.
+-- Settings: /cui -> Threat. Move the pieces in /cui layout.
 --------------------------------------------------------------------------------
 local CUI = CysUI
 local W = CUI.W
@@ -24,12 +22,6 @@ local floor, max, min = math.floor, math.max, math.min
 
 local DEFAULTS = {
     role = "auto",      -- auto / tank / dps
-    bar = true,         -- show the bar for my own threat
-    onlyGroup = false,  -- only show when you are in a group
-    showNumber = true,  -- the percent on the bar
-    hideIdle = true,    -- hide when your target has no threat on you
-    width = 220,
-    height = 16,
     list = true,        -- group threat list
     listSolo = false,   -- ... also when not in a group
     listRows = 5,
@@ -52,7 +44,6 @@ local function DB()
     return db
 end
 
-local frame, fill, label
 local sample   -- when set, the example is showing: { pct, status }
 
 local function IsTank()
@@ -159,7 +150,7 @@ local function CheckWarn(pct, status, tanking)
         over = status == 1
         if status == 0 then armed = true end
     end
-    if tanking then armed = false return end -- it's on me already; the bar says so
+    if tanking then armed = false return end -- it's on me already
     if over and armed then
         armed = false
         ShowWarn(pct)
@@ -342,51 +333,6 @@ local function UpdateList()
 end
 
 --------------------------------------------------------------------------------
--- Threat bar
---------------------------------------------------------------------------------
-local STATUS_TEXT = { [0] = "Safe", [1] = "Gaining", [2] = "Close", [3] = "Tanking" }
-
-local function UpdateBar(pct, status, tanking)
-    if not frame then return end
-    local db = DB()
-    if sample then
-        pct, status, tanking = sample.pct, sample.status, sample.status >= 3
-    else
-        if not db.bar then frame:Hide() return end
-        if db.onlyGroup and not IsInGroup() then frame:Hide() return end
-        if status == nil then frame:Hide() return end
-        if db.hideIdle and status == 0 and (not pct or pct <= 0) then frame:Hide() return end
-    end
-    local value
-    if pct then value = max(0, min(100, pct))
-    else value = ({ [0] = 8, [1] = 55, [2] = 85, [3] = 100 })[status] or 0 end
-    if tanking then value = 100 end
-
-    local tank = IsTank()
-    local r, g, b
-    if tank then
-        if tanking then r, g, b = 0.3, 0.85, 0.35
-        elseif value >= 80 then r, g, b = 1, 0.35, 0.25
-        else r, g, b = 1, 0.8, 0.2 end
-    else
-        if tanking then r, g, b = 1, 0.25, 0.2
-        elseif value >= 80 then r, g, b = 1, 0.65, 0.2
-        elseif value >= 50 then r, g, b = 1, 0.9, 0.25
-        else r, g, b = 0.3, 0.85, 0.35 end
-    end
-    fill:SetColorTexture(r, g, b, 0.9)
-    -- our own frame's width can come back locked on Forever: fall back to the saved width
-    local fw = Plain(frame:GetWidth()) or db.width
-    fill:SetWidth(max(1, (fw - 2) * value / 100))
-    if pct and db.showNumber then
-        label:SetText(string.format("%s  %d%%", tanking and (tank and "Tanking" or "Aggro") or "Threat", floor(value + 0.5)))
-    else
-        label:SetText(tank and tanking and "Tanking" or (STATUS_TEXT[status] or ""))
-    end
-    frame:Show()
-end
-
---------------------------------------------------------------------------------
 -- Threat percent beside the target frame
 --------------------------------------------------------------------------------
 local tpFrame, tpText
@@ -434,31 +380,16 @@ end
 
 local function Update()
     local pct, status, tanking = Read()
-    UpdateBar(pct, status, tanking)
     UpdateTargetPct(pct, status, tanking)
     UpdateList()
     if not sample then CheckWarn(pct, status, tanking) end
 end
 Update = CysUICompat.Guard("Threat", Update) -- WoW Forever: a locked value skips one update instead of erroring
 
+local built
 local function Build()
-    if frame then return end
-    local db = DB()
-    frame = CreateFrame("Frame", "CysThreatFrame", UIParent)
-    frame:SetSize(db.width, db.height)
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -170)
-    frame:SetFrameStrata("MEDIUM")
-    W.Texture(frame, "BACKGROUND", { 0.08, 0.085, 0.1, 0.85 }):SetAllPoints()
-    W.Border(frame, 1, T.border, "BORDER")
-    fill = frame:CreateTexture(nil, "ARTWORK")
-    fill:SetPoint("TOPLEFT", 1, -1); fill:SetPoint("BOTTOMLEFT", 1, 1)
-    fill:SetColorTexture(0.3, 0.85, 0.35, 0.9)
-    fill:SetWidth(1)
-    label = frame:CreateFontString(nil, "OVERLAY")
-    label:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
-    label:SetPoint("CENTER")
-    frame:Hide()
-    CUI:RegisterMovable(frame, "threat", "Threat Bar", { point = "CENTER", x = 0, y = -170, resizable = true, minW = 100 })
+    if built then return end
+    built = true
     BuildList()
     BuildWarn()
 end
@@ -494,21 +425,21 @@ end
 
 CUI:RegisterModule({
     key = "threat",
-    name = "Threat Bar",
-    defaultOff = true, -- the nameplates already color by threat; tick it on if you want the bar too
+    name = "Threat",
+    defaultOff = true, -- the nameplates already color by threat; tick it on if you want these too
     addon = "CysUI",
-    desc = "A bar for your threat on your target (colors flip for tanks), a group threat list and a pull warning. Move them in /cui layout.",
+    desc = "A group threat list, a pull warning and your threat % beside the target frame. Move them in /cui layout.",
     onEnable = Enable,
-    open = function() CUI:OpenConfig("Threat Bar") end,
+    open = function() CUI:OpenConfig("Threat") end,
 })
 
-CUI:RegisterPage("Threat Bar", function(page)
+CUI:RegisterPage("Threat", function(page)
     local db = DB()
     local width = 480
     W.Header(page, "Threat", width):SetPoint("TOPLEFT", 0, -4)
     local intro = W.Text(page, 12, T.text)
     intro:SetPoint("TOPLEFT", 4, -34); intro:SetWidth(width - 8); intro:SetJustifyV("TOP"); intro:SetSpacing(3)
-    intro:SetText("Your threat on your target, the whole group's threat and a warning before you pull. Move and resize them with /cui layout.")
+    intro:SetText("The whole group's threat, a warning before you pull and your threat % beside the target frame. Move them with /cui layout.")
 
     local y = -76
     local dd = W.Dropdown(page, 220, { { "auto", "Colors for: Automatic" }, { "tank", "Colors for: Tank" }, { "dps", "Colors for: Damage dealer" } },
@@ -524,11 +455,6 @@ CUI:RegisterPage("Threat Bar", function(page)
         y = y - 32
     end
 
-    Sub("Threat bar")
-    Check("Show the bar for my threat", "bar")
-    Check("Hide the bar when my target has no threat on me", "hideIdle")
-    Check("Only show it when I am in a group", "onlyGroup")
-    Check("Show the percent number", "showNumber")
     Check("My threat % beside the target frame (in a group)", "targetPct")
 
     Sub("Group threat list")
@@ -555,12 +481,10 @@ CUI:RegisterPage("Threat Bar", function(page)
     test:SetScript("OnClick", Example)
     W.Notes(page, 4, y - 40, width, "", {
         "Automatic uses your group role while you are in a group. Solo (or with no role set) it counts you as a tank with most talent points in Protection (Warrior, Paladin), in Bear Form, or with Rockbiter Weapon on (Shaman), the same as the nameplates.",
-        "Damage dealer: green is safe, yellow is getting close, red means the mob is on you. Tank: green means you hold it, red means you are about to lose it.",
         "The percent is how close you are to pulling: 100% means the mob comes for you (the tank shows 100%). Melee pull at 110% of the tank's threat, ranged at 130%; the game works that out for you.",
         "The group list shows only in a group while someone has threat on your target. Your own line is always on it, marked in gold.",
         "The pull warning uses the Alerts box when the Alerts module is on; otherwise it shows as big red text you can move in /cui layout.",
         "The percent beside the target frame is white when safe, then yellow, orange and red as you get close to pulling. For tanks it is green while you hold the mob.",
         "WoW Forever hides threat numbers on bosses during a fight. The list still shows everyone's bar but in group order (tanks first), and the pull warning fires when the game says you have more threat than the tank.",
-        "Some Classic clients only report a four-step status instead of a percent. Then the bar shows Safe, Gaining, Close or Tanking.",
     })
 end)

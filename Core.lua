@@ -528,8 +528,12 @@ if CysChangelog then
         entries = {
             { version = "0.58.33", date = "2026-11-25",
               added = {
+                  "Trinkets: two buttons for your trinket slots. Click one to use it; point at one (or right-click, your pick) and a list of the trinkets in your bags opens. Left-click puts a trinket in that slot, right-click in the other one, shift-click links it. Swaps made in combat wait and go on when the fight ends (right-click the slot to cancel). Optional keys per trinket. Move it in Layout mode. Settings: /cui -> Trinkets. New file: restart the game once.",
                   "Cys's Alerts: healer low on mana. When a group healer drops under 30% mana (your pick on the Alerts page), a line like 'Healer low mana: Name 25%' shows in the same spot as Potion ready, and 'Healer out of mana' under 15%. Once per drop: it shows again only after they climb back 10% above the line. Healers go by the group's Healer role, or by class when nobody has one. By default only in dungeons and raids.",
                   "Cys's Alerts: zeroes the XP. WoW Forever gives the whole group no kill XP once its highest member is 13+ levels above the mob. Cys's UI now learns each dungeon's mob levels as you see them (saved for all your characters), and when you enter a dungeon or the group changes, a box like the Group level check says 'Name (40) will zero out the XP here'. Close it with the X, move it in Layout mode. /cuialerts xp shows what has been learned.",
+              },
+              improved = {
+                  "Threat Bar is now the Threat List: the bar, the pull warning and the threat % beside the target frame are gone; only the group threat list is left (same spot, same settings). Settings: /cui -> Threat List.",
               },
               fixed = {
                   "Cast bar: no longer weaves in and out of a Cooldown Manager bar placed on top of it (like a new bar of racials and trinkets). The cast bar now always draws above the cooldown bars.",

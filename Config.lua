@@ -23,8 +23,8 @@ local GROUPS = {
                             "Chat", "Friends", "Guild Recruiter", "Cys's UI Users" } },
     { "Frames & Combat",  { "Unit Frames", "Raid Frames", "Cast Bar", "PlayerAuras", "Nameplates", "Action Bars", "Click-Casting",
                             "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log",
-                            "Swing Timer", "Threat Bar", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick",
-                            "Marker Wheel", "Weapon Swap", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
+                            "Swing Timer", "Threat List", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick",
+                            "Marker Wheel", "Weapon Swap", "Trinkets", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
     { "Items & Leveling", { "Vendor", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Tracked Recipes", "Upgrade", "BiS List",
                             "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
 }
@@ -37,8 +37,8 @@ local MERGED = {
     { "Social",         { "Chat", "Friends", "Guild Recruiter", "Cys's UI Users" } },
     { "Unit Frames",    { "Unit Frames", "Raid Frames", "Cast Bar", "PlayerAuras" } },
     { "Damage Meter",   { "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log" } },
-    { "Combat Helpers", { "Swing Timer", "Threat Bar", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick" } },
-    { "Handy Extras",   { "Marker Wheel", "Weapon Swap", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
+    { "Combat Helpers", { "Swing Timer", "Threat List", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick" } },
+    { "Handy Extras",   { "Marker Wheel", "Weapon Swap", "Trinkets", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
     { "Vendor & Bags",  { "Vendor", "Consumables", "Durability" } },
     { "Loot",           { "Loot", "Roll Tracker", "Crate Tracker" } },
     { "Leveling",       { "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
@@ -328,7 +328,7 @@ end
 
 -- Modules page groups, most-used first. Modules not listed land in "Other".
 local MODULE_GROUPS = {
-    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel", "weaponswap", "clickcast", "vehicleexit", "alerts", "manatick" } },
+    { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel", "weaponswap", "trinkets", "clickcast", "vehicleexit", "alerts", "manatick" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "runs", "characters", "micromenu", "tooltip", "skins", "friends", "recruit", "hello", "scale", "durability", "automation", "questlist", "flight" } },
     { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade", "bis", "queststart", "crates", "recipes" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "talentplan", "healadvisor", "warrior", "shoutremind" } },
