@@ -879,16 +879,35 @@ local BLIZZARD = {
     party = { "PartyMemberFrame1", "PartyMemberFrame2", "PartyMemberFrame3", "PartyMemberFrame4", "PartyFrame" },
 }
 
+-- Blizzard's own health/power bars inside a unit frame. They register their own events, so muting the
+-- frame alone leaves them updating in the background (on WoW Forever that runs into locked "secret" health
+-- values and throws taint errors blamed on CysUI, e.g. when the Character window opens).
+local function BlizzardBars(fr)
+    local bars = {}
+    local function add(b) if b and b.UnregisterAllEvents then bars[#bars + 1] = b end end
+    add(fr.healthbar); add(fr.healthBar); add(fr.HealthBar)
+    add(fr.manabar); add(fr.manaBar); add(fr.ManaBar)
+    local hbc = fr.HealthBarsContainer
+    if hbc then add(hbc.healthBar); add(hbc.HealthBar) end
+    return bars
+end
+
+local function Quiet(obj)
+    if obj.UnregisterAllEvents then pcall(obj.UnregisterAllEvents, obj) end
+    if obj.SetScript and obj.HasScript then
+        if obj:HasScript("OnUpdate") then pcall(obj.SetScript, obj, "OnUpdate", nil) end
+    end
+end
+
 -- Park Blizzard's frame somewhere it can never come back (we're out of combat at login).
 local function HideBlizzard(key)
     for _, name in ipairs(BLIZZARD[key] or {}) do
         local fr = _G[name]
         if fr then
-            pcall(function()
-                if fr.UnregisterAllEvents then fr:UnregisterAllEvents() end
-                fr:SetParent(hidden)
-                fr:Hide()
-            end)
+            Quiet(fr)
+            for _, bar in ipairs(BlizzardBars(fr)) do Quiet(bar) end
+            pcall(fr.SetParent, fr, hidden)
+            pcall(fr.Hide, fr)
         end
     end
 end
