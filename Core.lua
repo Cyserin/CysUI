@@ -541,7 +541,8 @@ if CysChangelog then
               },
               improved = {
                   "Look, Skins tab: Window style is now a dropdown, with the new Font dropdown beside it.",
-                  "Settings window: crisp drawn icons instead of letters for the close button, search clear, dropdown arrows (flip up while open), sidebar fold arrows and the - / + buttons.",
+                  "Settings window: crisp drawn icons instead of letters for the close button, search clear, dropdown arrows (flip up while open), and sidebar fold arrows.",
+                  "Settings: number settings (UI scale, sizes, spacing and the rest) are now slim sliders instead of round - / + buttons. Drag the knob or click the track, roll the mouse wheel over the row for one step, or click the number and type a value (Enter to apply). The setting applies when you let go of the knob.",
                   "Cys's BiS is gone, to keep the UI lighter: no BiS window, BiS button, BiS tooltip lines or BiS drop pop-ups. Cys's Upgrade still scores your gear.",
                   "Upgrade: tank profiles set their Survival / Threat mix with the - and + buttons beside the Weights header on the Upgrade page (it used to live in the BiS window).",
                   "Crate Tracker: a crate's heading says Ready when you have everything for it, and 2 of 4 items while you're still gathering (it used to read 0 / 4).",

@@ -554,34 +554,25 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     return b
 end
 
--- Stepper: "Label        ( - )  [ 20s ]  ( + )" - round gold buttons around a dark value pill, the row lights
--- up under the mouse like a switch row, and a button greys out at its limit.
-local function RoundButton(parent, text, onHover)
-    local b = CreateFrame("Button", nil, parent)
-    b:SetSize(18, 18)
-    b.bg = b:CreateTexture(nil, "BORDER")
-    b.bg:SetTexture(CIRCLE)
-    b.bg:SetAllPoints()
-    b.txt = W.Glyph(b, text == "-" and "minus" or "plus", 8, T.dark, 2)
-    b.txt:SetPoint("CENTER", 0, 0)
-    function b:Paint()
-        local on = self:IsEnabled()
-        local c = not on and OFF_TRACK or (self.hot and T.glow or T.brand)
-        self.bg:SetVertexColor(c[1], c[2], c[3], 1)
-        local tc = on and T.dark or OFF_KNOB
-        self.txt:SetColor(tc)
-    end
-    b:SetScript("OnEnter", function(s) s.hot = true; s:Paint(); onHover() end)
-    b:SetScript("OnLeave", function(s) s.hot = false; s:Paint(); onHover() end)
-    b:SetScript("OnMouseDown", function(s) if s:IsEnabled() then s.txt:SetPoint("CENTER", 0, -1) end end)
-    b:SetScript("OnMouseUp", function(s) s.txt:SetPoint("CENTER", 0, 0) end)
-    return b
+-- Stepper: "Label                 [====o-------]  [ 100% ]" - a slim slider with a gold fill and a round knob,
+-- and the value in a small box you can click to type a number. Drag the knob (or click the track), or roll the
+-- mouse wheel over the row for one step. While dragging only the number moves; the setting is saved when you let
+-- go, so heavy settings (UI scale) don't re-apply on every pixel. The row lights up under the mouse like a switch row.
+local SLIDER_W, VALUE_W = 124, 48
+local function StepText(v, step, suffix)
+    local s
+    if type(v) ~= "number" then s = tostring(v)
+    elseif step and step % 1 ~= 0 then s = (string.format("%.2f", v):gsub("0+$", ""):gsub("%.$", ""))
+    else s = tostring(math.floor(v + 0.5)) end
+    return s .. (suffix or "")
 end
 
 function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
+    step = step or 1
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(320, 22)
     f:EnableMouse(true)
+    f:EnableMouseWheel(true)
     f.hl = f:CreateTexture(nil, "BACKGROUND")
     f.hl:SetColorTexture(1, 1, 1, 0.045)
     f.hl:SetPoint("TOPLEFT", -6, 1)
@@ -590,44 +581,141 @@ function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
     f.label = W.Text(f, 12, T.text)
     f.label:SetPoint("LEFT", 0, 0)
     f.label:SetText(label)
-    -- a long label widens the row instead of sliding under the buttons
-    local needW = (f.label:GetStringWidth() or 0) + 124
+    -- a long label widens the row instead of sliding under the slider
+    local needW = (f.label:GetStringWidth() or 0) + SLIDER_W + VALUE_W + 30
     if needW > 320 then f:SetWidth(needW) end
 
+    local function Snap(v)
+        v = minValue + math.floor((v - minValue) / step + 0.5) * step
+        if step % 1 == 0 then v = math.floor(v + 0.5) end
+        return min(maxValue, max(minValue, v))
+    end
+
+    -- value box: dark field, gold number; click to type
+    local box = CreateFrame("EditBox", nil, f)
+    box:SetSize(VALUE_W, 18)
+    box:SetPoint("RIGHT", 0, 0)
+    box:SetAutoFocus(false)
+    box:SetFont(CysUICompat.Font(), CysUICompat.FontSize(12), "")
+    box:SetJustifyH("CENTER")
+    box:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+    box:SetMaxLetters(8)
+    W.Texture(box, "BACKGROUND", T.field):SetAllPoints()
+    box.edges = W.Border(box, 1, T.line, "BORDER")
+    f.value = box
+
+    -- track: a thin rounded bar, gold up to the value, with a knob on top
+    local track = CreateFrame("Frame", nil, f)
+    track:SetSize(SLIDER_W, 16)
+    track:SetPoint("RIGHT", box, "LEFT", -12, 0)
+    track:EnableMouse(true)
+    local bar = CreateFrame("Frame", nil, track)
+    bar:SetHeight(4)
+    bar:SetPoint("LEFT", 0, 0); bar:SetPoint("RIGHT", 0, 0)
+    local back = Pill(bar, "BORDER", 0, SLIDER_W, 4)
+    back:Color(OFF_TRACK[1], OFF_TRACK[2], OFF_TRACK[3], 1)
+    local fillF = CreateFrame("Frame", nil, bar)
+    fillF:SetHeight(4)
+    fillF:SetPoint("LEFT", 0, 0)
+    local fill = Pill(fillF, "ARTWORK", 0, 10, 4)
+    -- the knob lives on its own frame above the bar (a child frame always draws over its parent's textures),
+    -- with a dark ring so it stands out against the gold fill
+    local knobF = CreateFrame("Frame", nil, track)
+    knobF:SetSize(14, 14)
+    knobF:SetFrameLevel(bar:GetFrameLevel() + 5)
+    local ring = knobF:CreateTexture(nil, "ARTWORK")
+    ring:SetTexture(CIRCLE)
+    ring:SetAllPoints()
+    ring:SetVertexColor(T.dark[1], T.dark[2], T.dark[3], 1)
+    local knob = knobF:CreateTexture(nil, "OVERLAY")
+    knob:SetTexture(CIRCLE)
+    knob:SetSize(10, 10)
+    knob:SetPoint("CENTER")
+    f.track, f.knob = track, knob
+
+    local shown -- the value drawn right now (differs from get() while dragging)
+    local function Draw(v)
+        shown = v
+        local frac = (type(v) == "number" and maxValue > minValue) and (v - minValue) / (maxValue - minValue) or 0
+        frac = min(1, max(0, frac))
+        local x = frac * SLIDER_W
+        knobF:ClearAllPoints()
+        knobF:SetPoint("CENTER", track, "LEFT", x, 0)
+        fillF:SetWidth(max(4, x))
+        fillF:SetShown(frac > 0)
+        if not box:HasFocus() then box:SetText(StepText(v, step, suffix)) end
+    end
+
     local function Hot()
-        local hot = f:IsMouseOver()
-        f.hl:SetShown(hot)
+        local hot = f:IsMouseOver() or f.dragging
+        f.hl:SetShown(hot and true or false)
         local c = hot and T.accent or T.text
         f.label:SetTextColor(c[1], c[2], c[3])
+        local kc = hot and T.glow or T.text
+        knob:SetVertexColor(kc[1], kc[2], kc[3], 1)
+        local fc = T.brand
+        fill:Color(fc[1], fc[2], fc[3], 1)
+        W.SetBorder(box.edges, (box:HasFocus() or box.hot) and T.glow or T.line)
     end
+    f.Hot = Hot
+
+    local function Commit(v)
+        v = Snap(v)
+        if v ~= get() then set(v) end
+        f:Refresh()
+    end
+
+    local function CursorValue()
+        local x = GetCursorPosition() / track:GetEffectiveScale()
+        local left = track:GetLeft() or 0
+        return minValue + (maxValue - minValue) * min(1, max(0, (x - left) / SLIDER_W))
+    end
+    track:SetScript("OnMouseDown", function(_, button)
+        if button ~= "LeftButton" or type(get()) ~= "number" then return end
+        box:ClearFocus()
+        f.dragging = true
+        Draw(Snap(CursorValue()))
+        track:SetScript("OnUpdate", function()
+            local v = Snap(CursorValue())
+            if v ~= shown then Draw(v) end
+        end)
+        Hot()
+    end)
+    track:SetScript("OnMouseUp", function()
+        if not f.dragging then return end
+        f.dragging = nil
+        track:SetScript("OnUpdate", nil)
+        Commit(shown)
+        Hot()
+    end)
+    track:SetScript("OnEnter", Hot)
+    track:SetScript("OnLeave", Hot)
+
+    f:SetScript("OnMouseWheel", function(_, delta)
+        local v = get()
+        if type(v) ~= "number" or f.dragging then return end
+        Commit(v + (delta > 0 and step or -step))
+    end)
     f:SetScript("OnEnter", Hot)
     f:SetScript("OnLeave", Hot)
 
-    local plus = RoundButton(f, "+", Hot)
-    plus:SetPoint("RIGHT", 0, 0)
-    local pill = CreateFrame("Frame", nil, f)
-    pill:SetSize(60, 18)
-    pill:SetPoint("RIGHT", plus, "LEFT", -5, 0)
-    Pill(pill, "BORDER", 0, 60, 18):Color(T.field[1], T.field[2], T.field[3], 1)
-    f.value = W.Text(pill, 12, T.accent, "CENTER")
-    f.value:SetPoint("CENTER", 0, 0)
-    f.value:SetWidth(56)
-    local minus = RoundButton(f, "-", Hot)
-    minus:SetPoint("RIGHT", pill, "LEFT", -5, 0)
-    f.minus, f.plus = minus, plus
+    box:SetScript("OnEnter", function(s) s.hot = true; Hot() end)
+    box:SetScript("OnLeave", function(s) s.hot = false; Hot() end)
+    box:SetScript("OnEditFocusGained", function(s) s:SetText(StepText(get(), step)); s:HighlightText(); Hot() end)
+    box:SetScript("OnEditFocusLost", function(s) s:HighlightText(0, 0); f:Refresh(); Hot() end)
+    box:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
+    box:SetScript("OnEnterPressed", function(s)
+        local n = tonumber((s:GetText() or ""):match("%-?[%d%.]+") or "")
+        s:ClearFocus()
+        if n and type(get()) == "number" then Commit(n) end
+    end)
 
     function f:Refresh()
-        local v = get()
-        self.value:SetText(tostring(v) .. (suffix or ""))
-        if type(v) == "number" then
-            if v <= minValue then minus:Disable() else minus:Enable() end
-            if v >= maxValue then plus:Disable() else plus:Enable() end
-        end
-        minus:Paint(); plus:Paint()
+        if self.dragging then return end
+        Draw(get())
     end
-    minus:SetScript("OnClick", function() set(max(minValue, get() - step)); f:Refresh() end)
-    plus:SetScript("OnClick", function() set(min(maxValue, get() + step)); f:Refresh() end)
     f:Refresh()
+    Hot()
     return f
 end
 
