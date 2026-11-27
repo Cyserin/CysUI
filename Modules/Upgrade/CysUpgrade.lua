@@ -1778,6 +1778,19 @@ function CysUpgrade.GetTankBlend()
     if not CysUpgrade.IsTankProfile(name) then return nil end
     local prof = CharDB().profiles[name]
     if not prof then return nil end
+    if not prof.blend then
+        -- a tank profile made from the Leveling buttons got the blend's rows but no mark: if its rows are
+        -- still exactly the default mix, mark it now (rows you edited yourself stay your own)
+        local def = CysUpgrade.TankRows(select(2, UnitClass("player")), CysUpgrade.TANK_DEFAULT)
+        local rows = prof.statRows or {}
+        local same = #rows == #def
+        if same then
+            local have = {}
+            for _, r in ipairs(rows) do have[r.key or ""] = tonumber(r.weight) end
+            for _, r in ipairs(def) do if have[r.key] ~= r.weight then same = false break end end
+        end
+        if same then prof.blend = CysUpgrade.TANK_DEFAULT end
+    end
     return prof.blend or false
 end
 function CysUpgrade.SetTankBlend(pct)
@@ -2103,6 +2116,7 @@ local function BuildUpgradeSettingsPage(page)
                     local rows = {}
                     for i, r in ipairs(stage.rows) do rows[i] = { key = r.key, weight = r.weight } end
                     cd.profiles[stage.name] = { statRows = rows }
+                    if CysUpgrade.IsTankProfile(stage.name) then cd.profiles[stage.name].blend = CysUpgrade.TANK_DEFAULT end
                     made = made + 1
                 end
             end
