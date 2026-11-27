@@ -374,7 +374,7 @@ function KT.Enable()
     W.Border(frame, 1, T.border, "BORDER")
 
     text = W.Text(frame, 12, T.accent, "CENTER")
-    text:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+    text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(12), "OUTLINE")
     text:SetPoint("CENTER", 0, 0)
 
     CUI:RegisterMovable(frame, "killtracker", "Kill Tracker", { point = "CENTER", x = 0, y = -180, scalable = true,
@@ -394,7 +394,7 @@ function KT.Enable()
     alert:SetSize(300, 30)
     alert:SetFrameStrata("HIGH")
     alertText = alert:CreateFontString(nil, "OVERLAY")
-    alertText:SetFont(STANDARD_TEXT_FONT, 20, "OUTLINE")
+    alertText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(20), "OUTLINE")
     alertText:SetTextColor(T.green[1], T.green[2], T.green[3])
     alertText:SetPoint("CENTER")
     alert:Hide()

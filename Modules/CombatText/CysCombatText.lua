@@ -131,7 +131,7 @@ local function Spawn(lane, text, r, g, b, opts)
     local e = Acquire()
     if not e then return end
     local size = floor(db.size * (opts.size or 1) + 0.5)
-    e.fs:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+    e.fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
     e.fs:SetText(text)
     e.fs:SetTextColor(r, g, b)
     laneCount[lane] = ((laneCount[lane] or 0) % #STAGGER) + 1

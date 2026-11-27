@@ -64,7 +64,7 @@ end
 
 local function Text(parent, size, color, justify)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(STANDARD_TEXT_FONT, size, "")
+    fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "")
     fs:SetTextColor(color[1], color[2], color[3])
     fs:SetJustifyH(justify or "LEFT")
     return fs

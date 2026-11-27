@@ -2301,7 +2301,7 @@ local function UpdateEnchants()
             local fs = enchantText[btn]
             if not fs then
                 fs = btn:CreateFontString(nil, "OVERLAY")
-                fs:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+                fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE")
                 if s[3] == "LEFT" then
                     fs:SetPoint("LEFT", btn, "RIGHT", 4, 0); fs:SetJustifyH("LEFT")
                 else
@@ -2436,7 +2436,7 @@ local function SkinWorldMap()
         bar:SetHeight(18)
         W.Texture(bar, "BACKGROUND", { 0, 0, 0, 0.55 }):SetAllPoints()
         local txt = bar:CreateFontString(nil, "OVERLAY")
-        txt:SetFont(STANDARD_TEXT_FONT, 11, "")
+        txt:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "")
         txt:SetPoint("CENTER")
         txt:SetTextColor(T.text[1], T.text[2], T.text[3])
         f.cysCoords = bar
@@ -4233,36 +4233,31 @@ CUI:RegisterPage("Skins", function(page)
     bnote:SetText("Applies right away to every frame edge in Cys's UI and the skinned windows. If something keeps its old color, type /reload.")
     local extra = math.floor((#styles - 1) / 5) * 30 -- a second row of colours pushes the rest down
 
-    -- Window style: Soft (warm, see-through, quieter edges) or Classic (flat black, full edges)
-    W.Header(page, "Window style", width):SetPoint("TOPLEFT", 0, -100 - extra)
-    local wsButtons = {}
-    local function RefreshWS()
-        local cur = CysUIDB.windowStyle or "soft"
-        for key, b in pairs(wsButtons) do W.SetBorder(b.edges, key == cur and T.glow or T.line) end
+    -- Window style (Soft: warm, see-through, quieter edges / Classic: flat black, full edges) and the UI font
+    W.Header(page, "Window style and font", width):SetPoint("TOPLEFT", 0, -100 - extra)
+    local function Picker(x, label, opts, get, set)
+        local l = W.Text(page, 12, T.accent)
+        l:SetPoint("TOPLEFT", x, -130 - extra)
+        l:SetText(label)
+        local d = W.Dropdown(page, 150, opts, get, set)
+        d:SetPoint("TOPLEFT", x, -148 - extra)
+        return d
     end
-    for i, st in ipairs(W.WINDOW_STYLES) do
-        local b = CreateFrame("Button", nil, page)
-        b:SetSize(90, 26)
-        b:SetPoint("TOPLEFT", 4 + (i - 1) * 94, -130 - extra)
-        W.Texture(b, "BACKGROUND", T.button):SetAllPoints()
-        b.edges = W.Border(b, 1, T.line, "BORDER")
-        local label = W.Text(b, 10, T.text, "CENTER")
-        label:SetPoint("CENTER")
-        label:SetText(st.label)
-        b:SetScript("OnClick", function()
-            CysUIDB.windowStyle = st.key
-            RefreshWS()
-            CUI:Print("Window style: " .. st.label .. ". Type /reload to apply it.")
-        end)
-        b:SetScript("OnEnter", function() W.SetBorder(b.edges, T.glow) end)
-        b:SetScript("OnLeave", RefreshWS)
-        wsButtons[st.key] = b
-    end
-    RefreshWS()
+    local wsOpts, fontOpts = {}, {}
+    for _, st in ipairs(W.WINDOW_STYLES) do wsOpts[#wsOpts + 1] = { st.key, st.label } end
+    for _, ft in ipairs(CysUICompat.FONTS) do fontOpts[#fontOpts + 1] = { ft.key, ft.label } end
+    Picker(4, "Window style", wsOpts, function() return CysUIDB.windowStyle or "soft" end, function(v)
+        CysUIDB.windowStyle = v
+        CUI:Print("Window style changed. Type /reload to apply it.")
+    end)
+    local fontPick = Picker(170, "Font", fontOpts, function() return CysUIDB.font or "cys" end, function(v)
+        CysUIDB.font = v
+        CUI:Print("Font changed. Type /reload to apply it.")
+    end)
     local wsNote = W.Text(page, 11, T.desc)
-    wsNote:SetPoint("LEFT", wsButtons[W.WINDOW_STYLES[#W.WINDOW_STYLES].key], "RIGHT", 10, 0)
-    wsNote:SetText("Needs a /reload.")
-    extra = extra + 64
+    wsNote:SetPoint("LEFT", fontPick, "RIGHT", 12, 0)
+    wsNote:SetText("Both need a /reload.")
+    extra = extra + 84
 
     W.Header(page, "Skins", width):SetPoint("TOPLEFT", 0, -100 - extra)
     local y = -130 - extra

@@ -148,7 +148,7 @@ local function BuildRing(w, name)
     Circle(ring, "BORDER", 1, HUB * 2 - 3, T.bg, 1)
 
     local label = ring:CreateFontString(nil, "OVERLAY")
-    label:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+    label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE")
     label:SetPoint("CENTER", 0, 0)
 
     local step = 2 * math.pi / 9

@@ -151,7 +151,7 @@ local function BuildDruid()
     top:SetFrameLevel(dm.bar:GetFrameLevel() + 1)
     W.Border(top, 1, T.border, "OVERLAY")
     dm.text = top:CreateFontString(nil, "OVERLAY")
-    dm.text:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+    dm.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(9), "OUTLINE")
     dm.text:SetPoint("RIGHT", dm, "BOTTOMRIGHT", -3, -6)
     dm.text:SetJustifyH("RIGHT")
     local pf = _G.CysUIPlayerFrame

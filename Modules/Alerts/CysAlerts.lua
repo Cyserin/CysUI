@@ -58,7 +58,7 @@ end
 
 local function ApplyFont()
     for _, l in ipairs(lines) do
-        l.text:SetFont(STANDARD_TEXT_FONT, db.size, "OUTLINE")
+        l.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(db.size), "OUTLINE")
         l.icon:SetSize(db.size + 4, db.size + 4)
     end
 end

@@ -173,10 +173,10 @@ function MM.Enable()
         -- one size for every label: the largest that still fits the longest word
         for i, btn in ipairs(btns) do
             local cell = Edge(i + 1) - Edge(i)
-            btn.label:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+            btn.label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
             while size > 8 and btn.label:GetStringWidth() > cell - 6 do
                 size = size - 1
-                btn.label:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+                btn.label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
             end
         end
         for i, btn in ipairs(btns) do
@@ -184,7 +184,7 @@ function MM.Enable()
             btn:SetSize(cell, bh)
             btn:ClearAllPoints()
             btn:SetPoint("LEFT", holder, "LEFT", Edge(i), 0)
-            btn.label:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+            btn.label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
             if seps[i] then
                 seps[i]:SetSize(1, max(bh - 4, 4))
                 seps[i]:ClearAllPoints()
@@ -231,7 +231,7 @@ function MM.Enable()
             btn:SetScript("OnClick", info.func)
         end
         local label = btn:CreateFontString(nil, "OVERLAY")
-        label:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+        label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(9), "OUTLINE")
         label:SetText(info.text)
         label:SetPoint("CENTER", btn, "CENTER", 0, 0)
         btn.label = label

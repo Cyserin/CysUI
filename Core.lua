@@ -164,6 +164,7 @@ end
 local DEFAULTS = {
     borderColor = "gold", -- gold / brightgold / class / black / grey
     windowStyle = "soft", -- soft / classic (panel colours; needs a /reload)
+    font = "cys", -- cys / game / narrow (see CysUICompat.FONTS; Look > Skins tab; needs a /reload)
     modules = {}, -- [key] = false when switched off; missing = on
     vendor = { autoRepair = true, autoSell = false, showButton = true },
     tooltip = { itemCount = true, skin = true, qualityBorder = true, sellPrice = true, classColors = true, healthBar = true,
@@ -535,7 +536,12 @@ if CysChangelog then
         db = function() return CysUIDB end,
         entries = {
             { version = "0.58.34", date = "2026-11-27",
+              added = {
+                  "A new UI font: Cys's UI now uses Barlow, a clean modern font, on every window, frame and HUD piece. Pick Game default or Arial Narrow under Look, Skins tab (needs a /reload). Chat keeps the game font.",
+              },
               improved = {
+                  "Look, Skins tab: Window style is now a dropdown, with the new Font dropdown beside it.",
+                  "Settings window: crisp drawn icons instead of letters for the close button, search clear, dropdown arrows (flip up while open), sidebar fold arrows and the - / + buttons.",
                   "Cys's BiS is gone, to keep the UI lighter: no BiS window, BiS button, BiS tooltip lines or BiS drop pop-ups. Cys's Upgrade still scores your gear.",
                   "Upgrade: tank profiles set their Survival / Threat mix with the - and + buttons beside the Weights header on the Upgrade page (it used to live in the BiS window).",
                   "Crate Tracker: a crate's heading says Ready when you have everything for it, and 2 of 4 items while you're still gathering (it used to read 0 / 4).",

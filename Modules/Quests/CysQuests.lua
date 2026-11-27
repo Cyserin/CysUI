@@ -71,7 +71,7 @@ content:SetHeight(30)
 content:SetFrameLevel(panel:GetFrameLevel() + 2)
 
 local function Font(fs, size, outline)
-    fs:SetFont(STANDARD_TEXT_FONT, size, outline and "OUTLINE" or "")
+    fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), outline and "OUTLINE" or "")
     fs:SetShadowColor(0, 0, 0, 0.9)
     fs:SetShadowOffset(1, -1)
 end

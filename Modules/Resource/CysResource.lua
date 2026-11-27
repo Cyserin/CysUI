@@ -52,7 +52,7 @@ CUI:RegisterMovable(holder, MOVER, "Resource Bar", { point = "CENTER", x = 0, y 
 
 local function ApplyFont()
     for _, fs in ipairs({ text, label }) do
-        fs:SetFont(STANDARD_TEXT_FONT, db.fontSize, "OUTLINE")
+        fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(db.fontSize), "OUTLINE")
         fs:SetTextColor(1, 1, 1)
     end
     label:SetTextColor(0.85, 0.85, 0.85)

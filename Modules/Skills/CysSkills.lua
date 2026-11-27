@@ -74,7 +74,7 @@ local function Show(name, rank)
     local line = table.remove(pool)
     if not line then
         local fs = holder:CreateFontString(nil, "OVERLAY")
-        fs:SetFont(STANDARD_TEXT_FONT, 15, "OUTLINE")
+        fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(15), "OUTLINE")
         line = { fs = fs }
     end
     local g = T.accent

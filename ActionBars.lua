@@ -235,13 +235,13 @@ local function SkinButton(b)
 
     local hk = Part(b, "HotKey")
     if hk then
-        hk:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+        hk:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE")
         hk:ClearAllPoints()
         hk:SetPoint("TOPRIGHT", b, "TOPRIGHT", -1, -2)
     end
     local count = Part(b, "Count")
     if count then
-        count:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+        count:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE")
         count:ClearAllPoints()
         count:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -1, 2)
     end
@@ -301,7 +301,7 @@ local function SkinButton(b)
             local size = math.max(8, math.min(16, math.floor(w * 0.36 + 0.5)))
             if lastSize ~= size then
                 lastSize = size
-                fs:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+                fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
             end
         end
         SizeCountdown()

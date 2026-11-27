@@ -374,8 +374,8 @@ local function LayoutButton(b)
         b.health:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 1, -1 + 2)
         b.health:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -1, -1 + 2)
     end
-    b.name:SetFont(STANDARD_TEXT_FONT, mode.font, "OUTLINE")
-    b.healthText:SetFont(STANDARD_TEXT_FONT, mode.font - 1, "OUTLINE")
+    b.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(mode.font), "OUTLINE")
+    b.healthText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(mode.font - 1), "OUTLINE")
 end
 
 local function BuildButton(b, preview)

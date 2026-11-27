@@ -24,6 +24,51 @@ interface = tonumber(interface) or 0
 Compat.isForever = interface >= 16000 and interface < 17000
 
 --------------------------------------------------------------------------------
+-- UI font: every CysUI text asks here (CysUICompat.Font() / FontSize(size)) instead of naming a font file,
+-- so one setting (CysUIDB.font, Appearance page, needs a /reload) changes the whole UI. Chat keeps the game
+-- font (other alphabets). bump = points added below 16 so a narrow font reads as large as the game font.
+-- A font file that won't load falls back to the game font instead of leaving text blank.
+--------------------------------------------------------------------------------
+Compat.FONTS = {
+    { key = "cys",    label = "Cys (Barlow)", file = "Interface\\AddOns\\CysUI\\Media\\Fonts\\BarlowSemiCondensed-Medium.ttf", bump = 1 },
+    { key = "game",   label = "Game default" },
+    { key = "narrow", label = "Arial Narrow", file = "Fonts\\ARIALN.TTF", bump = 1 },
+}
+local fontOK = {}
+local function FontEntry()
+    local key = CysUIDB and CysUIDB.font or "cys"
+    for _, f in ipairs(Compat.FONTS) do
+        if f.key == key then
+            if not f.file then return nil end
+            if fontOK[key] == nil then
+                local probe = UIParent:CreateFontString(nil, "OVERLAY")
+                fontOK[key] = probe:SetFont(f.file, 12, "") and true or false
+                probe:Hide()
+            end
+            return fontOK[key] and f or nil
+        end
+    end
+end
+function Compat.Font()
+    local f = FontEntry()
+    return f and f.file or STANDARD_TEXT_FONT
+end
+function Compat.FontSize(size)
+    local f = FontEntry()
+    if f and f.bump and type(size) == "number" and size < 16 then return size + f.bump end
+    return size
+end
+-- other addons using LibSharedMedia (meters, WeakAuras...) can pick the Cys font too
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_LOGIN")
+    ev:SetScript("OnEvent", function()
+        local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+        if LSM then pcall(LSM.Register, LSM, "font", "Cys (Barlow)", Compat.FONTS[1].file) end
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- Secret values (WoW Forever, like retail Midnight)
 --
 -- The game hands addons some values as "secret": other units' health, casts, creature names in instances,
@@ -131,7 +176,7 @@ function Compat.SmallCooldownText(cd, iconSize)
     local ok, fs = pcall(cd.GetCountdownFontString, cd)
     if not ok or not (fs and fs.SetFont) then return end
     local size = math.max(7, math.floor((iconSize or 20) * 0.45))
-    fs:SetFont(STANDARD_TEXT_FONT, size, "OUTLINE")
+    fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
     if cd.SetCountdownAbbrevThreshold then pcall(cd.SetCountdownAbbrevThreshold, cd, 90) end -- "2m" not "120"
 end
 
@@ -760,7 +805,7 @@ local function AuraCellInit(spec)
         top:SetFrameLevel(cd:GetFrameLevel() + 2)
         top:EnableMouse(false)
         local count = top:CreateFontString(nil, "OVERLAY")
-        count:SetFont(STANDARD_TEXT_FONT, math.max(8, math.floor(size * 0.45)), "OUTLINE")
+        count:SetFont(CysUICompat.Font(), CysUICompat.FontSize(math.max(8, math.floor(size * 0.45))), "OUTLINE")
         count:SetPoint("BOTTOMRIGHT", 1, 0)
         -- optional fixed-colour 1px edge (player buffs use the theme border), drawn under the debuff-type tint
         if spec.edgeColor then
@@ -777,7 +822,7 @@ local function AuraCellInit(spec)
         local timerText
         if spec.timerText then
             timerText = top:CreateFontString(nil, "OVERLAY")
-            timerText:SetFont(STANDARD_TEXT_FONT, math.max(8, math.floor(size * 0.4)), "OUTLINE")
+            timerText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(math.max(8, math.floor(size * 0.4))), "OUTLINE")
             if spec.timerText == "below" then
                 timerText:SetPoint("TOP", button, "BOTTOM", 0, -1)
             else

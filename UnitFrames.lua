@@ -106,7 +106,7 @@ local function MakeAura(parent)
     a.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     a.edges = W.Border(a, 1, T.line, "OVERLAY")
     a.count = a:CreateFontString(nil, "OVERLAY")
-    a.count:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+    a.count:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE")
     a.count:SetPoint("BOTTOMRIGHT", 1, 0)
     a.cd = CreateFrame("Cooldown", nil, a, "CooldownFrameTemplate")
     a.cd:SetAllPoints(a.icon)
@@ -780,15 +780,15 @@ local function CreateUnitFrame(def)
     overlay:SetFrameLevel(f:GetFrameLevel() + 5)
     f.overlay = overlay
     f.healthText = overlay:CreateFontString(nil, "OVERLAY")
-    f.healthText:SetFont(STANDARD_TEXT_FONT, def.fontSize or 11, "OUTLINE")
+    f.healthText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(def.fontSize or 11), "OUTLINE")
     f.healthText:SetPoint("RIGHT", f.health, "RIGHT", -5, 0)
     if def.powerH and f.power then
         f.powerText = overlay:CreateFontString(nil, "OVERLAY")
-        f.powerText:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+        f.powerText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(9), "OUTLINE")
         f.powerText:SetPoint("RIGHT", f.power, "RIGHT", -4, 0)
     end
     f.name = overlay:CreateFontString(nil, "OVERLAY")
-    f.name:SetFont(STANDARD_TEXT_FONT, def.fontSize or 11, "OUTLINE")
+    f.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(def.fontSize or 11), "OUTLINE")
     f.name:SetJustifyH("LEFT")
     f.name:SetWordWrap(false)
     f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
@@ -1129,11 +1129,11 @@ function UF.ApplyNameStyle()
         f.name:SetShadowColor(0, 0, 0, 1) -- a dark drop shadow keeps the name readable on bright class colors
         f.name:SetShadowOffset(1, -1)
         if corner then
-            f.name:SetFont(STANDARD_TEXT_FONT, cornerSize, "OUTLINE")
+            f.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(cornerSize), "OUTLINE")
             f.name:SetPoint("TOPLEFT", f.health, "TOPLEFT", 4, -3)
             f.name:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", right or -4, -3)
         else
-            f.name:SetFont(STANDARD_TEXT_FONT, plainSize, "OUTLINE")
+            f.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(plainSize), "OUTLINE")
             f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
             f.name:SetPoint("RIGHT", f.healthText, "LEFT", -4, 0)
         end
@@ -1204,7 +1204,7 @@ function UF.StartRangeCheck()
         if tf and tf:IsShown() then
             if not tf.rangeText then
                 tf.rangeText = tf.healthText:GetParent():CreateFontString(nil, "OVERLAY")
-                tf.rangeText:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+                tf.rangeText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(9), "OUTLINE")
                 tf.rangeText:SetPoint("BOTTOMRIGHT", tf, "BOTTOMRIGHT", -5, 3)
                 tf.rangeText:SetTextColor(0.75, 0.75, 0.75)
             end

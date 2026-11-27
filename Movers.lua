@@ -258,7 +258,7 @@ function CUI:RegisterMovable(frame, key, label, opts)
     m.moverFill:SetAllPoints()
     m.moverEdges = W.Border(mover, 1, T.border, "BORDER")
     local text = W.Text(mover, 11, { 1, 1, 1 }, "CENTER") -- white with an outline so it reads on any background
-    text:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+    text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE")
     text:SetPoint("CENTER", 0, 0)
     text:SetText(m.label)
 
@@ -684,7 +684,7 @@ local function BuildGuides()
     g.markV, g.markH = Mark(), Mark()
     local function Label()
         local fs = g:CreateFontString(nil, "OVERLAY")
-        fs:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+        fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE")
         fs:Hide()
         return fs
     end

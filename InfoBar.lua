@@ -357,10 +357,10 @@ end
 local function FitText(b)
     local size = max(8, min(12, floor(b:GetHeight() * 0.46 + 0.5)))
     local room = max(b:GetWidth() - 8, 20)
-    b.text:SetFont(STANDARD_TEXT_FONT, size, "")
+    b.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "")
     while size > 8 and b.text:GetStringWidth() > room do
         size = size - 1
-        b.text:SetFont(STANDARD_TEXT_FONT, size, "")
+        b.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "")
     end
 end
 

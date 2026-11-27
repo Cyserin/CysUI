@@ -88,7 +88,7 @@ end
 
 local function CreateText(parent, size, color, justify)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(STANDARD_TEXT_FONT, size or 11, "")
+    fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size or 11), "")
     local c = color or C.text
     fs:SetTextColor(c[1], c[2], c[3])
     fs:SetJustifyH(justify or "LEFT")
@@ -949,7 +949,7 @@ local function CreatePanel()
     input:SetPoint("TOPLEFT", PAD, -(HEADER_H + 8))
     input:SetAutoFocus(false)
     input:SetMaxLetters(24)
-    input:SetFont(STANDARD_TEXT_FONT, 12, "")
+    input:SetFont(CysUICompat.Font(), CysUICompat.FontSize(12), "")
     input:SetTextColor(C.text[1], C.text[2], C.text[3])
     input:SetTextInsets(8, 8, 0, 0)
     SolidTexture(input, "BACKGROUND", C.field):SetAllPoints()

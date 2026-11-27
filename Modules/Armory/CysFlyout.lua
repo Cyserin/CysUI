@@ -184,7 +184,7 @@ end
 
 local function MakeText(parent, size, color, outline)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(STANDARD_TEXT_FONT, size, outline or "")
+    fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), outline or "")
     fs:SetTextColor(color[1], color[2], color[3])
     return fs
 end

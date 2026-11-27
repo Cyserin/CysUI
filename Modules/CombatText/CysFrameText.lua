@@ -74,7 +74,7 @@ end
 local function Show(unit, r, g, b, big, fmt, value)
     local h = Holder(unit)
     if not h then return end
-    h.text:SetFont(STANDARD_TEXT_FONT, math.floor(db.size * (big and 1.35 or 1) + 0.5), "OUTLINE")
+    h.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(math.floor(db.size * (big and 1.35 or 1) + 0.5)), "OUTLINE")
     h.text:SetTextColor(r, g, b)
     local ok
     if fmt then

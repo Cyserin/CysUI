@@ -204,11 +204,79 @@ end
 
 function W.Text(parent, size, color, justify)
     local fs = parent:CreateFontString(nil, "OVERLAY")
-    fs:SetFont(STANDARD_TEXT_FONT, size or 11, "")
+    fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size or 11), "")
     local c = color or T.text
     fs:SetTextColor(c[1], c[2], c[3])
     fs:SetJustifyH(justify or "LEFT")
     return fs
+end
+
+--------------------------------------------------------------------------------
+-- Glyph: crisp line icons drawn from thin bars instead of font letters ("X", "v", "+").
+--   W.Glyph(parent, kind, size, color, thick) -> a small frame to SetPoint;  :SetKind(kind)  :SetColor(c | r, g, b, a)
+--   kinds: "close", "down", "up", "right", "left", "plus", "minus", "none"
+--------------------------------------------------------------------------------
+local WHITE = "Interface\\Buttons\\WHITE8X8"
+local R45 = math.rad(45)
+local function GlyphLayout(g)
+    local s, th, k = g.size, g.thick, g.kind
+    local a, b = g.bars[1], g.bars[2]
+    a:Show(); b:Show()
+    a:SetRotation(0); b:SetRotation(0)
+    a:ClearAllPoints(); b:ClearAllPoints()
+    if k == "close" then
+        local len = s * 1.25
+        a:SetSize(len, th); b:SetSize(len, th)
+        a:SetPoint("CENTER", g, "CENTER", 0, 0); b:SetPoint("CENTER", g, "CENTER", 0, 0)
+        a:SetRotation(R45); b:SetRotation(-R45)
+    elseif k == "plus" or k == "minus" then
+        a:SetSize(s, th); a:SetPoint("CENTER", g, "CENTER", 0, 0)
+        b:SetSize(th, s); b:SetPoint("CENTER", g, "CENTER", 0, 0)
+        b:SetShown(k == "plus")
+    elseif k == "down" or k == "up" or k == "right" or k == "left" then
+        -- two arms at 45 degrees that meet at the tip; nudged together a little so the tip has no notch
+        local arm = s * 0.7
+        local h = arm * 0.7071 / 2 - th * 0.25
+        a:SetSize(arm, th); b:SetSize(arm, th)
+        if k == "down" or k == "up" then
+            local tip = k == "down" and 1 or -1
+            a:SetPoint("CENTER", g, "CENTER", -h, 0); a:SetRotation(-R45 * tip)
+            b:SetPoint("CENTER", g, "CENTER", h, 0);  b:SetRotation(R45 * tip)
+        else
+            local tip = k == "right" and 1 or -1
+            a:SetPoint("CENTER", g, "CENTER", 0, h);  a:SetRotation(-R45 * tip)
+            b:SetPoint("CENTER", g, "CENTER", 0, -h); b:SetRotation(R45 * tip)
+        end
+    else
+        a:Hide(); b:Hide()
+    end
+end
+
+function W.Glyph(parent, kind, size, color, thick)
+    local g = CreateFrame("Frame", nil, parent)
+    g.size, g.thick = size or 10, thick or 2
+    g:SetSize(g.size, g.size)
+    g.bars = {}
+    for i = 1, 2 do
+        local t = g:CreateTexture(nil, "OVERLAY")
+        t:SetTexture(WHITE)
+        -- rotated bars look jagged when snapped to the pixel grid
+        if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false); t:SetTexelSnappingBias(0) end
+        g.bars[i] = t
+    end
+    function g:SetColor(r, gg, b, a)
+        if type(r) == "table" then r, gg, b, a = r[1], r[2], r[3], r[4] end
+        for i = 1, 2 do self.bars[i]:SetVertexColor(r, gg, b, a or 1) end
+    end
+    g.SetTextColor = g.SetColor -- lets code written for the old letter icons keep working
+    function g:SetKind(k)
+        if self.kind == k then return end
+        self.kind = k
+        GlyphLayout(self)
+    end
+    g:SetColor(color or T.text)
+    g:SetKind(kind or "none")
+    return g
 end
 
 --------------------------------------------------------------------------------
@@ -386,14 +454,14 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     b.label:SetPoint("LEFT", 8, 0)
     b.label:SetPoint("RIGHT", -22, 0)
     b.label:SetWordWrap(false)
-    b.arrow = W.Text(b, 11, T.dim, "RIGHT")
-    b.arrow:SetPoint("RIGHT", -8, 0)
-    b.arrow:SetText("v")
+    b.arrow = W.Glyph(b, "down", 8, T.dim, 1.5)
+    b.arrow:SetPoint("RIGHT", -9, 0)
     function b:Paint()
         local hot = self.hot or self.open
         W.SetBorder(self.edges, hot and T.glow or T.line)
         local ac = hot and T.accent or T.dim
-        self.arrow:SetTextColor(ac[1], ac[2], ac[3])
+        self.arrow:SetColor(ac)
+        self.arrow:SetKind(self.open and "up" or "down")
         local f = self.hot and T.hover or T.field
         self.bg:SetColorTexture(f[1], f[2], f[3], 1)
     end
@@ -494,21 +562,19 @@ local function RoundButton(parent, text, onHover)
     b.bg = b:CreateTexture(nil, "BORDER")
     b.bg:SetTexture(CIRCLE)
     b.bg:SetAllPoints()
-    b.txt = W.Text(b, 14, T.dark, "CENTER")
-    b.txt:SetFont(STANDARD_TEXT_FONT, 14, "")
-    b.txt:SetPoint("CENTER", 0, text == "-" and 1 or 0)
-    b.txt:SetText(text)
+    b.txt = W.Glyph(b, text == "-" and "minus" or "plus", 8, T.dark, 2)
+    b.txt:SetPoint("CENTER", 0, 0)
     function b:Paint()
         local on = self:IsEnabled()
         local c = not on and OFF_TRACK or (self.hot and T.glow or T.brand)
         self.bg:SetVertexColor(c[1], c[2], c[3], 1)
         local tc = on and T.dark or OFF_KNOB
-        self.txt:SetTextColor(tc[1], tc[2], tc[3])
+        self.txt:SetColor(tc)
     end
     b:SetScript("OnEnter", function(s) s.hot = true; s:Paint(); onHover() end)
     b:SetScript("OnLeave", function(s) s.hot = false; s:Paint(); onHover() end)
-    b:SetScript("OnMouseDown", function(s) if s:IsEnabled() then s.txt:SetPoint("CENTER", 0, text == "-" and 0 or -1) end end)
-    b:SetScript("OnMouseUp", function(s) s.txt:SetPoint("CENTER", 0, text == "-" and 1 or 0) end)
+    b:SetScript("OnMouseDown", function(s) if s:IsEnabled() then s.txt:SetPoint("CENTER", 0, -1) end end)
+    b:SetScript("OnMouseUp", function(s) s.txt:SetPoint("CENTER", 0, 0) end)
     return b
 end
 

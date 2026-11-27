@@ -139,7 +139,7 @@ local function CreateIconBox(parent, size, labelText, secure, name)
     top:SetAllPoints()
     top:SetFrameLevel(box:GetFrameLevel() + 3)
     box.timer = top:CreateFontString(nil, "OVERLAY")
-    box.timer:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+    box.timer:SetFont(CysUICompat.Font(), CysUICompat.FontSize(12), "OUTLINE")
     box.timer:SetPoint("CENTER", 0, 0)
     box.timer:SetTextColor(1, 1, 1)
     return box
@@ -220,7 +220,7 @@ do
     top:SetAllPoints()
     top:SetFrameLevel(imbueBox:GetFrameLevel() + 3)
     imbueBox.timer = top:CreateFontString(nil, "OVERLAY")
-    imbueBox.timer:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
+    imbueBox.timer:SetFont(CysUICompat.Font(), CysUICompat.FontSize(12), "OUTLINE")
     imbueBox.timer:SetPoint("CENTER", 0, 0)
     imbueBox.timer:SetTextColor(1, 1, 1)
 end

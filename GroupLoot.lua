@@ -106,7 +106,7 @@ local function LayoutRollFrame(frame)
         end
         name:SetPoint("RIGHT", leftmost or frame, leftmost and "LEFT" or "RIGHT", -8, 0)
         name:SetJustifyH("LEFT")
-        if name.SetFont then name:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE") end
+        if name.SetFont then name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE") end
         if name.SetWordWrap then name:SetWordWrap(false) end
         if name.SetMaxLines then name:SetMaxLines(1) end
     end
@@ -195,7 +195,7 @@ local function PaintCounts(frame)
         if b then
             if not b.cysCount then
                 local fs = b:CreateFontString(nil, "OVERLAY")
-                fs:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE")
+                fs:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE")
                 fs:SetPoint("TOPRIGHT", b, "TOPRIGHT", 4, 5)
                 fs:SetTextColor(1, 0.82, 0)
                 b.cysCount = fs

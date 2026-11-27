@@ -64,7 +64,7 @@ local function MakeRow(kind)
     top:SetFrameLevel(r.bar:GetFrameLevel() + 1)
     W.Border(top, 1, T.border, "OVERLAY") -- follows the Border color setting
     r.text = top:CreateFontString(nil, "OVERLAY")
-    r.text:SetFont(STANDARD_TEXT_FONT, 10, "OUTLINE") -- a font from the start: a line not laid out yet can still be cleared
+    r.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE") -- a font from the start: a line not laid out yet can still be cleared
     r.text:SetPoint("RIGHT", -3, 0)
     r:Hide()
     rows[kind] = r
@@ -122,7 +122,7 @@ local function Layout()
             row:SetSize(w, h)
             if kind == MAIN and row.queued then row.bar:SetStatusBarColor(1, 0.5, 0.12, 1) -- a queued strike (below)
             else row.bar:SetStatusBarColor(r, g, b, kind == MAIN and 1 or 0.75) end
-            row.text:SetFont(STANDARD_TEXT_FONT, db.fontSize, "OUTLINE")
+            row.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(db.fontSize), "OUTLINE")
             row.text:SetShown(db.text and h >= 8)
             row:Show()
             n = n + 1
@@ -234,7 +234,7 @@ local function UpdateQueued()
     row.queued = queued
     row.bar:SetStatusBarColor(r, g, b, 1)
     if queued and db.height >= 7 then
-        queuedLabel:SetFont(STANDARD_TEXT_FONT, max(7, min(db.fontSize, db.height + 2)), "OUTLINE")
+        queuedLabel:SetFont(CysUICompat.Font(), CysUICompat.FontSize(max(7, min(db.fontSize, db.height + 2))), "OUTLINE")
         queuedLabel:SetText(queued)
         queuedLabel:Show()
     else

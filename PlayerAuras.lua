@@ -93,13 +93,13 @@ local function CreateAuraIcon(parent, size, isDebuff)
     end) end
 
     f.count = f:CreateFontString(nil, "OVERLAY")
-    f.count:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    f.count:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE")
     f.count:SetTextColor(1, 1, 1)
     f.count:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     f.count:SetJustifyH("RIGHT")
 
     f.timer = f:CreateFontString(nil, "OVERLAY")
-    f.timer:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    f.timer:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE")
     f.timer:SetTextColor(1, 1, 1, 1)
     f.timer:SetJustifyH("CENTER")
     PlaceTimer(f)
