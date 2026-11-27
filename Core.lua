@@ -542,6 +542,7 @@ if CysChangelog then
               improved = {
                   "Look, Skins tab: Window style is now a dropdown, with the new Font dropdown beside it.",
                   "Settings window: crisp drawn icons instead of letters for the close button, search clear, dropdown arrows (flip up while open), and sidebar fold arrows.",
+                  "Every Cys window now uses the same crisp drawn x for its close button (bags, bank, friends, armory, crates, recipes, recruiter, characters, roll tracker, logs, guides, pop-ups and the skinned Blizzard windows), with a soft red square under the mouse. The bag search clear and the log dropdowns match too.",
                   "Settings: number settings (UI scale, sizes, spacing and the rest) are now slim sliders instead of round - / + buttons. Drag the knob or click the track, roll the mouse wheel over the row for one step, or click the number and type a value (Enter to apply). The setting applies when you let go of the knob.",
                   "Cys's BiS is gone, to keep the UI lighter: no BiS window, BiS button, BiS tooltip lines or BiS drop pop-ups. Cys's Upgrade still scores your gear.",
                   "Upgrade: tank profiles set their Survival / Threat mix with the - and + buttons beside the Weights header on the Upgrade page (it used to live in the BiS window).",

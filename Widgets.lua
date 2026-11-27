@@ -279,6 +279,20 @@ function W.Glyph(parent, kind, size, color, thick)
     return g
 end
 
+-- CloseGlyph: the drawn x for a close / clear / remove button, centered on it, with a faint red square under the
+-- mouse (noHover skips the square, for buttons that light up on their own). small = the size for 16-18 px buttons.
+-- Returns the glyph; it answers SetTextColor like the old "X" letter did, so existing hover code keeps working.
+function W.CloseGlyph(btn, color, small, noHover)
+    local g = W.Glyph(btn, "close", small and 7 or 9, color or T.desc, small and 1.5 or 2)
+    g:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    if not noHover and btn.SetHighlightTexture then
+        btn:SetHighlightTexture(WHITE, "BLEND")
+        local hl = btn:GetHighlightTexture()
+        if hl then hl:SetVertexColor(1, 0.3, 0.3, 0.14); hl:SetAllPoints() end
+    end
+    return g
+end
+
 --------------------------------------------------------------------------------
 -- Button: flat, gold text; `primary` = the one gold-filled call-to-action button
 --------------------------------------------------------------------------------

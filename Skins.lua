@@ -197,9 +197,9 @@ local function SkinClose(btn, panel)
     btn:HookScript("OnShow", Clean)
     btn:HookScript("OnEnter", Clean)
     btn:HookScript("OnLeave", Clean)
-    local x = W.Text(btn, 14, T.text, "CENTER")
-    x:SetPoint("CENTER", 0, 0)
-    x:SetText("X")
+    -- a drawn x (its own child frame, flagged ours so Clean leaves it alone); no highlight square here,
+    -- since Clean hides every texture Blizzard puts on the button
+    local x = W.CloseGlyph(btn, T.text, nil, true)
     x.cysOwn = true
     btn:HookScript("OnEnter", function() x:SetTextColor(1, 0.3, 0.3) end)
     btn:HookScript("OnLeave", function() x:SetTextColor(T.text[1], T.text[2], T.text[3]) end)

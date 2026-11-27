@@ -1022,9 +1022,7 @@ local function Build()
     local close = CreateFrame("Button", nil, f)
     close:SetSize(22, 22)
     close:SetPoint("TOPRIGHT", -4, -4)
-    local x = W.Text(close, 14, T.text, "CENTER")
-    x:SetPoint("CENTER")
-    x:SetText("X")
+    local x = CysUI.W.CloseGlyph(close, T.text)
     close:SetScript("OnEnter", function() x:SetTextColor(1, 0.3, 0.3) end)
     close:SetScript("OnLeave", function() x:SetTextColor(T.text[1], T.text[2], T.text[3]) end)
     close:SetScript("OnClick", function() CUI:HideWindow(f) end)
@@ -1386,7 +1384,7 @@ do
             copy.eb = eb
             local x = CreateFrame("Button", nil, copy)
             x:SetSize(20, 20); x:SetPoint("TOPRIGHT", -4, -4)
-            x.t = W.Text(x, 13, { 1, 1, 1 }, "CENTER"); x.t:SetPoint("CENTER"); x.t:SetText("X")
+            x.t = CysUI.W.CloseGlyph(x, { 1, 1, 1 })
             x:SetScript("OnClick", function() copy:Hide() end)
         end
         copy.text = text
