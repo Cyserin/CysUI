@@ -906,8 +906,11 @@ local function HideBlizzard(key)
         if fr then
             Quiet(fr)
             for _, bar in ipairs(BlizzardBars(fr)) do Quiet(bar) end
-            pcall(fr.SetParent, fr, hidden)
-            pcall(fr.Hide, fr)
+            -- Forever: these are Edit Mode frames; hiding them from addon code taints Edit Mode (see Compat)
+            if not CysUICompat.HideEditModeFrame(fr) then
+                pcall(fr.SetParent, fr, hidden)
+                pcall(fr.Hide, fr)
+            end
         end
     end
 end

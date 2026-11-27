@@ -55,7 +55,10 @@ local spotByKey = {} -- [normalised name] = { bag, slot, n } of its biggest stac
 local function ScanBags()
     wipe(carried); wipe(crateIDs); wipe(spotByID); wipe(spotByKey); wipe(countByID); wipe(writs)
     local seen = {}
-    local last = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag) or NUM_BAG_SLOTS or 4
+    -- WoW Forever's reagent bag (bag 5) has no Enum entry there, so fall back to one past the normal bags,
+    -- the same way Cys's Bags does (crates land in the reagent bag).
+    local last = (Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag)
+        or ((CUI.isForever and (NUM_BAG_SLOTS or 4) + 1) or NUM_BAG_SLOTS or 4)
     for bag = 0, last do
         local n = C_Container.GetContainerNumSlots(bag) or 0
         for slot = 1, n do
@@ -91,15 +94,38 @@ end
 local cache, tries = {}, {} -- [itemID] = { name, reqs = { { count, name } } } or false
 local waiting = false
 
-local function TooltipLines(itemID)
-    if not (C_TooltipInfo and C_TooltipInfo.GetItemByID) then return end
-    local ok, data = pcall(C_TooltipInfo.GetItemByID, itemID)
-    if not ok or not data or not data.lines then return end
-    local lines = {}
-    for _, l in ipairs(data.lines) do
-        if type(l.leftText) == "string" then lines[#lines + 1] = l.leftText end
+-- Fallback reader: a hidden tooltip of our own (C_TooltipInfo can come back empty on WoW Forever)
+local scanTip
+local function ScanTipLines(itemID)
+    if not scanTip then
+        scanTip = CreateFrame("GameTooltip", "CysCratesScanTip", nil, "GameTooltipTemplate")
     end
+    scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+    scanTip:ClearLines()
+    local ok = pcall(scanTip.SetHyperlink, scanTip, "item:" .. itemID)
+    if not ok then return end
+    local lines = {}
+    for i = 1, scanTip:NumLines() or 0 do
+        local fs = _G["CysCratesScanTipTextLeft" .. i]
+        local t = fs and fs:GetText()
+        if type(t) == "string" and t ~= "" then lines[#lines + 1] = t end
+    end
+    scanTip:Hide()
     return #lines > 0 and lines or nil
+end
+
+local function TooltipLines(itemID)
+    if C_TooltipInfo and C_TooltipInfo.GetItemByID then
+        local ok, data = pcall(C_TooltipInfo.GetItemByID, itemID)
+        if ok and data and data.lines then
+            local lines = {}
+            for _, l in ipairs(data.lines) do
+                if type(l.leftText) == "string" and l.leftText ~= "" then lines[#lines + 1] = l.leftText end
+            end
+            if #lines > 0 then return lines end
+        end
+    end
+    return ScanTipLines(itemID)
 end
 
 local SKIP = { charge = true, charges = true, slot = true, slots = true }
@@ -159,18 +185,29 @@ local function Analyze(itemID)
     for _, text in ipairs(lines) do
         if text:find("[Ff]ill the crate") then isCrate = true break end
     end
-    if not isCrate then cache[itemID] = false return false end
+    if not isCrate then
+        -- the "Use:" text of new items can arrive a moment after the name: retry items that mention a crate
+        local crateish = false
+        for _, text in ipairs(lines) do if text:lower():find("crate") then crateish = true break end end
+        tries[itemID] = (tries[itemID] or 0) + 1
+        if crateish and tries[itemID] <= 20 then waiting = true return nil end
+        cache[itemID] = false return false
+    end
     local reqs = {}
     for i = 2, #lines do
         for line in lines[i]:gmatch("[^\n]+") do
-            line = line:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s*\226\128\162", ""):gsub("^%s*%-", "")
+            line = line:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^[^%w]+", "")
             local count, name = line:match("^%s*(%d+)%s*[xX]?%s+(.-)%s*$")
             if count and name and #name > 2 and not SKIP[name:lower()] then
                 reqs[#reqs + 1] = { count = tonumber(count), name = name, key = Norm(name) }
             end
         end
     end
-    if #reqs == 0 then cache[itemID] = false return false end
+    if #reqs == 0 then
+        tries[itemID] = (tries[itemID] or 0) + 1
+        if tries[itemID] <= 20 then waiting = true return nil end
+        cache[itemID] = false return false
+    end
     cache[itemID] = { name = lines[1], reqs = reqs }
     return cache[itemID]
 end
@@ -808,11 +845,31 @@ ev:SetScript("OnEvent", function(_, e)
         HookBags()
         AutoShow()
         Crates.Refresh()
+        if waiting then C_Timer.After(1, function() if waiting then ev:GetScript("OnEvent")(ev, "BAG_UPDATE_DELAYED") end end) end
     end)
 end)
 
 SLASH_CYSCRATES1 = "/cuicrates"
-SlashCmdList.CYSCRATES = function() Crates.Toggle() end
+SlashCmdList.CYSCRATES = function(msg)
+    if (msg or ""):lower():match("^%s*scan") then
+        wipe(cache); wipe(tries)
+        ScanBags()
+        local found = 0
+        for _, itemID in ipairs(crateIDs) do
+            local lines = TooltipLines(itemID)
+            local all = lines and table.concat(lines, " | ") or "(no tooltip yet)"
+            if all:lower():find("crate") then
+                found = found + 1
+                print("|cffffd200Crates|r " .. itemID .. ": " .. all:gsub("\n", " / "))
+                local c = Analyze(itemID)
+                print("|cffffd200Crates|r   -> " .. (c and (#c.reqs .. " items needed") or tostring(c)))
+            end
+        end
+        print("|cffffd200Crates|r items with \"crate\" in the tooltip: " .. found .. " (of " .. #crateIDs .. " scanned)")
+        return
+    end
+    Crates.Toggle()
+end
 
 CUI:RegisterPage("Crate Tracker", function(page)
     local width = 480

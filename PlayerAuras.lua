@@ -308,8 +308,11 @@ local function HideBlizzardAuras()
         local frame = _G[name]
         if frame then
             if frame.UnregisterAllEvents then pcall(frame.UnregisterAllEvents, frame) end
-            frame:SetParent(hiddenParent)
-            frame:Hide()
+            -- Forever: these are Edit Mode frames; hiding them from addon code taints Edit Mode (see Compat)
+            if not CysUICompat.HideEditModeFrame(frame) then
+                frame:SetParent(hiddenParent)
+                frame:Hide()
+            end
         end
     end
 end

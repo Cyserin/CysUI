@@ -627,8 +627,11 @@ local function HideBlizzardRaid()
         if fr then
             pcall(function()
                 if fr.UnregisterAllEvents then fr:UnregisterAllEvents() end
-                fr:SetParent(hidden)
-                fr:Hide()
+                -- Forever: these are Edit Mode frames; hiding them from addon code taints Edit Mode (see Compat)
+                if not CysUICompat.HideEditModeFrame(fr) then
+                    fr:SetParent(hidden)
+                    fr:Hide()
+                end
             end)
         end
     end

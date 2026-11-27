@@ -839,10 +839,13 @@ local function BuildWindow()
         end
     end
     atlas = atlas or ("talent-background-" .. CLASS:lower())
-    local okArt = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas)
-    if okArt then
-        win.art:SetAtlas(atlas)
-    else
+    -- Don't ask C_Texture.GetAtlasInfo first: on this client its result table needs
+    -- Vector2DMixin, which isn't always loaded yet, and it throws. SetAtlas itself
+    -- returns whether the atlas exists, so just try it (guarded) and check.
+    local okArt = false
+    local okCall, res = pcall(win.art.SetAtlas, win.art, atlas)
+    if okCall and res ~= false and win.art:GetAtlas() then okArt = true end
+    if not okArt then
         win.art:SetColorTexture(0, 0, 0, 0)
     end
     -- a soft dark wash at the top so the tree names read well

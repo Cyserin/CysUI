@@ -39,6 +39,28 @@ function Compat.Secret(v)
 end
 local Secret = Compat.Secret
 
+--------------------------------------------------------------------------------
+-- Hiding Blizzard frames that Edit Mode manages (WoW Forever)
+--
+-- Calling Hide() or SetParent() on one of Blizzard's Edit Mode frames (buffs, debuffs, player/target/focus,
+-- party, raid) from addon code runs that frame's own OnHide code as CysUI. Whatever it writes there is then
+-- "tainted", and the next time Edit Mode lays the screen out (login, zoning, changing layouts) the game blames
+-- CysUI when that frame reads auras: "Auras cannot be accessed when secret while tainted by 'CysUI'".
+-- On Forever the frame is instead hidden by the game's secure state driver (so its OnHide runs as Blizzard),
+-- faded out and made unclickable; it is never moved to another parent. Returns true when it handled the frame,
+-- false when the caller should hide it the old way (Classic Era, or in combat when nothing secure can change).
+--------------------------------------------------------------------------------
+function Compat.HideEditModeFrame(frame)
+    if not (Compat.isForever and frame) then return false end
+    if InCombatLockdown() then return true end -- try again out of combat; never fall back to the tainting way
+    if frame.SetAlpha then frame:SetAlpha(0) end
+    if frame.EnableMouse then pcall(frame.EnableMouse, frame, false) end
+    if RegisterStateDriver and not frame.cysVisDriver then
+        if pcall(RegisterStateDriver, frame, "visibility", "hide") then frame.cysVisDriver = true end
+    end
+    return true
+end
+
 -- v, or nil when it is secret (so 'if x then' and math on it are safe)
 function Compat.Plain(v)
     if issecret and issecret(v) then return nil end
