@@ -547,6 +547,9 @@ if CysChangelog then
                   "Cys's BiS is gone, to keep the UI lighter: no BiS window, BiS button, BiS tooltip lines or BiS drop pop-ups. Cys's Upgrade still scores your gear.",
                   "Upgrade: tank profiles set their Survival / Threat mix with the - and + buttons beside the Weights header on the Upgrade page (it used to live in the BiS window).",
                   "Crate Tracker: a crate's heading says Ready when you have everything for it, and 2 of 4 items while you're still gathering (it used to read 0 / 4).",
+                  "Layout mode: Attach to. Pin a HUD piece (a cooldown bar, alerts, timers) to the player frame, target frame, resource bar, another cooldown bar and more. It moves with that piece and grows away from the corner you pin it by, so a bar that gains an icon no longer shifts both ways. X and Y become the gap.",
+                  "Damage Meter: windows shrink to the rows they use (an empty window is just its title strip and one line), the title strip buttons show only when you point at the window, a slightly lighter title strip, dimmer rank numbers and bracketed figures, and long fights show hours (2:21:34). Both new options are on the Damage Meter page.",
+                  "Action bars: keybind text is smaller and a little see-through, so it doesn't crowd the icons.",
               },
               fixed = {
                   "Buff Helper: Blessing of Sanctuary is no longer offered (WoW Forever removed it). A saved Sanctuary pick falls back to Kings.",

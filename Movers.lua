@@ -52,6 +52,77 @@ local function Scale(m)
 end
 
 --------------------------------------------------------------------------------
+-- Attach: pin an element to another one (the player frame, a cooldown bar...). It then moves with that element,
+-- and since it is held by one corner or edge, it grows away from it when it gets bigger (a cooldown bar that gains
+-- an icon grows right when pinned by its left edge). X / Y become the gap from the spot it is pinned to.
+-- Protected frames (unit frames, action bars) can't be pinned to other elements: in a fight that would lock the
+-- element they hang from. Other elements can still be pinned to them.
+--------------------------------------------------------------------------------
+-- { id, label, our point, their point, gap x, gap y }
+local SPOTS = {
+    { "below_left",  "Under it, left edges lined up (grows right)",   "TOPLEFT",     "BOTTOMLEFT",  0, -2 },
+    { "below",       "Under it, centered (grows both ways)",          "TOP",         "BOTTOM",      0, -2 },
+    { "below_right", "Under it, right edges lined up (grows left)",   "TOPRIGHT",    "BOTTOMRIGHT", 0, -2 },
+    { "above_left",  "Above it, left edges lined up (grows right)",   "BOTTOMLEFT",  "TOPLEFT",     0, 2 },
+    { "above",       "Above it, centered (grows both ways)",          "BOTTOM",      "TOP",         0, 2 },
+    { "above_right", "Above it, right edges lined up (grows left)",   "BOTTOMRIGHT", "TOPRIGHT",    0, 2 },
+    { "left_top",    "Left of it, tops lined up (grows left)",        "TOPRIGHT",    "TOPLEFT",     -2, 0 },
+    { "left",        "Left of it, centered (grows left)",             "RIGHT",       "LEFT",        -2, 0 },
+    { "left_bottom", "Left of it, bottoms lined up (grows left)",     "BOTTOMRIGHT", "BOTTOMLEFT",  -2, 0 },
+    { "right_top",   "Right of it, tops lined up (grows right)",      "TOPLEFT",     "TOPRIGHT",    2, 0 },
+    { "right",       "Right of it, centered (grows right)",           "LEFT",        "RIGHT",       2, 0 },
+    { "right_bottom","Right of it, bottoms lined up (grows right)",   "BOTTOMLEFT",  "BOTTOMRIGHT", 2, 0 },
+}
+local SPOT = {}
+for _, s in ipairs(SPOTS) do SPOT[s[1]] = s end
+local DEFAULT_SPOT = "below"
+
+local function IsLocked(m)
+    local f = m and m.frame
+    return f and f.IsProtected and f:IsProtected() and true or false
+end
+
+-- the element this one is pinned to (and the spot), or nil: not pinned, the other one is missing or switched off,
+-- or the pins go round in a circle
+local function AttachTarget(m)
+    local e = Entry(m.key)
+    if not (e and e.attach) or IsLocked(m) then return nil end
+    local seen, key = { [m.key] = true }, e.attach
+    for _ = 1, 20 do
+        if seen[key] then return nil end
+        seen[key] = true
+        local t = CUI.movers[key]
+        if not t or t.disabled then return nil end
+        local te = Entry(key)
+        if not (te and te.attach) or IsLocked(t) then break end
+        key = te.attach
+    end
+    local target = CUI.movers[e.attach]
+    return target, SPOT[e.spot or DEFAULT_SPOT] or SPOT[DEFAULT_SPOT]
+end
+
+-- where one of a frame's points is on screen (both movers live under UIParent at scale 1)
+local function PointXY(frame, point)
+    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (l and r and t and b) then return nil end
+    local x = point:find("LEFT") and l or (point:find("RIGHT") and r or (l + r) / 2)
+    local y = point:find("TOP") and t or (point:find("BOTTOM") and b or (t + b) / 2)
+    return x, y
+end
+
+-- the gap that keeps a pinned element exactly where its box is now
+local function GapFromHere(m)
+    local target, spot = AttachTarget(m)
+    if not target then return end
+    local px, py = PointXY(m.mover, spot[3])
+    local tx, ty = PointXY(target.mover, spot[4])
+    if not (px and tx) then return end
+    local e = Entry(m.key, true)
+    e.ax, e.ay = floor(px - tx + 0.5), floor(py - ty + 0.5)
+    return true
+end
+
+--------------------------------------------------------------------------------
 -- Applying a saved layout
 --------------------------------------------------------------------------------
 function CUI:ApplyLayout(key)
@@ -69,9 +140,14 @@ function CUI:ApplyLayout(key)
     frame:SetScale(scale)
 
     mover:SetSize(max(frame:GetWidth() * scale, 24), max(frame:GetHeight() * scale, 16))
-    local point, x, y = Position(m)
+    local target, spot = AttachTarget(m)
     mover:ClearAllPoints()
-    mover:SetPoint(point, UIParent, point, x, y)
+    if target then
+        mover:SetPoint(spot[3], target.mover, spot[4], (e and e.ax) or spot[5], (e and e.ay) or spot[6])
+    else
+        local point, x, y = Position(m)
+        mover:SetPoint(point, UIParent, point, x, y)
+    end
 
     if m.opts.onResize then m.opts.onResize(frame, frame:GetWidth(), frame:GetHeight()) end
 end
@@ -207,6 +283,12 @@ end
 
 -- store where the mover ended up after a drag (always as an offset from the screen centre)
 local function CaptureDrag(m)
+    if AttachTarget(m) then
+        GapFromHere(m)
+        CUI:ApplyLayout(m.key)
+        if panel then panel:RefreshAll() end
+        return
+    end
     local cx, cy = m.mover:GetCenter()
     local ux, uy = UIParent:GetCenter()
     if not (cx and ux) then return end
@@ -270,7 +352,12 @@ function CUI:RegisterMovable(frame, key, label, opts)
         local e = Entry(key, true)
         if not e.point then e.point, e.x, e.y = Position(m) end
         local amount = (delta > 0 and 1 or -1) * (IsControlKeyDown() and 10 or 1)
-        if IsShiftKeyDown() then e.x = (e.x or 0) + amount else e.y = (e.y or 0) + amount end
+        local fx, fy = "x", "y"
+        if AttachTarget(m) then -- pinned: nudge the gap
+            fx, fy = "ax", "ay"
+            if e.ax == nil then GapFromHere(m) end
+        end
+        if IsShiftKeyDown() then e[fx] = (e[fx] or 0) + amount else e[fy] = (e[fy] or 0) + amount end
         CUI:ApplyLayout(key)
         if panel then panel:RefreshAll() end
     end)
@@ -296,6 +383,10 @@ function CUI:RegisterMovable(frame, key, label, opts)
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", mover, "CENTER", 0, 0)
     self:ApplyLayout(key)
+    -- anything pinned to this element was placed on its own spot while this one didn't exist yet: pin it now
+    for k, e in pairs(Layout()) do
+        if type(e) == "table" and e.attach == key and k ~= key and self.movers[k] then self:ApplyLayout(k) end
+    end
     return m
 end
 
@@ -502,12 +593,79 @@ local function BuildPanel()
         return floor(fn(m) + 0.5)
     end
 
+    -- pinned elements: X / Y are the gap from the spot they hang from
+    local function Gap(m, i)
+        local e, _, spot = Entry(m.key), AttachTarget(m)
+        local field = i == 1 and "ax" or "ay"
+        return (e and e[field]) or spot[4 + i]
+    end
     AddRow("X position",
-        function() return Num(function(m) local _, x = Position(m); return x end) end,
-        function(v) Edit(function(e) e.x = v end) end, -4000, 4000, 1)
+        function() return Num(function(m) if AttachTarget(m) then return Gap(m, 1) end local _, x = Position(m); return x end) end,
+        function(v) Edit(function(e, m) if AttachTarget(m) then e.ax = v else e.x = v end end) end, -4000, 4000, 1)
     AddRow("Y position",
-        function() return Num(function(m) local _, _, y = Position(m); return y end) end,
-        function(v) Edit(function(e) e.y = v end) end, -4000, 4000, 1)
+        function() return Num(function(m) if AttachTarget(m) then return Gap(m, 2) end local _, _, y = Position(m); return y end) end,
+        function(v) Edit(function(e, m) if AttachTarget(m) then e.ay = v else e.y = v end end) end, -4000, 4000, 1)
+
+    -- Attach to: the elements worth pinning to (unit frames, cooldown bars, resource / cast bars, action bars...)
+    local function PickRow(label, options, get, set, applies)
+        local row = CreateFrame("Frame", nil, f)
+        row:SetSize(332, 22)
+        row.label = W.Text(row, 12, T.text)
+        row.label:SetPoint("LEFT", 0, 0)
+        row.label:SetText(label)
+        row.dd = W.Dropdown(row, 226, options, get, set)
+        row.dd:SetPoint("RIGHT", 0, 0)
+        function row:Refresh() self.dd:Refresh() end
+        row.applies = applies
+        f.rows[#f.rows + 1] = row
+        return row
+    end
+    local targets = { { "none", "Nothing (its own spot)" } }
+    for _, key in ipairs(CUI.moverOrder) do
+        local o = CUI.movers[key]
+        if o and not o.opts.freeMove and (key == "player" or key == "target" or key == "targettarget" or key == "pet"
+            or key == "focus" or key == "resource" or key == "minimap" or key == "trinkets"
+            or key:find("^cooldowns_") or key:find("^castbar_") or key:find("^bar_")) then
+            targets[#targets + 1] = { key, (o.label or key):gsub("\n", " ") }
+        end
+    end
+    local function Pinnable(m) return not IsLocked(m) end
+    PickRow("Attach to", targets,
+        function() local m = Current(); local e = m and Entry(m.key); return (e and e.attach) or "none" end,
+        function(v)
+            local m = Current()
+            if not m then return end
+            local e = Entry(m.key, true)
+            if not e.point then e.point, e.x, e.y = Position(m) end
+            if v == "none" then
+                e.attach, e.ax, e.ay = nil, nil, nil
+            elseif v == m.key then
+                CUI:Print("An element can't be attached to itself.")
+            else
+                local was = e.attach
+                e.attach = v
+                if AttachTarget(m) then
+                    GapFromHere(m) -- stays where it is until you pick a spot
+                else
+                    e.attach = was
+                    CUI:Print("That would attach these elements to each other in a circle.")
+                end
+            end
+            CUI:ApplyLayout(m.key)
+            f:RefreshAll()
+        end, Pinnable)
+    local spotOptions = {}
+    for _, s in ipairs(SPOTS) do spotOptions[#spotOptions + 1] = { s[1], s[2] } end
+    PickRow("Where", spotOptions,
+        function() local m = Current(); local e = m and Entry(m.key); return (e and e.spot) or DEFAULT_SPOT end,
+        function(v)
+            local m = Current()
+            if not m then return end
+            local e = Entry(m.key, true)
+            e.spot, e.ax, e.ay = v, nil, nil -- snaps to the new spot with a small gap
+            CUI:ApplyLayout(m.key)
+            f:RefreshAll()
+        end, function(m) return Pinnable(m) and AttachTarget(m) ~= nil end)
     AddRow("Width",
         function() return Num(function(m) local e = Entry(m.key); return (e and e.width) or m.defW end) end,
         function(v)

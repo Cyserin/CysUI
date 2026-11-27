@@ -235,9 +235,12 @@ local function SkinButton(b)
 
     local hk = Part(b, "HotKey")
     if hk then
-        hk:SetFont(CysUICompat.Font(), CysUICompat.FontSize(10), "OUTLINE")
+        -- keybinds: small and a little see-through, so they don't fight the icon or its stack count
+        -- (the game still tints them red when the target is out of range)
+        hk:SetFont(CysUICompat.Font(), CysUICompat.FontSize(8), "OUTLINE")
+        hk:SetAlpha(0.7)
         hk:ClearAllPoints()
-        hk:SetPoint("TOPRIGHT", b, "TOPRIGHT", -1, -2)
+        hk:SetPoint("TOPRIGHT", b, "TOPRIGHT", -2, -2)
     end
     local count = Part(b, "Count")
     if count then

@@ -31,7 +31,8 @@ CysUIDB.meter = CysUIDB.meter or {}
 local db = CysUIDB.meter
 local DEFAULTS = { rowH = 18, fontSize = 11, show = "always", hideGame = true, classColors = true, rank = true, rate = 0.5,
     icons = true, pinMe = true, hover = true, more = false, autoCurrent = true,
-    hideParty = false, hideRaid = false, hidePvP = false, hideWorld = false, greyOOC = false, timer = false }
+    hideParty = false, hideRaid = false, hidePvP = false, hideWorld = false, greyOOC = false, timer = false,
+    fit = true, quietHead = true }
 for k, v in pairs(DEFAULTS) do if db[k] == nil then db[k] = v end end
 -- one entry per window: what it shows and its size. (0.58.10 test builds kept a single window's settings flat.)
 if not db.windows then
@@ -64,7 +65,7 @@ local function Mode(win)
 end
 
 local wins = {}
-local Paint, Queue, CreateWindow, CloseWindow, UpdateShown, OpenMenu, CloseMenu, NewWindow, ResetAll, PaintAll
+local Paint, Queue, CreateWindow, CloseWindow, UpdateShown, OpenMenu, CloseMenu, NewWindow, ResetAll, PaintAll, MenuFor
 
 --------------------------------------------------------------------------------
 -- Numbers. A plain number is shortened here (397, 1.2K, 12K, 3.4M). A locked one (in combat) can't be compared
@@ -316,6 +317,24 @@ local function Row(win, i)
     return r
 end
 
+-- Shrink to fit: the window's look (background, border, lock, resize grip) sits on win.back, pinned to the top.
+-- It is only as tall as the rows in use, so an empty Current window is just its title strip and one line. The
+-- holder keeps the full size (Layout mode and the saved spot use it); the empty part below lets the mouse through.
+local function FitBack(win)
+    if not win.back then return end
+    local cfg = win.cfg
+    local full = HEAD + cfg.rows * (db.rowH + 1) + 2
+    local h = full
+    if db.fit and not win.resizing and not CUI.layoutMode then
+        h = HEAD + math.min(cfg.rows, max(win.count or 0, 1)) * (db.rowH + 1) + 2
+    end
+    if win.backH ~= h then
+        win.backH = h
+        win.back:SetHeight(h)
+        win.holder:SetHitRectInsets(0, 0, 0, full - h)
+    end
+end
+
 local function Layout(win)
     local cfg = win.cfg
     local w, h = cfg.width, HEAD + cfg.rows * (db.rowH + 1) + 2
@@ -343,6 +362,8 @@ local function Layout(win)
         end
     end
     for i = cfg.rows + 1, #win.rows do win.rows[i]:Hide() end
+    win.backH = nil
+    FitBack(win)
 end
 
 local function SegmentLabel(win)
@@ -364,7 +385,11 @@ function Paint(win)
     local label = SegmentLabel(win)
     local secs = session and session.durationSeconds
     if type(secs) == "number" and not Secret(secs) and secs > 0 then
-        label = string.format("%s  %d:%02d", label, math.floor(secs / 60), math.floor(secs % 60))
+        if secs >= 3600 then
+            label = string.format("%s  %d:%02d:%02d", label, math.floor(secs / 3600), math.floor(secs % 3600 / 60), math.floor(secs % 60))
+        else
+            label = string.format("%s  %d:%02d", label, math.floor(secs / 60), math.floor(secs % 60))
+        end
     end
     win.sub:SetText(label)
 
@@ -410,7 +435,7 @@ function Paint(win)
             if not pcall(r.bar.SetValue, r.bar, src.totalAmount) then r.bar:SetValue(0) end
             local okN
             if db.rank then
-                okN = pcall(r.name.SetFormattedText, r.name, "%d. %s", index, src.name)
+                okN = pcall(r.name.SetFormattedText, r.name, "|cFF8C8C8C%d.|r %s", index, src.name)
             else
                 okN = pcall(r.name.SetText, r.name, src.name)
             end
@@ -420,9 +445,9 @@ function Paint(win)
             if mode.per then
                 local per, fP = Short(src.amountPerSecond)
                 if mode.first then -- DPS / HPS: the per-second figure leads
-                    okV = pcall(r.value.SetFormattedText, r.value, fP .. " (" .. fT .. ")", per, total)
+                    okV = pcall(r.value.SetFormattedText, r.value, fP .. " |cFF8C8C8C(" .. fT .. ")|r", per, total)
                 else
-                    okV = pcall(r.value.SetFormattedText, r.value, fT .. " (" .. fP .. ")", total, per)
+                    okV = pcall(r.value.SetFormattedText, r.value, fT .. " |cFF8C8C8C(" .. fP .. ")|r", total, per)
                 end
             else
                 okV = pcall(r.value.SetFormattedText, r.value, fT, total)
@@ -450,6 +475,7 @@ function Paint(win)
     else
         win.empty:Hide()
     end
+    FitBack(win)
 end
 function PaintAll()
     for _, win in ipairs(wins) do Paint(win) end
@@ -501,6 +527,7 @@ function UpdateShown()
         for _, b in ipairs(win.quick or {}) do b:EnableMouse(show) end
         if win.lock then win.lock:EnableMouse(show) end
         if win.grip then win.grip:EnableMouse(show) end
+        FitBack(win)
     end
     if not show then HideBreakdown(true); if CloseMenu then CloseMenu() end end
     if show and dirty then Queue() end
@@ -519,8 +546,14 @@ function CreateWindow(cfg)
     -- so the window's buttons get the click wherever the window is parked
     holder:SetFrameStrata("MEDIUM")
     holder:SetFrameLevel(200) -- the game's bag slots sit at level 54 there (seen with /fstack)
-    W.Texture(holder, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.88 }):SetAllPoints()
-    local edgeFrame = CreateFrame("Frame", nil, holder)
+    local back = CreateFrame("Frame", nil, holder) -- the window's look (see FitBack)
+    win.back = back
+    back:SetFrameLevel(holder:GetFrameLevel()) -- under the rows
+    back:SetPoint("TOPLEFT", 0, 0)
+    back:SetPoint("TOPRIGHT", 0, 0)
+    back:SetHeight(holder:GetHeight())
+    W.Texture(back, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.88 }):SetAllPoints()
+    local edgeFrame = CreateFrame("Frame", nil, back)
     edgeFrame:SetAllPoints()
     edgeFrame:SetFrameLevel(holder:GetFrameLevel() + 6)
     W.Border(edgeFrame, 1, T.border, "OVERLAY") -- follows the Border color setting
@@ -532,6 +565,8 @@ function CreateWindow(cfg)
     head:SetPoint("TOPRIGHT", -1, -1)
     head:SetHeight(HEAD)
     head:RegisterForClicks("AnyUp")
+    local headBg = W.Texture(head, "BACKGROUND", T.header) -- a slightly lighter title strip
+    headBg:SetAllPoints()
     local line = W.Texture(head, "ARTWORK", T.line)
     line:SetHeight(1)
     line:SetPoint("BOTTOMLEFT", 0, 0)
@@ -543,7 +578,10 @@ function CreateWindow(cfg)
         local b = CreateFrame("Button", nil, head)
         b:SetSize(16, HEAD)
         b:SetPoint("RIGHT", x, 0)
-        if icon:find("\\") then
+        if icon == "+" then -- drawn, like the rest of the UI's small icons
+            b.text = W.Glyph(b, "plus", 9, { 0.75, 0.75, 0.75 }, 1.5)
+            b.text:SetPoint("CENTER", 0, 0)
+        elseif icon:find("\\") then
             b.tex = b:CreateTexture(nil, "ARTWORK")
             b.tex:SetSize(12, 12)
             b.tex:SetPoint("CENTER", 0, 0)
@@ -588,12 +626,30 @@ function CreateWindow(cfg)
     win.sub:SetPoint("RIGHT", -88, 0)
     win.title:SetPoint("RIGHT", win.sub, "LEFT", -4, 0)
     win.title:SetWordWrap(false)
+    -- quiet title strip: the five buttons show only while you point at the window (or its menu is open), so the
+    -- title and fight time get the whole strip the rest of the time
+    function win.PaintHead()
+        local hot = win.headHot
+        for _, b in ipairs(win.quick) do b:SetAlpha(hot and 1 or 0) end
+        win.sub:ClearAllPoints()
+        win.sub:SetPoint("RIGHT", hot and -88 or -6, 0)
+    end
+    local hoverAcc = 0
+    holder:HookScript("OnUpdate", function(_, e)
+        hoverAcc = hoverAcc + e
+        if hoverAcc < 0.1 then return end
+        hoverAcc = 0
+        local hot = (not db.quietHead) or CUI.layoutMode or back:IsMouseOver() or MenuFor(win) or false
+        if hot ~= win.headHot then win.headHot = hot; win.PaintHead() end
+    end)
+    win.headHot = not db.quietHead
+    win.PaintHead()
 
     -- lock: bottom-right corner. Unlocked, the window drags by its title strip or its background.
     local lock = CreateFrame("Button", nil, holder)
     win.lock = lock
     lock:SetSize(16, 16)
-    lock:SetPoint("BOTTOMRIGHT", -16, 0)
+    lock:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -16, 0)
     lock:SetFrameLevel(holder:GetFrameLevel() + 8)
     lock.tex = lock:CreateTexture(nil, "OVERLAY")
     lock.tex:SetAllPoints()
@@ -617,7 +673,7 @@ function CreateWindow(cfg)
     local grip = CreateFrame("Button", nil, holder)
     win.grip = grip
     grip:SetSize(14, 14)
-    grip:SetPoint("BOTTOMRIGHT", -1, 1)
+    grip:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -1, 1)
     grip:SetFrameLevel(holder:GetFrameLevel() + 8)
     grip.tex = grip:CreateTexture(nil, "OVERLAY")
     grip.tex:SetAllPoints()
@@ -627,6 +683,7 @@ function CreateWindow(cfg)
     local function StopSizing()
         sizing = nil
         grip:SetScript("OnUpdate", nil)
+        if win.resizing then win.resizing = nil; FitBack(win) end
     end
     grip:SetScript("OnMouseDown", function(self, button)
         if button ~= "LeftButton" or cfg.locked or CUI.layoutMode then return end
@@ -636,6 +693,8 @@ function CreateWindow(cfg)
         if not (left and top) then return end
         CloseMenu(); HideBreakdown(true)
         sizing = { x = cx / scale, y = cy / scale, w = cfg.width, rows = cfg.rows, left = left, top = top }
+        win.resizing = true -- full height while you drag, so the grip stays under the mouse
+        FitBack(win)
         self:SetScript("OnUpdate", function()
             if not sizing or not IsMouseButtonDown("LeftButton") then StopSizing() return end
             local mx, my = GetCursorPosition()
@@ -676,8 +735,9 @@ function CreateWindow(cfg)
     end
 
     win.empty = W.Text(holder, 11, { 0.6, 0.6, 0.6 }, "CENTER")
-    win.empty:SetPoint("LEFT", 8, -HEAD / 2)
-    win.empty:SetPoint("RIGHT", -8, -HEAD / 2)
+    win.empty:SetPoint("TOPLEFT", 8, -(HEAD + 1))
+    win.empty:SetPoint("TOPRIGHT", -8, -(HEAD + 1))
+    win.empty:SetHeight(db.rowH)
     win.empty:SetWordWrap(true)
 
     head:SetScript("OnClick", function() OpenMenu(win, "show") end)
@@ -762,6 +822,7 @@ end
 -- The window's own options (click its title strip): what it shows, which fight, its size, more windows, reset
 --------------------------------------------------------------------------------
 local menu, catcher
+function MenuFor(win) return (menu and menu:IsShown() and menu.win == win) and true or false end
 function CloseMenu()
     if menu then menu:Hide() end
     if catcher then catcher:Hide() end
@@ -1094,6 +1155,10 @@ CUI:RegisterPage("Damage Meter", function(page)
     Check("Class-colored bars", "classColors")
     Check("Class icons", "icons")
     Check("Number each row (1. 2. 3.)", "rank")
+    Check("Shrink each window to the rows it uses", "fit", function() for _, w in ipairs(wins) do FitBack(w) end end)
+    Check("Title strip buttons show only when you point at it", "quietHead", function()
+        for _, w in ipairs(wins) do w.headHot = not db.quietHead; w.PaintHead() end
+    end)
     Check("Keep my own row in sight (last line when I am scrolled out)", "pinMe")
     Check("Spell breakdown when pointing at a row", "hover")
     Check("Breakdown shows 15 spells instead of 8", "more")
