@@ -1771,7 +1771,7 @@ local function RefreshOverlays()
     if _G.UpdateCysBankUpgradeOverlays then _G.UpdateCysBankUpgradeOverlays() end
 end
 
--- The Survival / Threat blend of the active tank profile (Cys's BiS window changes it).
+-- The Survival / Threat blend of the active tank profile (set with - / + beside the Weights header).
 -- GetTankBlend: nil = not a tank profile, a number = the survival %, false = its own rows (not a blend).
 function CysUpgrade.GetTankBlend()
     local name = CysUpgrade.activeProfileName or ""
@@ -1934,6 +1934,41 @@ local function BuildUpgradeSettingsPage(page)
     colWeight:SetPoint("TOPLEFT", 214, -212 - SHIFT)
     colWeight:SetText("Weight")
 
+    -- tank profiles: the Survival / Threat mix, shown only while a blended tank profile is active
+    local blendText = W.Text(page, 11, T.text)
+    blendText:SetPoint("TOPRIGHT", page, "TOPLEFT", width - 56, -212 - SHIFT)
+    blendText:SetJustifyH("RIGHT")
+    local blendMinus = W.Button(page, 22, 18, "-")
+    blendMinus:SetPoint("LEFT", blendText, "RIGHT", 8, 0)
+    local blendPlus = W.Button(page, 22, 18, "+")
+    blendPlus:SetPoint("LEFT", blendMinus, "RIGHT", 4, 0)
+    local function RefreshBlend()
+        local b = CysUpgrade.GetTankBlend()
+        local on = type(b) == "number"
+        blendText:SetShown(on); blendMinus:SetShown(on); blendPlus:SetShown(on)
+        if on then
+            blendText:SetText(string.format("|cFFFFD200Survival|r %d%%  |cFFFFD200Threat|r %d%%", b, 100 - b))
+        end
+    end
+    page.cysRefreshBlend = RefreshBlend
+    local function Nudge(d)
+        local b = CysUpgrade.GetTankBlend()
+        if type(b) ~= "number" then return end
+        CysUpgrade.SetTankBlend(b + d)  -- calls OnProfileAutoSwitched, which redraws the weight rows
+        RefreshBlend()
+    end
+    blendMinus:SetScript("OnClick", function() Nudge(-10) end)
+    blendPlus:SetScript("OnClick", function() Nudge(10) end)
+    for _, btn in ipairs({ blendMinus, blendPlus }) do
+        btn:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine("Survival / Threat", T.accent[1], T.accent[2], T.accent[3])
+            GameTooltip:AddLine("+ leans on Stamina, Defense, Armor, Dodge and Parry; - on Strength, Hit, Crit and weapon damage. Rewrites this tank profile's weights.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
     local ROW_H, ROWS_TOP = 28, 230 + SHIFT
     local rowsHolder = CreateFrame("Frame", nil, page)
     rowsHolder:SetPoint("TOPLEFT", 0, -ROWS_TOP)
@@ -2035,6 +2070,7 @@ local function BuildUpgradeSettingsPage(page)
         page.contentHeight = ROWS_TOP + #rows * ROW_H + 12 + 24 + 24
         local content = page:GetParent()
         if content and content.SetHeight then content:SetHeight(math.max(440, page.contentHeight)) end
+        if page.cysRefreshBlend then page.cysRefreshBlend() end
     end
 
     local function LoadProfile(name, data)

@@ -59,9 +59,8 @@ local BLESS = {
     kings     = { "Blessing of Kings", "Greater Blessing of Kings", label = "Kings" },
     salvation = { "Blessing of Salvation", "Greater Blessing of Salvation", label = "Salvation" },
     light     = { "Blessing of Light", "Greater Blessing of Light", label = "Light" },
-    sanctuary = { "Blessing of Sanctuary", "Greater Blessing of Sanctuary", label = "Sanctuary" },
 }
-local BLESS_ORDER = { "wisdom", "might", "kings", "salvation", "light", "sanctuary" }
+local BLESS_ORDER = { "wisdom", "might", "kings", "salvation", "light" }  -- no Sanctuary: WoW Forever removed it
 local PAL_CLASSES = { "WARRIOR", "ROGUE", "HUNTER", "MAGE", "WARLOCK", "PRIEST", "DRUID", "SHAMAN", "PALADIN" }
 
 local function Secret(v) return Compat and Compat.Secret and Compat.Secret(v) end
@@ -230,6 +229,7 @@ local function BlessFor(unit, class, tank)
         local pick = db.pal[class] or "auto"
         first = (pick == "auto") and AutoBless(unit, class) or pick
     end
+    if not BLESS[first] then first = "kings" end  -- an old saved pick (Sanctuary) that no longer exists
     local melee = (first == "might")
     -- what to try if the first choice isn't learned or another paladin already gave it
     local chain = { first, "kings", melee and "might" or "wisdom", melee and "wisdom" or "might" }

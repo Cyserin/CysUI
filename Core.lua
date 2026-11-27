@@ -531,9 +531,19 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.33",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.34",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.34", date = "2026-11-27",
+              improved = {
+                  "Cys's BiS is gone, to keep the UI lighter: no BiS window, BiS button, BiS tooltip lines or BiS drop pop-ups. Cys's Upgrade still scores your gear.",
+                  "Upgrade: tank profiles set their Survival / Threat mix with the - and + buttons beside the Weights header on the Upgrade page (it used to live in the BiS window).",
+                  "Crate Tracker: a crate's heading says Ready when you have everything for it, and 2 of 4 items while you're still gathering (it used to read 0 / 4).",
+              },
+              fixed = {
+                  "Buff Helper: Blessing of Sanctuary is no longer offered (WoW Forever removed it). A saved Sanctuary pick falls back to Kings.",
+              },
+            },
             { version = "0.58.33", date = "2026-11-25",
               added = {
                   "Trinkets: two buttons for your trinket slots. Click one to use it; point at one (or right-click, your pick) and a list of the trinkets in your bags opens. Left-click puts a trinket in that slot, right-click in the other one, shift-click links it. Swaps made in combat wait and go on when the fight ends (right-click the slot to cancel). Optional keys per trinket. Move it in Layout mode. Settings: /cui -> Trinkets. New file: restart the game once.",

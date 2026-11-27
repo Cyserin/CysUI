@@ -34,7 +34,6 @@ CysUIDB.talentPlans[CLASS] = CysUIDB.talentPlans[CLASS] or {}
 local saved = CysUIDB.talentPlans[CLASS] -- [name] = { node IDs }
 
 local FIRST_LEVEL = 10 -- the first talent point
-local LINE_H = 18
 local WIN_W = 300 -- width used by the Save / Load / Export box
 
 local TP = {}
@@ -384,14 +383,26 @@ end
 --------------------------------------------------------------------------------
 -- The window
 --------------------------------------------------------------------------------
+-- Looks: the Level plan is a fourth card beside the three trees, on the same class artwork, with its title in
+-- the same header band as the tree names. Learned picks fold into one line; the next pick is a gold card.
 local buttons, lines = {}, {}
 local listOff = 0
 local treeFrames = {}
-local numLines = 0
 local SIDE_W = 300
+local SIDE_MIN = 26    -- the folded Level plan: a thin strip you click to open again
+local HEAD_Y = -27     -- middle of the header band (tree icon 30 px tall, 12 px down)
+local HEAD_H = 52
+if plan.side == nil then plan.side = true end
+if plan.showLearned == nil then plan.showLearned = false end
+
+local GOLD = { 1, 0.82, 0 }
+local WHITE = { 1, 1, 1 }
+local GREEN = { 0.31, 0.84, 0.42, 1 }
+local LEARNED_EDGE = { 0.50, 0.43, 0.28, 1 }
+local ITEM_H = { head = 26, done = 20, next = 52, row = 24 }
 
 local function Tip(owner, n, extra)
-    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:SetOwner(owner, "ANCHOR_LEFT") -- the plan sits on the right: keep its tooltips inside the window
     if n.spellID then GameTooltip:SetSpellByID(n.spellID) else GameTooltip:SetText(n.name) end
     if extra then for _, l in ipairs(extra) do GameTooltip:AddLine(l, 1, 0.82, 0) end end
     GameTooltip:Show()
@@ -408,7 +419,7 @@ local function LayoutTrees()
     local nG = math.max(1, #Tree.groups)
     local rows, cols = 1, 1
     for _, g in ipairs(Tree.groups) do rows = math.max(rows, g.rows); cols = math.max(cols, g.cols) end
-    local treeW = math.floor((areaW - (nG - 1) * 12) / nG)
+    local treeW = math.floor((areaW - (nG - 1) * 10) / nG)
     local pitch = math.floor(math.min((treeW - 24) / cols, (areaH - 56) / rows, 66))
     local icon = math.floor(pitch * 0.72)
     for gi, g in ipairs(Tree.groups) do
@@ -419,22 +430,28 @@ local function LayoutTrees()
             tf.bg:SetAllPoints()
             tf.bg:SetColorTexture(0, 0, 0, 0.18) -- see-through: the class artwork shows behind
             W.Border(tf, 1, T.line)
-            tf.icon = tf:CreateTexture(nil, "ARTWORK")
-            tf.icon:SetSize(30, 30)
+            -- the tree icon in a gold frame with a thin dark gap, like the talent buttons
+            tf.iconRing = CreateFrame("Frame", nil, tf)
+            tf.iconRing:SetSize(32, 32)
+            W.Texture(tf.iconRing, "BACKGROUND", { 0, 0, 0, 1 }):SetAllPoints()
+            W.Border(tf.iconRing, 1, T.border)
+            tf.icon = tf.iconRing:CreateTexture(nil, "ARTWORK")
+            tf.icon:SetPoint("TOPLEFT", 2, -2)
+            tf.icon:SetPoint("BOTTOMRIGHT", -2, 2)
             tf.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             tf.name = W.Text(tf, 15, T.text)
             tf.name:SetShadowOffset(1, -1)
             tf.name:SetShadowColor(0, 0, 0, 1)
-            tf.name:SetPoint("LEFT", tf.icon, "RIGHT", 6, 0)
+            tf.name:SetPoint("LEFT", tf.iconRing, "RIGHT", 7, 0)
             tf.lines = {}
             treeFrames[gi] = tf
         end
         tf:SetSize(treeW, areaH)
         tf:ClearAllPoints()
-        tf:SetPoint("TOPLEFT", win.trees, "TOPLEFT", (gi - 1) * (treeW + 12), 0)
+        tf:SetPoint("TOPLEFT", win.trees, "TOPLEFT", (gi - 1) * (treeW + 10), 0)
         tf.icon:SetTexture(g.icon)
-        tf.icon:ClearAllPoints()
-        tf.icon:SetPoint("TOP", tf, "TOP", -50, -12)
+        tf.iconRing:ClearAllPoints()
+        tf.iconRing:SetPoint("TOP", tf, "TOP", -50, -11)
         tf.group = g
         tf:Show()
         -- center the grid in the tree
@@ -455,10 +472,25 @@ local function LayoutTrees()
                 b.icon:SetPoint("BOTTOMRIGHT", -1, 1)
                 b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
                 b.edges = W.Border(b, 1, T.line, "OVERLAY")
-                b.rankBg = W.Texture(b, "OVERLAY", { 0, 0, 0, 0.75 }, 1)
+                -- the next talent the plan learns: a soft gold glow that breathes
+                b.glow = b:CreateTexture(nil, "OVERLAY", nil, 2)
+                b.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+                b.glow:SetBlendMode("ADD")
+                b.glow:SetVertexColor(1, 0.82, 0)
+                b.glow:SetPoint("CENTER")
+                b.glow:Hide()
+                b.pulse = b.glow:CreateAnimationGroup()
+                b.pulse:SetLooping("BOUNCE")
+                local a = b.pulse:CreateAnimation("Alpha")
+                a:SetFromAlpha(0.35)
+                a:SetToAlpha(1)
+                a:SetDuration(0.8)
+                if a.SetSmoothing then a:SetSmoothing("IN_OUT") end
+                b.rankBg = W.Texture(b, "OVERLAY", { 0, 0, 0, 0.8 }, 3)
                 b.rankBg:SetSize(16, 13)
-                b.rankBg:SetPoint("BOTTOMRIGHT", 3, -3)
+                b.rankBg:SetPoint("BOTTOMRIGHT", 4, -4)
                 b.rank = W.Text(b, 10, T.accent, "CENTER")
+                b.rank:SetDrawLayer("OVERLAY", 4)
                 b.rank:SetPoint("CENTER", b.rankBg, "CENTER", 0, 0)
                 b:SetScript("OnClick", function(s, btn)
                     if btn == "RightButton" then TP.Remove(s.node.id) else TP.Add(s.node.id) end
@@ -481,6 +513,7 @@ local function LayoutTrees()
             b.node = n
             b:SetParent(tf)
             b:SetSize(icon, icon)
+            b.glow:SetSize(icon * 1.85, icon * 1.85)
             b.icon:SetTexture(n.icon)
             b:ClearAllPoints()
             b:SetPoint("TOPLEFT", tf, "TOPLEFT", ox + n.col * pitch, oy - n.row * pitch)
@@ -523,51 +556,218 @@ local function PlanLines()
     return out
 end
 
-local function MakeLine(i)
+-- What the list shows: a "Learned" line (opens to the learned picks), the next pick as a card, then the rest
+local function Items()
+    local done, todo, live = {}, {}, {}
+    for _, d in ipairs(PlanLines()) do
+        if live[d.id] == nil then live[d.id] = Learned(d.id) end
+        if not d.bad and live[d.id] >= d.rankTo then
+            done[#done + 1] = d
+        elseif not d.bad and live[d.id] >= d.rankFrom then
+            -- part of this run is learned already: show only the rest ("Enrage 4-5/5, levels 55-56")
+            local skip = live[d.id] - d.rankFrom + 1
+            todo[#todo + 1] = { id = d.id, from = d.from + skip, to = d.to, first = d.first, last = d.last,
+                                rankFrom = d.rankFrom + skip, rankTo = d.rankTo }
+        else
+            todo[#todo + 1] = d
+        end
+    end
+    local items = {}
+    if #done > 0 then
+        items[1] = { kind = "head", count = #done, from = done[1].from, to = done[#done].to }
+        if plan.showLearned then
+            for _, d in ipairs(done) do items[#items + 1] = { kind = "done", d = d } end
+        end
+    end
+    local first = true
+    for _, d in ipairs(todo) do
+        if first and not d.bad then
+            items[#items + 1] = { kind = "next", d = d }
+            first = false
+        else
+            items[#items + 1] = { kind = "row", d = d }
+        end
+    end
+    return items
+end
+
+local function LevelText(d) return d.from == d.to and tostring(d.from) or (d.from .. "-" .. d.to) end
+local function RankText(d, n)
+    if not n or n.max <= 1 then return "" end
+    return (d.rankFrom == d.rankTo and d.rankTo or (d.rankFrom .. "-" .. d.rankTo)) .. "/" .. n.max
+end
+local function Color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
+
+local function MakeLine()
     local l = CreateFrame("Button", nil, win.list)
-    l:SetHeight(LINE_H)
-    l:SetPoint("TOPLEFT", 4, -26 - (i - 1) * LINE_H)
-    l:SetPoint("TOPRIGHT", -4, -26 - (i - 1) * LINE_H)
-    l:RegisterForClicks("RightButtonUp")
-    l.hl = W.Texture(l, "BACKGROUND", T.cardHover)
+    l:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    l.hl = l:CreateTexture(nil, "BACKGROUND", nil, 1)
+    l.hl:SetColorTexture(1, 1, 1, 0.05)
     l.hl:SetAllPoints()
     l.hl:Hide()
-    l.lvl = W.Text(l, 11, T.accent)
-    l.lvl:SetPoint("LEFT", 4, 0)
-    l.lvl:SetWidth(42)
+    -- the Next card: a faint gold fill with a gold edge
+    l.card = CreateFrame("Frame", nil, l)
+    l.card:SetPoint("TOPLEFT", 8, -4)
+    l.card:SetPoint("BOTTOMRIGHT", -8, 4)
+    l.card.bg = l.card:CreateTexture(nil, "BACKGROUND")
+    l.card.bg:SetAllPoints()
+    l.card.bg:SetColorTexture(T.brand[1], T.brand[2], T.brand[3], 0.13)
+    W.Border(l.card, 1, T.glow)
+    l.sep = l:CreateTexture(nil, "BORDER")
+    l.sep:SetColorTexture(1, 1, 1, 0.06)
+    l.sep:SetPoint("BOTTOMLEFT", 8, 0)
+    l.sep:SetPoint("BOTTOMRIGHT", -8, 0)
+    l.sep:SetHeight(1)
+    l.tag = W.Text(l, 9, T.brand, "CENTER")
+    l.tag:SetText("NEXT")
+    l.lvl = W.Text(l, 11, T.accent, "RIGHT")
     l.icon = l:CreateTexture(nil, "ARTWORK")
-    l.icon:SetSize(15, 15)
-    l.icon:SetPoint("LEFT", 48, 0)
     l.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    l.name = W.Text(l, 11, T.text)
-    l.name:SetPoint("LEFT", l.icon, "RIGHT", 6, 0)
-    l.name:SetWidth(SIDE_W - 110)
+    l.name = W.Text(l, 12, T.text)
     l.name:SetWordWrap(false)
+    l.rank = W.Text(l, 11, T.dim, "RIGHT")
     l.tick = l:CreateTexture(nil, "ARTWORK")
-    l.tick:SetSize(14, 14)
-    l.tick:SetPoint("RIGHT", -6, 0)
+    l.tick:SetSize(12, 12)
     l.tick:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+    l.pips = {}
+    for i = 1, 5 do
+        local p = l:CreateTexture(nil, "ARTWORK")
+        p:SetSize(8, 8)
+        if i == 1 then p:SetPoint("BOTTOMLEFT", l.icon, "BOTTOMRIGHT", 10, 2)
+        else p:SetPoint("LEFT", l.pips[i - 1], "RIGHT", 3, 0) end
+        l.pips[i] = p
+    end
     l:SetScript("OnEnter", function(s)
-        s.hl:Show()
-        local n = s.data and Tree and Tree.nodes[s.data.id]
-        if n then Tip(s, n, { "|cffffffffRight-click: take its last point off the plan.|r" }) end
+        s.hl:SetShown(s.item and s.item.kind ~= "next")
+        local d = s.item and s.item.d
+        local n = d and Tree and Tree.nodes[d.id]
+        if n then Tip(s, n, { "|cffffffffRight-click: take its last point off the plan.|r" })
+        elseif s.item and s.item.kind == "head" then
+            GameTooltip:SetOwner(s, "ANCHOR_LEFT")
+            GameTooltip:SetText(plan.showLearned and "Hide the learned picks" or "Show the learned picks")
+            GameTooltip:Show()
+        end
     end)
     l:SetScript("OnLeave", function(s) s.hl:Hide(); GameTooltip:Hide() end)
-    l:SetScript("OnClick", function(s)
-        local d = s.data
-        if not d then return end
-        table.remove(plan.points, d.last)
+    l:SetScript("OnClick", function(s, btn)
+        local it = s.item
+        if not it then return end
+        if it.kind == "head" then
+            plan.showLearned = not plan.showLearned
+            listOff = 0
+            Paint()
+            return
+        end
+        if btn ~= "RightButton" or not it.d then return end
+        table.remove(plan.points, it.d.last)
         TP.status = nil
         Paint()
     end)
     return l
 end
 
-local function SizeList()
-    local h = win.list:GetHeight() or 0
-    numLines = math.max(1, math.floor((h - 30) / LINE_H))
-    for i = 1, numLines do if not lines[i] then lines[i] = MakeLine(i) end end
-    for i = numLines + 1, #lines do lines[i]:Hide() end
+local function ShowLine(l, it, y, h)
+    l.item = it
+    l:SetHeight(h)
+    l:ClearAllPoints()
+    l:SetPoint("TOPLEFT", 0, -y)
+    l:SetPoint("TOPRIGHT", 0, -y)
+    l.card:Hide(); l.tag:Hide(); l.tick:Hide(); l.icon:Hide(); l.sep:Show()
+    for _, p in ipairs(l.pips) do p:Hide() end
+    for _, fs in ipairs({ l.lvl, l.name, l.rank }) do fs:ClearAllPoints(); fs:SetText("") end
+    l.lvl:SetFont(STANDARD_TEXT_FONT, 11, "")
+    l.lvl:SetJustifyH("RIGHT")
+    l.lvl:SetWidth(44)
+    l.icon:SetAlpha(1)
+    local k, d = it.kind, it.d
+    local n = d and Tree.nodes[d.id]
+
+    if k == "head" then
+        l.lvl:SetJustifyH("LEFT")
+        l.lvl:SetWidth(12)
+        l.lvl:SetPoint("LEFT", 12, 0)
+        l.lvl:SetText(plan.showLearned and "-" or "+")
+        Color(l.lvl, T.dim)
+        l.tick:SetPoint("LEFT", 26, 0)
+        l.tick:Show()
+        l.name:SetPoint("LEFT", 44, 0)
+        l.name:SetPoint("RIGHT", -10, 0)
+        l.name:SetFont(STANDARD_TEXT_FONT, 11, "")
+        l.name:SetText(("Learned  -  %d %s, levels %d-%d"):format(it.count, it.count == 1 and "step" or "steps", it.from, it.to))
+        Color(l.name, T.dim)
+        return
+    end
+
+    l.icon:SetTexture(n and n.icon or 134400)
+    l.icon:Show()
+    l.name:SetFont(STANDARD_TEXT_FONT, k == "done" and 11 or 12, "")
+
+    if k == "next" then
+        l.card:Show()
+        l.sep:Hide()
+        l.tag:SetPoint("TOP", l, "TOPLEFT", 38, -12)
+        l.tag:Show()
+        l.lvl:SetFont(STANDARD_TEXT_FONT, 14, "")
+        l.lvl:SetJustifyH("CENTER")
+        l.lvl:SetPoint("TOP", l.tag, "BOTTOM", 0, -2)
+        l.lvl:SetWidth(52)
+        l.lvl:SetText(LevelText(d))
+        Color(l.lvl, T.accent)
+        l.icon:SetSize(30, 30)
+        l.icon:SetPoint("LEFT", 66, 0)
+        l.name:SetPoint("TOPLEFT", l.icon, "TOPRIGHT", 10, 0)
+        l.name:SetPoint("RIGHT", -16, 0)
+        l.name:SetText(n and n.name or "?")
+        Color(l.name, WHITE)
+        -- rank pips: learned = solid gold, this pick = soft gold, the rest = empty
+        local have = Learned(d.id)
+        local last
+        if n and n.max <= 5 then
+            for i = 1, n.max do
+                local p = l.pips[i]
+                if i <= have then p:SetColorTexture(T.brand[1], T.brand[2], T.brand[3], 1)
+                elseif i <= d.rankTo then p:SetColorTexture(T.glow[1], T.glow[2], T.glow[3], 0.35)
+                else p:SetColorTexture(0.25, 0.25, 0.25, 1) end
+                p:Show()
+                last = p
+            end
+        end
+        if last then l.rank:SetPoint("LEFT", last, "RIGHT", 8, 0)
+        else l.rank:SetPoint("BOTTOMLEFT", l.icon, "BOTTOMRIGHT", 10, 0) end
+        l.rank:SetJustifyH("LEFT")
+        l.rank:SetText(RankText(d, n))
+        Color(l.rank, T.dim)
+        return
+    end
+
+    -- "done" (a learned pick, dim) and "row" (still to come)
+    local sz = k == "done" and 14 or 18
+    l.lvl:SetPoint("LEFT", 8, 0)
+    l.icon:SetSize(sz, sz)
+    l.icon:SetPoint("LEFT", 62, 0)
+    l.name:SetPoint("LEFT", l.icon, "RIGHT", 8, 0)
+    l.name:SetPoint("RIGHT", -56, 0)
+    l.rank:SetJustifyH("RIGHT")
+    l.rank:SetPoint("RIGHT", -14, 0)
+    l.rank:SetText(RankText(d, n))
+    Color(l.rank, T.dim)
+    if k == "done" then
+        l.lvl:SetText(LevelText(d))
+        Color(l.lvl, T.dim)
+        l.icon:SetAlpha(0.55)
+        l.name:SetText(n and n.name or "?")
+        Color(l.name, T.dim)
+    elseif d.bad then
+        l.lvl:SetText("--")
+        Color(l.lvl, T.danger)
+        l.name:SetText((n and n.name or "?") .. " (can't go here)")
+        Color(l.name, T.danger)
+    else
+        l.lvl:SetText(LevelText(d))
+        Color(l.lvl, T.accent)
+        l.name:SetText(n and n.name or "?")
+        Color(l.name, T.text)
+    end
 end
 
 function Paint()
@@ -576,80 +776,112 @@ function Paint()
         win.summary:SetText("Talent data is not ready yet.")
         return
     end
-    local count, spent, bad, level, valid = Simulate(plan.points)
-    for _, tf in ipairs(treeFrames) do
-        if tf:IsShown() and tf.group then
-            local pts = spent[tf.group] or 0
-            tf.name:SetText(("%s  %s%d|r"):format(tf.group.name, pts > 0 and "|cffff9933" or "|cff8a8a8a", pts))
+    local count, spent, bad, _, valid = Simulate(plan.points)
+
+    -- the next point the plan learns (it glows on the tree)
+    local nextId
+    do
+        local have, seen = {}, {}
+        for i, id in ipairs(plan.points) do
+            if not bad[i] then
+                if have[id] == nil then have[id] = Learned(id) end
+                seen[id] = (seen[id] or 0) + 1
+                if have[id] < seen[id] then nextId = id; break end
+            end
         end
     end
+    local learnedBy, inPlan = {}, 0
+    for id, n in pairs(Tree.nodes) do
+        local l = Learned(id)
+        learnedBy[n.group] = (learnedBy[n.group] or 0) + l
+        inPlan = inPlan + math.min(l, count[id] or 0)
+    end
+
+    -- tree headers: "Fury  19 -> 28" (learned, then where the plan takes it)
+    for _, tf in ipairs(treeFrames) do
+        if tf:IsShown() and tf.group then
+            local have, want = learnedBy[tf.group] or 0, spent[tf.group] or 0
+            local txt = ("%s  %s%d|r"):format(tf.group.name, have > 0 and "|cffff9933" or "|cff8a8a8a", have)
+            if want > have then txt = txt .. ("  |cff777777->|r  |cffffd100%d|r"):format(want) end
+            tf.name:SetText(txt)
+        end
+    end
+
+    -- talents: learned = plain, planned ahead = faded with a gold edge, next = glowing, can take a point = green
     for id, b in pairs(buttons) do
         if b:IsShown() then
-            local planned = count[id] or 0
-            local learned = Learned(id)
+            local n = b.node
+            local planned, learned = count[id] or 0, Learned(id)
             b.planned = planned
-            -- like the game's own trees: green = can take a point now, gold = planned, grey = locked
-            local open = planned < b.node.max and CanAdd(b.node) == nil
-            local shown = math.max(planned, learned)
-            local lit = open or shown > 0
-            b.icon:SetDesaturated(not lit)
-            b.icon:SetAlpha(lit and 1 or 0.45)
-            if lit then
-                b.rank:SetText(shown .. "")
+            local isNext = id == nextId
+            local open = planned < n.max and CanAdd(n) == nil
+            local rank, rc, edge, desat, alpha
+            if isNext then
+                desat, alpha, edge = false, 1, T.accent
+                rank, rc = learned .. "/" .. planned, GOLD
+            elseif planned > learned then
+                desat, alpha, edge = true, 0.9, T.glow
+                rank, rc = learned .. "/" .. planned, GOLD
+            elseif learned > 0 then
+                desat, alpha, edge = false, 1, LEARNED_EDGE
+                rank, rc = tostring(learned), learned >= n.max and GOLD or WHITE
+            elseif open then
+                desat, alpha, edge = false, 0.9, GREEN
+            else
+                desat, alpha, edge = true, 0.4, T.line
+            end
+            b.icon:SetDesaturated(desat)
+            b.icon:SetAlpha(alpha)
+            if rank then
+                b.rank:SetText(rank)
+                b.rank:SetTextColor(rc[1], rc[2], rc[3])
+                b.rankBg:SetWidth(math.max(16, b.rank:GetStringWidth() + 6))
                 b.rankBg:Show()
-                if shown >= b.node.max then b.rank:SetTextColor(1, 0.82, 0)
-                elseif open then b.rank:SetTextColor(0.31, 0.84, 0.42)
-                else b.rank:SetTextColor(1, 0.82, 0) end
             else
                 b.rank:SetText("")
                 b.rankBg:Hide()
             end
-            if planned > 0 then W.SetBorder(b.edges, T.glow)
-            elseif open then W.SetBorder(b.edges, { 0.31, 0.84, 0.42, 1 })
-            else W.SetBorder(b.edges, T.line) end
+            W.SetBorder(b.edges, edge)
+            b.glow:SetShown(isNext)
+            if isNext then
+                if not b.pulse:IsPlaying() then b.pulse:Play() end
+            elseif b.pulse:IsPlaying() then
+                b.pulse:Stop()
+            end
         end
     end
+
+    -- progress: points of the plan learned so far
     local needs = valid > 0 and (FIRST_LEVEL + valid - 1) or nil
-    local learnedTotal = 0
-    for id in pairs(Tree.nodes) do learnedTotal = learnedTotal + Learned(id) end
-    win.summary:SetText(("Planned |cffffffff%d|r  -  learned |cffffffff%d|r%s"):format(valid, learnedTotal,
-        needs and ("  -  needs level |cffffffff" .. needs .. "|r") or ""))
+    win.summary:SetText(("|cffffffff%d|r / %d points learned"):format(inPlan, valid))
+    win.goal:SetText(needs and ("done at level " .. needs) or "")
+    local frac = valid > 0 and math.min(1, inPlan / valid) or 0
+    local bw = (win.bar:GetWidth() or 0) - 2
+    win.bar.fill:SetShown(frac > 0 and bw > 0)
+    if bw > 0 then win.bar.fill:SetWidth(math.max(1, bw * frac)) end
     win.status:SetText(TP.status or "Click a talent to plan its next point. Right-click to take one off.")
 
-    SizeList()
-    local data = PlanLines()
-    local max = math.max(0, #data - numLines)
-    if listOff > max then listOff = max end
-    local live = {}
-    for i = 1, numLines do
-        local l, d = lines[i], data[listOff + i]
-        l.data = d
-        if d then
-            local n = Tree.nodes[d.id]
-            l.icon:SetTexture(n and n.icon or 134400)
-            if d.bad then
-                l.lvl:SetText("|cffff6060--|r")
-                l.name:SetText("|cffff6060" .. (n and n.name or "?") .. " (can't go here)|r")
-                l.tick:Hide()
-            else
-                l.lvl:SetText(d.from == d.to and tostring(d.from) or (d.from .. "-" .. d.to))
-                local ranks = n and n.max > 1 and (" |cff8a8a8a" .. (d.rankFrom == d.rankTo and d.rankTo or (d.rankFrom .. "-" .. d.rankTo)) .. "/" .. n.max .. "|r") or ""
-                l.name:SetText((n and n.name or "?") .. ranks)
-                if live[d.id] == nil then live[d.id] = Learned(d.id) end
-                l.tick:SetShown(live[d.id] >= d.rankTo)
-            end
-            l:Show()
-        else
-            l:Hide()
-        end
+    -- the list
+    local items = Items()
+    local listH = win.list:GetHeight() or 0
+    if listOff > #items - 1 then listOff = math.max(0, #items - 1) end
+    local y, used, i = 4, 0, listOff
+    while i < #items do
+        local it = items[i + 1]
+        local h = ITEM_H[it.kind]
+        if used > 0 and y + h > listH - 16 then break end
+        used = used + 1
+        lines[used] = lines[used] or MakeLine()
+        ShowLine(lines[used], it, y, h)
+        lines[used]:Show()
+        y, i = y + h, i + 1
     end
-    if #data == 0 then
-        win.listInfo:SetText("")
-        win.empty:Show()
-    else
-        win.empty:Hide()
-        win.listInfo:SetText(#data > numLines and ("%d-%d of %d"):format(listOff + 1, math.min(listOff + numLines, #data), #data) or "")
-    end
+    for k = used + 1, #lines do lines[k].item = nil; lines[k]:Hide() end
+    local more = #items - i
+    if more > 0 then win.listInfo:SetText(("%d more below - scroll"):format(more))
+    elseif listOff > 0 then win.listInfo:SetText("scroll up for more")
+    else win.listInfo:SetText("") end
+    win.empty:SetShown(#items == 0)
     win.auto:Refresh()
 end
 
@@ -812,6 +1044,122 @@ local function Box(mode)
     box:Show()
 end
 
+-- Profiles: Save / Load / Import / Export in one small menu that opens above its button
+local function ProfilesMenu(anchor)
+    local opts = { { "Save this plan...", "save" }, { "Load a saved plan", "load" },
+                   { "Import from text", "import" }, { "Export as text", "export" } }
+    local ROW, MW = 22, 160
+    local m = CreateFrame("Frame", nil, UIParent)
+    m:SetFrameStrata("FULLSCREEN_DIALOG")
+    m:SetFrameLevel(50)
+    m:SetClampedToScreen(true)
+    m:SetSize(MW, #opts * ROW + 6)
+    m:SetPoint("BOTTOMRIGHT", anchor, "TOPRIGHT", 0, 3)
+    W.Texture(m, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.98 }):SetAllPoints()
+    W.Border(m, 1, T.border, "BORDER")
+    m:Hide()
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:SetFrameLevel(40)
+    catcher:Hide()
+    catcher:SetScript("OnClick", function() m:Hide() end)
+    m:SetScript("OnShow", function() catcher:Show() end)
+    m:SetScript("OnHide", function() catcher:Hide() end)
+    for i, o in ipairs(opts) do
+        local r = CreateFrame("Button", nil, m)
+        r:SetSize(MW - 8, ROW)
+        r:SetPoint("TOPLEFT", 4, -3 - (i - 1) * ROW)
+        r.hl = r:CreateTexture(nil, "BACKGROUND")
+        r.hl:SetColorTexture(1, 1, 1, 0.06)
+        r.hl:SetAllPoints()
+        r.hl:Hide()
+        r.label = W.Text(r, 12, T.text)
+        r.label:SetPoint("LEFT", 10, 0)
+        r.label:SetText(o[1])
+        r:SetScript("OnEnter", function(s) s.hl:Show(); Color(s.label, T.accent) end)
+        r:SetScript("OnLeave", function(s) s.hl:Hide(); Color(s.label, T.text) end)
+        r:SetScript("OnClick", function() m:Hide(); Box(o[2]) end)
+    end
+    anchor:HookScript("OnHide", function() m:Hide() end)
+    return m
+end
+
+-- "Auto-learn as I level": a small gold checkbox (fits the plan card better than the big switch)
+local function AutoCheck(parent)
+    local c = CreateFrame("Button", nil, parent)
+    c:SetHeight(18)
+    c.box = CreateFrame("Frame", nil, c)
+    c.box:SetSize(13, 13)
+    c.box:SetPoint("LEFT")
+    W.Texture(c.box, "BACKGROUND", T.field):SetAllPoints()
+    c.edges = W.Border(c.box, 1, T.border)
+    c.check = c.box:CreateTexture(nil, "ARTWORK")
+    c.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+    c.check:SetSize(18, 18)
+    c.check:SetPoint("CENTER", 1, 0)
+    c.label = W.Text(c, 12, T.text)
+    c.label:SetPoint("LEFT", c.box, "RIGHT", 8, 0)
+    c.label:SetText("Auto-learn as I level")
+    c:SetWidth(13 + 8 + c.label:GetStringWidth() + 4)
+    function c:Refresh()
+        self.check:SetShown(plan.auto and true or false)
+        Color(self.label, self.hot and T.accent or T.text)
+        W.SetBorder(self.edges, self.hot and T.glow or T.border)
+    end
+    c:SetScript("OnClick", function(s)
+        plan.auto = not plan.auto
+        declinedKey = nil
+        if plan.auto then QueueLearn(0.2) else HideAsk() end
+        s:Refresh()
+    end)
+    c:SetScript("OnEnter", function(s)
+        s.hot = true; s:Refresh()
+        GameTooltip:SetOwner(s, "ANCHOR_LEFT")
+        GameTooltip:SetText("Auto-learn as I level")
+        GameTooltip:AddLine("When you level up, asks first and then learns the next planned talents (out of combat).", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    c:SetScript("OnLeave", function(s) s.hot = false; s:Refresh(); GameTooltip:Hide() end)
+    return c
+end
+
+-- open or fold the Level plan (folded: a thin strip, and the trees take the room). animate = slide it
+-- (eased, about a fifth of a second); the plan's contents keep their full width and are clipped by the card.
+local SLIDE_TIME = 0.18
+local function ApplySide(animate)
+    if not win then return end
+    local side = win.side
+    local open = plan.side and true or false
+    local target = open and SIDE_W or SIDE_MIN
+    if box and not open then box:Hide() end
+    local function Finish()
+        side:SetScript("OnUpdate", nil)
+        win.sliding = nil
+        side:SetWidth(target)
+        side.content:SetShown(open); side.content:SetAlpha(1)
+        side.strip:SetShown(not open); side.strip:SetAlpha(1)
+    end
+    if not animate or not side:IsVisible() then Finish() return end
+    local from, t = side:GetWidth(), 0
+    win.sliding = true
+    side.content:Show()
+    side.strip:Show()
+    side:SetScript("OnUpdate", function(s, elapsed)
+        t = math.min(SLIDE_TIME, t + elapsed)
+        local p = 1 - (1 - t / SLIDE_TIME) ^ 3 -- ease out
+        s:SetWidth(from + (target - from) * p)
+        local shown = open and p or (1 - p)
+        s.content:SetAlpha(shown)
+        s.strip:SetAlpha(1 - shown)
+        if t >= SLIDE_TIME then
+            Finish()
+            LayoutTrees()
+            Paint()
+        end
+    end)
+end
+
 local function BuildWindow()
     if win then return end
     local host = _G.PlayerSpellsFrame
@@ -824,15 +1172,29 @@ local function BuildWindow()
     W.Texture(win, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 1 }):SetAllPoints()
     W.Border(win, 1, T.border)
 
-    -- trees: left part, over the game's own class artwork (the same picture the talents window shows)
+    -- the Level plan card on the right (made first: the trees are anchored to it)
+    local side = CreateFrame("Frame", nil, win)
+    side:SetPoint("TOPRIGHT", -12, -12)
+    side:SetPoint("BOTTOMRIGHT", -12, 34)
+    side:SetWidth(SIDE_W)
+    local sbg = side:CreateTexture(nil, "BACKGROUND", nil, 4)
+    sbg:SetAllPoints()
+    sbg:SetColorTexture(0, 0, 0, 0.35) -- a plain dark card: the class artwork stays behind the trees only
+    W.Border(side, 1, T.line)
+    win.side = side
+
+    -- trees: everything left of the plan card
     win.trees = CreateFrame("Frame", nil, win)
     win.trees:SetPoint("TOPLEFT", 12, -12)
-    win.trees:SetPoint("BOTTOMRIGHT", -(SIDE_W + 24), 34)
+    win.trees:SetPoint("BOTTOMRIGHT", side, "BOTTOMLEFT", -10, 0)
+
+    -- the game's own class artwork behind the trees only: it is three spec pictures side by side, so it has to
+    -- span exactly the three trees or a picture's edge lands inside a tree (stretched over the plan card, the
+    -- Fury / Protection seam showed up inside the Protection tree)
     win.art = win:CreateTexture(nil, "BACKGROUND", nil, 2)
     win.art:SetAllPoints(win.trees)
     local atlas
     local specVis = _G.SpecializationVisuals
-    local classID = select(3, UnitClass("player"))
     if specVis then
         for _, v in pairs(specVis) do
             if v.background and v.background:lower():find(CLASS:lower(), 1, true) then atlas = v.background; break end
@@ -851,7 +1213,7 @@ local function BuildWindow()
     -- a soft dark wash at the top so the tree names read well
     win.shade = win:CreateTexture(nil, "BACKGROUND", nil, 3)
     win.shade:SetPoint("TOPLEFT", win.trees, "TOPLEFT")
-    win.shade:SetPoint("TOPRIGHT", win.trees, "TOPRIGHT")
+    win.shade:SetPoint("TOPRIGHT", side, "TOPRIGHT")
     win.shade:SetHeight(60)
     win.shade:SetColorTexture(1, 1, 1, 1)
     if win.shade.SetGradient and CreateColor then
@@ -859,94 +1221,170 @@ local function BuildWindow()
     else
         win.shade:SetColorTexture(0, 0, 0, 0.3)
     end
+
+    -- bottom strip: what the colours mean (right) and tips / messages (left)
+    local legend = { { "Learned", LEARNED_EDGE }, { "Planned", T.glow }, { "Next", T.accent }, { "Can take a point", GREEN } }
+    local prev
+    for i = #legend, 1, -1 do
+        local e = legend[i]
+        local t = W.Text(win, 10, T.dim)
+        t:SetText(e[1])
+        if prev then t:SetPoint("RIGHT", prev, "LEFT", -12, 0) else t:SetPoint("BOTTOMRIGHT", -14, 13) end
+        local sw = CreateFrame("Frame", nil, win)
+        sw:SetSize(10, 10)
+        sw:SetPoint("RIGHT", t, "LEFT", -5, 0)
+        local fill = e[1] == "Next" and { 1, 0.82, 0, 0.55 } or { 0.12, 0.12, 0.12, 1 }
+        W.Texture(sw, "BACKGROUND", fill):SetAllPoints()
+        W.Border(sw, 1, e[2])
+        prev = sw
+    end
     win.status = W.Text(win, 11, T.dim)
     win.status:SetPoint("BOTTOMLEFT", 14, 12)
-    win.status:SetPoint("RIGHT", win.trees, "RIGHT", 0, 0)
+    win.status:SetPoint("RIGHT", prev, "LEFT", -16, 0)
+    win.status:SetWordWrap(false)
 
-    -- side: the Level plan
-    local side = CreateFrame("Frame", nil, win)
-    side:SetPoint("TOPRIGHT", -12, -12)
-    side:SetPoint("BOTTOMRIGHT", -12, 12)
-    side:SetWidth(SIDE_W)
-    W.Texture(side, "BACKGROUND", T.card):SetAllPoints()
-    W.Border(side, 1, T.line)
-    win.side = side
+    -- the plan card's contents (hidden while it is folded)
+    local c = CreateFrame("Frame", nil, side)
+    c:SetPoint("TOPLEFT")
+    c:SetPoint("BOTTOMLEFT")
+    c:SetWidth(SIDE_W) -- full width always; while sliding the card clips it
+    if side.SetClipsChildren then side:SetClipsChildren(true) end
+    side.content = c
 
-    local title = W.Text(side, 14, T.accent)
-    title:SetPoint("TOPLEFT", 10, -10)
-    title:SetText("Level plan")
-    win.summary = W.Text(side, 10, T.text)
-    win.summary:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
-    win.summary:SetWidth(SIDE_W - 20)
-    win.auto = W.Checkbox(side, "Learn these talents as I level",
-        function() return plan.auto end,
-        function(v) plan.auto = v; declinedKey = nil; if v then QueueLearn(0.2) else HideAsk() end end)
-    win.auto:SetPoint("TOPLEFT", win.summary, "BOTTOMLEFT", 0, -8)
-    local now = W.Button(side, 86, 20, "Learn now")
-    now:SetPoint("TOPRIGHT", -10, -8)
+    local title = W.Text(c, 15, T.text)
+    title:SetShadowOffset(1, -1)
+    title:SetShadowColor(0, 0, 0, 1)
+    title:SetPoint("LEFT", c, "TOPLEFT", 12, HEAD_Y)
+    title:SetText("Level Plan")
+    local fold = W.Button(c, 22, 22, ">")
+    fold:SetPoint("RIGHT", c, "TOPRIGHT", -8, HEAD_Y)
+    fold:SetScript("OnClick", function() GameTooltip:Hide(); plan.side = false; ApplySide(true) end)
+    fold:HookScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_LEFT")
+        GameTooltip:SetText("Fold the Level plan")
+        GameTooltip:Show()
+    end)
+    fold:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    local now = W.Button(c, 80, 22, "Learn now", true)
+    now:SetPoint("RIGHT", fold, "LEFT", -6, 0)
     now:SetScript("OnClick", function() Learn(true); C_Timer.After(0.5, Paint) end)
-    now:SetScript("OnEnter", function(s)
-        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+    now:HookScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_LEFT")
         GameTooltip:SetText("Learn the next planned talents now")
         GameTooltip:AddLine("Uses any talent points you have left.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    now:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    now:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    local hl = c:CreateTexture(nil, "BORDER")
+    hl:SetColorTexture(1, 1, 1, 0.08)
+    hl:SetPoint("TOPLEFT", 1, -HEAD_H)
+    hl:SetPoint("TOPRIGHT", -1, -HEAD_H)
+    hl:SetHeight(1)
 
-    win.list = CreateFrame("Frame", nil, side)
-    win.list:SetPoint("TOPLEFT", 6, -76)
-    win.list:SetPoint("BOTTOMRIGHT", -6, 62)
-    W.Texture(win.list, "BACKGROUND", T.field):SetAllPoints()
-    win.listInfo = W.Text(win.list, 10, T.dim, "RIGHT")
-    win.listInfo:SetPoint("TOPRIGHT", -6, -6)
-    local lh = W.Text(win.list, 10, T.dim)
-    lh:SetPoint("TOPLEFT", 8, -6)
-    lh:SetText("Level   Talent")
+    -- progress
+    win.summary = W.Text(c, 11, { 0.78, 0.74, 0.64 })
+    win.summary:SetPoint("TOPLEFT", 12, -62)
+    win.goal = W.Text(c, 11, T.dim, "RIGHT")
+    win.goal:SetPoint("TOPRIGHT", -12, -62)
+    local bar = CreateFrame("Frame", nil, c)
+    bar:SetPoint("TOPLEFT", 12, -80)
+    bar:SetPoint("TOPRIGHT", -12, -80)
+    bar:SetHeight(7)
+    W.Texture(bar, "BACKGROUND", T.field):SetAllPoints()
+    W.Border(bar, 1, T.line)
+    bar.fill = W.Texture(bar, "ARTWORK", T.brand)
+    bar.fill:SetPoint("TOPLEFT", 1, -1)
+    bar.fill:SetPoint("BOTTOMLEFT", 1, 1)
+    bar.fill:SetWidth(1)
+    win.bar = bar
+    bar:SetScript("OnSizeChanged", function() if win:IsShown() then Paint() end end)
+
+    win.auto = AutoCheck(c)
+    win.auto:SetPoint("TOPLEFT", 12, -95)
+    local hl2 = c:CreateTexture(nil, "BORDER")
+    hl2:SetColorTexture(1, 1, 1, 0.08)
+    hl2:SetPoint("TOPLEFT", 1, -121)
+    hl2:SetPoint("TOPRIGHT", -1, -121)
+    hl2:SetHeight(1)
+
+    -- the list: no box of its own, rows straight on the card
+    win.list = CreateFrame("Frame", nil, c)
+    win.list:SetPoint("TOPLEFT", 0, -122)
+    win.list:SetPoint("BOTTOMRIGHT", 0, 41)
+    win.listInfo = W.Text(win.list, 10, T.dim, "CENTER")
+    win.listInfo:SetPoint("BOTTOM", 0, 3)
     win.empty = W.Text(win.list, 11, T.dim)
-    win.empty:SetPoint("TOPLEFT", 10, -30)
-    win.empty:SetWidth(SIDE_W - 40)
+    win.empty:SetPoint("TOPLEFT", 14, -14)
+    win.empty:SetWidth(SIDE_W - 28)
     win.empty:SetText("No plan yet. Click talents on the left in the order you want them, or use From my talents to start from what you have.")
     win.list:EnableMouseWheel(true)
     win.list:SetScript("OnMouseWheel", function(_, delta)
-        listOff = math.max(0, listOff - delta * 3)
+        listOff = math.max(0, listOff - delta * 2)
         Paint()
     end)
+    win.list:SetScript("OnSizeChanged", function() if win:IsShown() then Paint() end end)
 
-    -- buttons: two rows of three
-    local defs = {
-        { "From my talents", function(s)
-            if #plan.points > 0 and not s.armed then
-                s.armed = true; s:SetLabel("Replace plan?")
-                C_Timer.After(3, function() s.armed = nil; s:SetLabel("From my talents") end)
-                return
-            end
-            s.armed = nil; s:SetLabel("From my talents")
-            TP.FromCurrent()
-        end },
-        { "Save", function() Box("save") end },
-        { "Load", function() Box("load") end },
-        { "Export", function() Box("export") end },
-        { "Import", function() Box("import") end },
-        { "Clear", function(s)
-            if not s.armed then
-                s.armed = true; s:SetLabel("Sure?")
-                C_Timer.After(3, function() s.armed = nil; s:SetLabel("Clear") end)
-                return
-            end
-            s.armed = nil; s:SetLabel("Clear")
-            wipe(plan.points)
-            plan.name = nil
-            TP.status = "Plan cleared."
-            Paint()
-        end },
-    }
-    local bw = math.floor((SIDE_W - 12 - 8) / 3)
-    for i, d in ipairs(defs) do
-        local b = W.Button(side, bw, 22, d[1])
-        local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
-        b:SetPoint("BOTTOMLEFT", 6 + col * (bw + 4), 32 - row * 26)
-        b:SetScript("OnClick", d[2])
-    end
+    -- footer: From my talents  |  Profiles v  |  Clear
+    local fl = c:CreateTexture(nil, "BORDER")
+    fl:SetColorTexture(1, 1, 1, 0.08)
+    fl:SetPoint("BOTTOMLEFT", 1, 40)
+    fl:SetPoint("BOTTOMRIGHT", -1, 40)
+    fl:SetHeight(1)
+    local clear = W.Button(c, 58, 24, "Clear")
+    clear:SetPoint("BOTTOMRIGHT", -8, 8)
+    clear:SetScript("OnClick", function(s)
+        if not s.armed then
+            s.armed = true; s:SetLabel("Sure?")
+            C_Timer.After(3, function() s.armed = nil; s:SetLabel("Clear") end)
+            return
+        end
+        s.armed = nil; s:SetLabel("Clear")
+        wipe(plan.points)
+        plan.name = nil
+        TP.status = "Plan cleared."
+        Paint()
+    end)
+    local prof = W.Button(c, 86, 24, "Profiles  v")
+    prof:SetPoint("RIGHT", clear, "LEFT", -6, 0)
+    local menu = ProfilesMenu(prof)
+    prof:SetScript("OnClick", function() if menu:IsShown() then menu:Hide() else menu:Show() end end)
+    local from = W.Button(c, 10, 24, "From my talents")
+    from:SetPoint("BOTTOMLEFT", 8, 8)
+    from:SetPoint("RIGHT", prof, "LEFT", -6, 0)
+    from:SetScript("OnClick", function(s)
+        if #plan.points > 0 and not s.armed then
+            s.armed = true; s:SetLabel("Replace plan?")
+            C_Timer.After(3, function() s.armed = nil; s:SetLabel("From my talents") end)
+            return
+        end
+        s.armed = nil; s:SetLabel("From my talents")
+        TP.FromCurrent()
+    end)
+
+    -- folded: a thin strip, click it to open the plan again
+    local strip = CreateFrame("Button", nil, side)
+    strip:SetAllPoints()
+    strip.hl = strip:CreateTexture(nil, "BACKGROUND", nil, 5)
+    strip.hl:SetAllPoints()
+    strip.hl:SetColorTexture(1, 1, 1, 0.05)
+    strip.hl:Hide()
+    local arrow = W.Text(strip, 14, T.accent, "CENTER")
+    arrow:SetPoint("TOP", 0, -20)
+    arrow:SetText("<")
+    local word = W.Text(strip, 11, T.accent, "CENTER")
+    word:SetPoint("TOP", arrow, "BOTTOM", 0, -12)
+    word:SetSpacing(2)
+    word:SetText("P\nL\nA\nN")
+    strip:SetScript("OnClick", function() GameTooltip:Hide(); plan.side = true; ApplySide(true) end)
+    strip:SetScript("OnEnter", function(s)
+        s.hl:Show()
+        GameTooltip:SetOwner(s, "ANCHOR_LEFT")
+        GameTooltip:SetText("Open the Level plan")
+        GameTooltip:Show()
+    end)
+    strip:SetScript("OnLeave", function(s) s.hl:Hide(); GameTooltip:Hide() end)
+    side.strip = strip
+    ApplySide()
 
     win:SetScript("OnShow", function()
         C_Timer.After(0, function() -- sizes are known after the first layout pass
@@ -957,7 +1395,11 @@ local function BuildWindow()
             Paint()
         end)
     end)
-    win:SetScript("OnSizeChanged", function() if win:IsShown() then LayoutTrees(); Paint() end end)
+    win.trees:SetScript("OnSizeChanged", function()
+        if not win:IsShown() then return end
+        LayoutTrees()
+        if not win.sliding then Paint() end -- while sliding only the layout moves; one Paint at the end
+    end)
     win:Hide()
 end
 
@@ -1007,12 +1449,12 @@ function Sync()
         win:SetPoint("TOPLEFT", host, "TOPLEFT", 8, -70)
         win:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -8, 8)
         win:Show()
-        opener:SetLabel("Planner  |cff4fd66bActive|r")
-        W.SetBorder(opener.edges, T.glow)
+        opener:SetLabel("Planner")
+        opener:SetPrimary(true) -- gold edge while the planner is up
     else
         if win then win:Hide() end
         opener:SetLabel("Planner")
-        W.SetBorder(opener.edges, T.line)
+        opener:SetPrimary(false)
     end
 end
 TP.Sync = Sync
@@ -1086,9 +1528,9 @@ CUI:RegisterPage("Talent Planner", function(page)
         function() return plan.open end, function(v) plan.open = v; Sync() end)
     show:SetPoint("TOPLEFT", 4, -62)
     W.Notes(page, 4, -98, width, "", {
-        "Open your talents (N) and click Planner (next to Primary / Secondary): the talents area turns into the planner, and clicking Planner again brings the normal talents back. Click a talent to plan its next point, right-click to take one off. Green means it can take a point now, gold means planned, grey means locked. The Level plan on the right lists every pick with the level it comes at (the first point at level 10, then one per level).",
+        "Open your talents (N) and click Planner (next to Primary / Secondary): the talents area turns into the planner, and clicking Planner again brings the normal talents back. Click a talent to plan its next point, right-click to take one off. Learned talents look normal, planned ones are faded with a gold edge, the next one to learn glows, and green means it can take a point now. The Level plan on the right shows your progress, folds the picks you have learned into one line, and shows the next pick as a gold card with the level it comes at (the first point at level 10, then one per level). The > button folds the plan into a thin strip so the trees get the room.",
         "With Learn these talents as I level on, a window asks before anything is learned when you level up (it names your Primary or Secondary talents, so a plan made for your other spec is never spent by mistake). Not now waits until your next level. In a fight it waits until the fight ends. Learn now uses any points you have left.",
-        "From my talents starts a plan from what you have learned now. Save and Load keep plans by name for every character of your class (Load shows the points per tree). Export and Import share a plan as text.",
+        "From my talents starts a plan from what you have learned now. The Profiles menu has Save and Load (plans by name for every character of your class; Load shows the points per tree) and Export and Import (share a plan as text).",
         "A pick that breaks the rules (5 points per tier in that tree, or a talent its arrow comes from not filled yet) shows in red and is skipped until you fix the plan.",
         "/cuitalents switches planner mode on or off.",
     })

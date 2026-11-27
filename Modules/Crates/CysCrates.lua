@@ -486,7 +486,7 @@ function Crates.Refresh()
         r.name:SetText((db.folded[c.fold or c.itemID] and "+ " or "") .. (c.name or "Crate")
             .. ((c.n or 1) > 1 and format("  |cFFFFFFFFx%d|r", c.n) or ""))
         local all = c.ready == #c.reqs
-        r.right:SetText(c.startMacro and "not started" or format("%d / %d", c.ready, #c.reqs))
+        r.right:SetText(c.startMacro and "not started" or (all and "Ready") or format("%d of %d items", c.ready, #c.reqs))
         if all then r.right:SetTextColor(0.35, 0.85, 0.35) else r.right:SetTextColor(0.7, 0.7, 0.7) end
         r.tag:SetText("")
         r.line:Show()

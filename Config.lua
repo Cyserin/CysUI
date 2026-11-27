@@ -25,7 +25,7 @@ local GROUPS = {
                             "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log",
                             "Swing Timer", "Threat", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick",
                             "Marker Wheel", "Weapon Swap", "Trinkets", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
-    { "Items & Leveling", { "Vendor", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Tracked Recipes", "Upgrade", "BiS List",
+    { "Items & Leveling", { "Vendor", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Tracked Recipes", "Upgrade",
                             "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
 }
 
@@ -330,7 +330,7 @@ end
 local MODULE_GROUPS = {
     { "Frames & Combat",  { "unitframes", "raidframes", "actionbars", "castbar", "nameplates", "playerAuras", "killtracker", "raiddebuffs", "damagemeters", "meter", "swing", "combattext", "threat", "markwheel", "weaponswap", "trinkets", "clickcast", "vehicleexit", "alerts", "manatick" } },
     { "Interface",        { "chat", "minimap", "mmbuttons", "infobar", "xpbar", "runs", "characters", "micromenu", "tooltip", "skins", "friends", "recruit", "hello", "scale", "durability", "automation", "questlist", "flight" } },
-    { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade", "bis", "queststart", "crates", "recipes" } },
+    { "Bags & Loot",      { "bags", "bank", "vendor", "consumables", "grouploot", "rolls", "upgrade", "queststart", "crates", "recipes" } },
     { "Character & Class", { "armory", "flyout", "skills", "totems", "tremor", "ranks", "talentplan", "healadvisor", "warrior", "shoutremind" } },
 }
 
