@@ -158,6 +158,7 @@ function MM.Enable()
     local numButtons = #buttons
     local padding = 2
     holder = CreateFrame("Frame", "CysUI_MicroMenuPanel", UIParent)
+    MM.holder = holder
     holder:SetSize(numButtons * 55 + (numButtons + 1) * padding, 18 + padding * 2)
 
     local btns, seps = {}, {}
@@ -241,6 +242,13 @@ function MM.Enable()
         hl:SetPoint("BOTTOMRIGHT", -1, 0)
         hl:SetColorTexture(T.brand[1], T.brand[2], T.brand[3], 0.22)
         hl:Hide()
+        -- opened from the data panel's Menu button: picking something closes it again (out of combat)
+        btn:HookScript("OnClick", function()
+            if DB().popup and not InCombatLockdown() then
+                holder:Hide()
+                if CUI.InfoBar then CUI.InfoBar:UpdateItem("menu") end
+            end
+        end)
         btn:SetScript("OnEnter", function() label:SetTextColor(T.accent[1], T.accent[2], T.accent[3], 1); hl:Show() end)
         btn:SetScript("OnLeave", function() label:SetTextColor(1, 1, 1, 1); hl:Hide() end)
         btns[i] = btn
@@ -255,6 +263,11 @@ function MM.Enable()
         end
     end
     Relayout()
+    if db.popup then holder:Hide() end
+    -- popup: Layout mode puts the panel back on its own box; pin it over the Menu button again
+    hooksecurefunc(CUI, "ApplyLayout", function(_, key)
+        if key == "micromenu" and DB().popup and MM.anchorBtn then MM.PlaceAbove(MM.anchorBtn) end
+    end)
 
     local function SyncSecure()
         if InCombatLockdown() then return end
@@ -272,6 +285,34 @@ function MM.Enable()
         if event == "PLAYER_ENTERING_WORLD" and db.hideBlizz and not InCombatLockdown() then MM:HideBlizzard() end
         C_Timer.After(0, SyncSecure)
     end)
+end
+
+-- Popup: the panel stays hidden and opens just above the data panel's Menu button (Info Bar > Micro menu button).
+-- Its box is pinned there out of combat; its own saved Layout spot is kept for when popup goes off again.
+function MM.PlaceAbove(btn)
+    MM.anchorBtn = btn
+    local m = CUI.movers and CUI.movers.micromenu
+    if not (holder and m and btn and DB().popup) or InCombatLockdown() then return end
+    m.mover:ClearAllPoints()
+    m.mover:SetPoint("BOTTOMRIGHT", btn, "TOPRIGHT", 0, 6)
+end
+
+function MM.SetPopup(on)
+    local db = DB()
+    db.popup = on and true or false
+    if not holder or InCombatLockdown() then return end
+    if on then
+        holder:Hide()
+        if MM.anchorBtn then MM.PlaceAbove(MM.anchorBtn) end
+    else
+        holder:Show()
+        CUI:ApplyLayout("micromenu")
+    end
+    if CUI.InfoBar then
+        local ib = CysUIDB.infobar
+        if ib and ib.enabled then ib.enabled.menu = on and true or ib.enabled.menu end
+        CUI.InfoBar:Apply()
+    end
 end
 
 CUI:RegisterModule({
@@ -295,5 +336,8 @@ CUI:RegisterPage("Micro Menu", function(page)
         function() return db.hideBlizz end,
         function(on) db.hideBlizz = on; if on then MM:HideBlizzard() end end)
     hide:SetPoint("TOPLEFT", 4, -60)
+    local pop = W.Checkbox(page, "Keep it hidden; open it from the Menu button on the Info Bar / data panel",
+        function() return db.popup end, function(on) MM.SetPopup(on) end)
+    pop:SetPoint("TOPLEFT", 4, -86)
 
 end)

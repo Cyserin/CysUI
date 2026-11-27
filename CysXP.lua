@@ -200,6 +200,67 @@ end
 
 function XP:Refresh() Refresh() end
 
+-- On the action bars: a thin XP line pinned along the top of the highest of action bars 1-3, as wide as that bar
+-- (it follows the bar's width), numbers only when you point at it. Uses Layout mode's Attach, so it can still be
+-- re-pinned or moved there. Off puts it back on its own spot with its old height and text setting.
+local ONBARS_H = 12 -- tall enough for the numbers to sit inside it
+local function TopActionBar()
+    local best, bestTop
+    for _, key in ipairs({ "bar_main", "bar_bl", "bar_br" }) do
+        local m = CUI.movers and CUI.movers[key]
+        local top = m and not m.disabled and m.frame and m.frame:IsShown() and m.mover:GetTop()
+        if top and (not bestTop or top > bestTop) then best, bestTop = key, top end
+    end
+    return best
+end
+local hookedBars = {}
+local function FollowWidth()
+    local db = DB()
+    local e = CysUIDB.layout and CysUIDB.layout.cys_xp_bar
+    if not (db.onBars and e and e.attach) then return end
+    local t = CUI.movers[e.attach]
+    local w = t and t.mover:GetWidth()
+    if w and w > 40 and math.abs((e.width or 0) - w) >= 1 then
+        e.width = math.floor(w + 0.5)
+        CUI:ApplyLayout("cys_xp_bar")
+    end
+end
+function XP.SetOnBars(on)
+    local db = DB()
+    if InCombatLockdown() then CUI:Print("Out of combat, please.") return end
+    CysUIDB.layout = CysUIDB.layout or {}
+    local e = CysUIDB.layout.cys_xp_bar or {}
+    CysUIDB.layout.cys_xp_bar = e
+    if on then
+        local target = TopActionBar()
+        if not target then
+            CUI:Print("No action bar to put the XP bar on (Action Bars module off?).")
+            db.onBars = false
+            return
+        end
+        if not db.onBars then db.savedText, db.savedH = db.textMode, e.height end
+        db.onBars = true
+        e.attach, e.spot, e.ax, e.ay = target, "above", 0, 3
+        e.height = ONBARS_H
+        db.textMode = 1 -- numbers always, inside the bar
+        local m = CUI.movers[target]
+        if m and not hookedBars[target] then
+            hookedBars[target] = true
+            m.mover:HookScript("OnSizeChanged", function() C_Timer.After(0, FollowWidth) end)
+        end
+        e.width = m and math.floor(m.mover:GetWidth() + 0.5) or e.width
+    else
+        if db.onBars then
+            e.attach, e.spot, e.ax, e.ay = nil, nil, nil, nil
+            e.height = db.savedH
+            db.textMode = db.savedText or 1
+        end
+        db.onBars = false
+    end
+    CUI:ApplyLayout("cys_xp_bar")
+    Refresh()
+end
+
 function XP.Enable()
     DB()
     bar = CreateFrame("Button", "CysXPBar", UIParent)
@@ -239,9 +300,14 @@ function XP.Enable()
     text2:SetPoint("CENTER", text, "CENTER", 0, 0)
     -- text size follows the bar's height
     local function SizeText()
-        local size = math.max(8, math.min(10, math.floor(bar:GetHeight() * 0.6 + 0.5)))
+        local h = bar:GetHeight()
+        local size = math.max(8, math.min(10, math.floor(h * 0.6 + 0.5)))
         text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
         text2:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
+        -- a bar too thin for its numbers (on the action bars) shows them just above it instead
+        text:ClearAllPoints()
+        if h < 10 then text:SetPoint("BOTTOM", bar, "TOP", 0, 3) else text:SetPoint("CENTER", 0, -1) end
+        if h < 10 then bar:SetHitRectInsets(0, 0, -4, -1) else bar:SetHitRectInsets(0, 0, 0, 0) end -- easier to point at
     end
     bar:SetScript("OnSizeChanged", SizeText)
     SizeText()
@@ -259,7 +325,7 @@ function XP.Enable()
 
     CUI:RegisterMovable(bar, "cys_xp_bar", "Experience Bar", {
         point = "BOTTOM", x = 0, y = 4,
-        resizable = true, minW = 150, maxW = 1000, minH = 6, maxH = 30, scalable = false,
+        resizable = true, minW = 150, maxW = 2000, minH = 4, maxH = 30, scalable = false,
     })
 
     local f = CreateFrame("Frame")
@@ -275,6 +341,24 @@ function XP.Enable()
         Refresh()
     end)
     Refresh()
+    -- on the action bars: keep matching the bar's width after a reload too
+    C_Timer.After(3, function()
+        local db = DB()
+        local e = CysUIDB.layout and CysUIDB.layout.cys_xp_bar
+        local m = db.onBars and e and e.attach and CUI.movers[e.attach]
+        if m and not hookedBars[e.attach] then
+            hookedBars[e.attach] = true
+            m.mover:HookScript("OnSizeChanged", function() C_Timer.After(0, FollowWidth) end)
+        end
+        -- earlier versions made it 5 / 8 px with numbers on mouseover: now 12 px, numbers always shown inside
+        if m and (e.height or 0) < ONBARS_H then e.height = ONBARS_H; CUI:ApplyLayout("cys_xp_bar") end
+        if m and not db.onBarsText then
+            db.onBarsText = true
+            if db.textMode == 2 then db.textMode = 1 end
+            Refresh()
+        end
+        FollowWidth()
+    end)
 end
 
 CUI:RegisterModule({
@@ -298,7 +382,7 @@ CUI:RegisterPage("XP Bar", function(page)
     local modeOpts = {}
     for i, name in ipairs(TEXT_MODES) do modeOpts[i] = { i, name } end
     local mode = W.Dropdown(page, 260, modeOpts, function() return db.textMode end,
-        function(v) db.textMode = v; Refresh() end, "Numbers on the bar: ")
+        function(v) db.textMode = v; db.onBarsText = true; Refresh() end, "Numbers on the bar: ")
     mode:SetPoint("TOPLEFT", 4, -66)
 
     local cap = W.Checkbox(page, "Hide it at max level", function() return db.hideAtMax end,
@@ -325,8 +409,11 @@ CUI:RegisterPage("XP Bar", function(page)
     local kt = W.Checkbox(page, "Show kills to level on the bar (from the Kill Tracker)", function() return db.killsText end,
         function(on) db.killsText = on; Refresh() end)
     kt:SetPoint("TOPLEFT", 4, -202)
+    local ob = W.Checkbox(page, "Slim bar along the top of the action bars",
+        function() return db.onBars end, function(on) XP.SetOnBars(on); mode:Refresh() end)
+    ob:SetPoint("TOPLEFT", 4, -228)
 
-    W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -238)
+    W.Header(page, "Colors (click to change)", width):SetPoint("TOPLEFT", 0, -264)
     local function ColorButton(y, label, key)
         local opts = {}
         for i, p in ipairs(PALETTE) do
@@ -336,12 +423,12 @@ CUI:RegisterPage("XP Bar", function(page)
             function(v) db[key] = v; Refresh() end, label .. ": ")
         b:SetPoint("TOPLEFT", 4, y)
     end
-    ColorButton(-268, "Your XP", "xpColor")
-    ColorButton(-296, "Rested XP", "restedColor")
-    ColorButton(-324, "Completed-quest XP", "questColor")
+    ColorButton(-294, "Your XP", "xpColor")
+    ColorButton(-322, "Rested XP", "restedColor")
+    ColorButton(-350, "Completed-quest XP", "questColor")
 
     local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", 4, -362)
+    note:SetPoint("TOPLEFT", 4, -388)
     note:SetWidth(width)
     note:SetJustifyV("TOP")
     note:SetSpacing(3)

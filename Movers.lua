@@ -581,8 +581,10 @@ local function BuildPanel()
     end
 
     f.rows = {}
+    f.pickRows = {}
     local function AddRow(label, get, set, lo, hi, step, suffix, applies)
         local row = W.Stepper(f, label, get, set, lo, hi, step, suffix)
+        row.wheelAlways = true -- the layout panel doesn't scroll: the wheel nudges values here
         row.applies = applies
         f.rows[#f.rows + 1] = row
     end
@@ -617,7 +619,7 @@ local function BuildPanel()
         row.dd:SetPoint("RIGHT", 0, 0)
         function row:Refresh() self.dd:Refresh() end
         row.applies = applies
-        f.rows[#f.rows + 1] = row
+        f.pickRows[#f.pickRows + 1] = row -- laid out at the bottom, so their lists open below the panel
         return row
     end
     local targets = { { "none", "Nothing (its own spot)" } }
@@ -692,6 +694,7 @@ local function BuildPanel()
                 if x then x.set(max(x.min or -99999, min(x.max or 99999, v))) end
             end, -99999, 99999, 1)
         row.extra = i
+        row.wheelAlways = true
         row.applies = function() return Extra() ~= nil end
         f.rows[#f.rows + 1] = row
     end
@@ -701,6 +704,18 @@ local function BuildPanel()
 
     f.showGrid = W.Checkbox(f, "Show grid lines near the box I move", function() return CysUIDB.showGrid ~= false end,
         function(on) CysUIDB.showGrid = on; if guides then guides:DrawGrid() end end)
+
+    -- heading over the Attach to / Where rows: a small gold label and a thin line to the right edge
+    f.attachHead = CreateFrame("Frame", nil, f)
+    f.attachHead:SetSize(332, 14)
+    local ahText = W.Text(f.attachHead, 11, T.accent)
+    ahText:SetPoint("LEFT", 0, 0)
+    ahText:SetText("Attach")
+    local ahLine = W.Texture(f.attachHead, "ARTWORK", T.line)
+    ahLine:SetHeight(1)
+    ahLine:SetPoint("LEFT", ahText, "RIGHT", 8, 0)
+    ahLine:SetPoint("RIGHT", 0, 0)
+    f.attachHead:Hide()
 
     f.resetOne = W.Button(f, 110, 22, "Reset this one")
     f.resetOne:SetScript("OnClick", function() if selected then CUI:ResetMover(selected) end end)
@@ -721,6 +736,8 @@ local function BuildPanel()
         self.resetAll:SetShown(not small)
         if small then
             for _, row in ipairs(self.rows) do row:Hide() end
+            for _, row in ipairs(self.pickRows) do row:Hide() end
+            self.attachHead:Hide()
             self.done:ClearAllPoints(); self.done:SetPoint("TOPRIGHT", -14, -36)
             self:SetHeight(68)
             return
@@ -746,6 +763,29 @@ local function BuildPanel()
         self.showGrid:SetPoint("TOPLEFT", 14, y - 32)
         self.showGrid:Refresh()
         y = y - 66
+        -- Attach to / Where sit at the bottom under their own heading
+        local anyPick = false
+        for _, row in ipairs(self.pickRows) do
+            if m and (not row.applies or row.applies(m)) then anyPick = true end
+        end
+        self.attachHead:SetShown(anyPick)
+        if anyPick then
+            self.attachHead:ClearAllPoints()
+            self.attachHead:SetPoint("TOPLEFT", 14, y + 4)
+            y = y - 18
+        end
+        for _, row in ipairs(self.pickRows) do
+            if anyPick and (not row.applies or row.applies(m)) then
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 14, y)
+                row:Show()
+                row:Refresh()
+                y = y - 28
+            else
+                row:Hide()
+            end
+        end
+        if anyPick then y = y - 10 end
         self.resetOne:ClearAllPoints(); self.resetOne:SetPoint("TOPLEFT", 14, y)
         self.resetAll:ClearAllPoints(); self.resetAll:SetPoint("LEFT", self.resetOne, "RIGHT", 8, 0)
         self.done:ClearAllPoints(); self.done:SetPoint("TOPRIGHT", -14, y)

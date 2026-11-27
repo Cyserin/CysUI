@@ -401,7 +401,7 @@ local function CastCostNow(unit)
 end
 
 local function UpdatePower(f)
-    if not f.power then return end
+    if not f.power or f.powerHidden then return end
     local unit = f.unit
     if not UnitExists(unit) then return end
     local mx = UnitPowerMax(unit)
@@ -414,6 +414,7 @@ local function UpdatePower(f)
         pcall(f.power.SetValue, f.power, pcur)
         if f.powerText then
             local mode = DB().manaText or "current"
+            if UnitPowerType(unit) == 1 and (mode == "percent" or mode == "valuepct") then mode = "current" end -- rage: no "%"
             if mode == "off" then
                 f.powerText:SetText("")
             else
@@ -432,6 +433,7 @@ local function UpdatePower(f)
     -- number on the mana bar (player only; Settings > Unit Frames)
     if f.powerText then
         local mode = DB().manaText or "current"
+        if UnitPowerType(unit) == 1 and (mode == "percent" or mode == "valuepct") then mode = "current" end -- rage: no "%"
         local cur = UnitPower(unit)
         if mode == "off" or mx <= 0 then
             f.powerText:SetText("")
@@ -543,9 +545,13 @@ local function Step(label, fn, f)
         end
     end
 end
+-- Darker fill (on by default): the class / reaction color pulled toward black, so the white text on top reads
+-- easily even on pale colors (Warrior tan, Priest white, Rogue yellow).
+local DARK = 0.6
 local function ApplyColor(f)
     local r, g, b = UnitColor(f.unit)
     if not DB().classColors then r, g, b = T.accent[1], T.accent[2], T.accent[3] end
+    if DB().darkFill ~= false then r, g, b = r * DARK, g * DARK, b * DARK end
     f.health:SetStatusBarColor(r, g, b)
 end
 
@@ -789,6 +795,12 @@ local function CreateUnitFrame(def)
     end
     f.name = overlay:CreateFontString(nil, "OVERLAY")
     f.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(def.fontSize or 11), "OUTLINE")
+    -- white text with a soft drop shadow on every frame
+    for _, fs in ipairs({ f.healthText, f.powerText, f.name }) do
+        fs:SetTextColor(1, 1, 1)
+        fs:SetShadowColor(0, 0, 0, 0.9)
+        fs:SetShadowOffset(1, -1)
+    end
     f.name:SetJustifyH("LEFT")
     f.name:SetWordWrap(false)
     f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
@@ -1060,6 +1072,50 @@ function UF.Enable()
     UF.ApplyNameStyle()
     UF.ApplyTargetAccent()
     UF.SetupLeaderIcons()
+    UF.ApplyPlayerPower()
+    C_Timer.After(3, UF.ApplyPlayerPower) -- once more after the modules (Resource Bar) are up
+end
+
+-- The player frame's own power bar. "auto" (default) hides it while Cys's Resource Bar is on and always shown,
+-- so rage / energy / mana isn't on screen twice; "show" / "hide" force it. The health bar takes the freed space.
+-- Our own child frames only, but they sit in a secure button, so it waits until out of combat.
+local powerWaiter
+function UF.ApplyPlayerPower()
+    local f = UF.frames.player
+    if not (f and f.power and f.health) then return end
+    if InCombatLockdown() then
+        if not powerWaiter then
+            powerWaiter = CreateFrame("Frame")
+            powerWaiter:SetScript("OnEvent", function(self)
+                self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                UF.ApplyPlayerPower()
+            end)
+        end
+        powerWaiter:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
+    local mode = DB().playerPower or "auto"
+    local hide = mode == "hide"
+    if mode == "auto" then
+        local rdb = CysUIDB.resource
+        hide = CUI:IsModuleEnabled("resource") and _G.CysResourceBar ~= nil and not (rdb and rdb.show == "combat")
+    end
+    local was = f.powerHidden
+    f.powerHidden = hide or nil
+    f.power:SetShown(not hide)
+    if f.powerText then f.powerText:SetShown(not hide) end
+    if hide and f.cysCostBar then f.cysCostBar:Hide() end
+    f.health:ClearAllPoints()
+    f.health:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
+    f.health:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
+    if hide then
+        f.health:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
+        f.health:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
+    else
+        f.health:SetPoint("BOTTOMLEFT", f.power, "TOPLEFT", 0, 1)
+        f.health:SetPoint("BOTTOMRIGHT", f.power, "TOPRIGHT", 0, 1)
+        if was then UF:Update(f) end
+    end
 end
 
 -- Group leader: a small crown just left of the top-left corner of the leader's frame - on the party frames, and
@@ -1459,12 +1515,19 @@ CUI:RegisterPage("Unit Frames", function(page)
         { "eliteTag", "Elite / Rare / Boss tag beside the name", RefreshAll },
         { "targetAccent", "Soft gold line along the top of the target frame", function() UF.ApplyTargetAccent() end },
         { "leaderIcon", "Crown beside the group leader (player and party frames)", function() UF.UpdateLeaders() end },
+        { "darkFill", "Darker health bars so the white text reads easily", RefreshAll },
     }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
             function(on) db[row[1]] = on and true or false; row[3]() end)
         cb:SetPoint("TOPLEFT", 4, y - 4)
         y = y - 26
     end
+    local ppBtn = W.Dropdown(page, 340, {
+            { "auto", "hide while Cys's Resource Bar is on" }, { "show", "always show" }, { "hide", "always hide" } },
+        function() return db.playerPower or "auto" end,
+        function(v) db.playerPower = v; UF.ApplyPlayerPower() end, "Player power bar: ")
+    ppBtn:SetPoint("TOPLEFT", 4, y - 6)
+    y = y - 34
     y = y - 4
     local auraSize = W.Stepper(page, "Target buff and debuff icon size", function() return db.auraSize or 24 end,
         function(v) db.auraSize = v; UF.RebuildAuras() end, 16, 40, 2, " px")

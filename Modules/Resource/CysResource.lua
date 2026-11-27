@@ -91,12 +91,14 @@ local function Update()
     pcall(bar.SetMinMaxValues, bar, 0, UnitPowerMax("player"))
     pcall(bar.SetValue, bar, UnitPower("player"))
     local cur, mx = UnitPower("player"), UnitPowerMax("player")
-    if db.text == "off" then
+    local mode = db.text
+    if token == "RAGE" and mode == "percent" then mode = "current" end -- rage tops out at 100: the number alone, no "%"
+    if mode == "off" then
         text:SetText("")
-    elseif db.text == "percent" and not Secret(cur) and not Secret(mx) and type(mx) == "number" and mx > 0 then
+    elseif mode == "percent" and not Secret(cur) and not Secret(mx) and type(mx) == "number" and mx > 0 then
         text:SetFormattedText("%d%%", cur / mx * 100 + 0.5) -- plain numbers (Classic Era, or unlocked): our own math is fine
     else
-        CysUICompat.LockedUnitText(text, "player", "power", db.text == "max" and "max" or db.text)
+        CysUICompat.LockedUnitText(text, "player", "power", mode == "max" and "max" or mode)
     end
     if db.label then
         label:SetText(string.upper(NAMES[token or ""] or (token and _G[token]) or ""))
@@ -117,6 +119,9 @@ local function Refresh()
     ApplySize()
     Update()
     UpdateShown()
+    -- the player frame hides its own power bar while this one is always shown (Unit Frames > Player power bar)
+    local UF = CUI.UnitFrames
+    if UF and UF.ApplyPlayerPower then pcall(UF.ApplyPlayerPower) end
 end
 CUI.ResourceRefresh = Refresh
 if type(CUI.SetLayoutMode) == "function" then hooksecurefunc(CUI, "SetLayoutMode", UpdateShown) end -- always visible while placing it

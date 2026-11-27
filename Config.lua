@@ -217,22 +217,26 @@ CUI:RegisterPage("General", function(page)
         function() return CysUIDB.menuButton ~= false end,
         function(v) CysUIDB.menuButton = v and true or false end)
     menuBtn:SetPoint("TOPLEFT", 4, -192)
+    local wheel = W.Checkbox(page, "Mouse wheel changes sliders in the settings (off: the wheel only scrolls)",
+        function() return CysUIDB.wheelSliders == true end,
+        function(v) CysUIDB.wheelSliders = v and true or false end)
+    wheel:SetPoint("TOPLEFT", 4, -214)
 
     local memHeader = W.Header(page, "Memory use", CONTENT_W)
-    memHeader:SetPoint("TOPLEFT", 0, -212)
+    memHeader:SetPoint("TOPLEFT", 0, -236)
     page.memStatus = W.Text(page, 16, T.text)
-    page.memStatus:SetPoint("TOPLEFT", 4, -238)
+    page.memStatus:SetPoint("TOPLEFT", 4, -262)
     local legend = W.Text(page, 10, T.desc)
-    legend:SetPoint("TOPLEFT", 4, -262)
+    legend:SetPoint("TOPLEFT", 4, -286)
     legend:SetWidth(CONTENT_W - 12)
     legend:SetJustifyV("TOP")
     legend:SetSpacing(2)
     legend:SetText(format("|cFF59D959Green|r under %d MB   |cFFFFD100Yellow|r %d-%d MB   |cFFFF4D4DRed|r over %d MB\nAddon memory only; other addons are not counted.", MEM_YELLOW, MEM_YELLOW, MEM_RED, MEM_RED))
     page.memNames = W.Text(page, 11, T.text)
-    page.memNames:SetPoint("TOPLEFT", 4, -298)
+    page.memNames:SetPoint("TOPLEFT", 4, -322)
     page.memNames:SetSpacing(3)
     page.memValues = W.Text(page, 11, T.accent, "RIGHT")
-    page.memValues:SetPoint("TOPLEFT", 160, -298)
+    page.memValues:SetPoint("TOPLEFT", 160, -322)
     page.memValues:SetWidth(90)
     page.memValues:SetSpacing(3)
 
@@ -286,7 +290,7 @@ CUI:RegisterPage("General", function(page)
         function(v) CysUIDB.update = CysUIDB.update or {}; CysUIDB.update.enabled = v and true or false end)
     upd:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -14)
 
-    page.contentHeight = 830
+    page.contentHeight = 852
     RefreshMemory(page)
 end, RefreshMemory)
 

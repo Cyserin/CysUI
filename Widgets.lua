@@ -483,16 +483,24 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     function b:SetActive(on)
         if on then self:Enable(); self:SetAlpha(1) else self:Disable(); self:SetAlpha(0.4) end
     end
-    b:SetScript("OnEnter", function(s) s.hot = true; s:Paint() end)
-    b:SetScript("OnLeave", function(s) s.hot = false; s:Paint() end)
+    -- a choice too long for the box shows in full in a tooltip
+    b:SetScript("OnEnter", function(s)
+        s.hot = true; s:Paint()
+        if s.label.IsTruncated and s.label:IsTruncated() and not s.open then
+            GameTooltip:SetOwner(s, "ANCHOR_TOP")
+            GameTooltip:AddLine(s.label:GetText() or "", 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+    b:SetScript("OnLeave", function(s) s.hot = false; s:Paint(); if not s.open then GameTooltip:Hide() end end)
 
     local ROW = 20
+    -- the open list lives in the TOOLTIP strata: above every window, whatever level the window has climbed to
     local list = CreateFrame("Frame", nil, UIParent)
-    list:SetFrameStrata("FULLSCREEN_DIALOG")
+    list:SetFrameStrata("TOOLTIP")
     list:SetFrameLevel(50)
     list:SetClampedToScreen(true)
     list:SetSize(width, #options * ROW + 6)
-    list:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
     W.Texture(list, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.98 }):SetAllPoints()
     W.Border(list, 1, T.border, "BORDER")
     list:Hide()
@@ -500,7 +508,7 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     -- clicking anywhere else closes the list
     local catcher = CreateFrame("Button", nil, UIParent)
     catcher:SetAllPoints(UIParent)
-    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:SetFrameStrata("TOOLTIP")
     catcher:SetFrameLevel(40)
     catcher:Hide()
     catcher:SetScript("OnClick", function() list:Hide() end)
@@ -552,14 +560,44 @@ function W.Dropdown(parent, width, options, get, set, prefix)
         end)
         rows[i] = row
     end
+    -- the list can be wider than the box, so long choices are never cut off
+    local listW = width
+    for _, row in ipairs(rows) do
+        local fs = row.label
+        local tw = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth() or 0
+        listW = math.max(listW, math.ceil(tw + 26))
+    end
+    listW = math.min(listW, 480)
+    list:SetWidth(listW)
+    for _, row in ipairs(rows) do row:SetWidth(listW - 8) end
+
+    -- Open the list above whatever window holds the box (the settings window and the layout panel share its
+    -- strata and climb in level when clicked), the click-catcher just under it. Opens upward near the bottom edge.
+    local function Place()
+        local lvl = 60
+        catcher:SetFrameLevel(lvl - 10)
+        list:SetFrameLevel(lvl)
+        for _, row in ipairs(rows) do row:SetFrameLevel(lvl + 2) end
+        list:Raise()
+        list:ClearAllPoints()
+        local bottom = b:GetBottom()
+        local room = bottom and (bottom * b:GetEffectiveScale() / UIParent:GetEffectiveScale()) or 9999
+        if room < list:GetHeight() + 8 then
+            list:SetPoint("BOTTOMLEFT", b, "TOPLEFT", 0, 2)
+        else
+            list:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -2)
+        end
+    end
     b:SetScript("OnClick", function()
         if list:IsShown() then list:Hide() return end
+        GameTooltip:Hide()
         local cur = get()
         for i, o in ipairs(options) do
             rows[i].current = o[1] == cur
             rows[i].hot = false
             rows[i]:Paint()
         end
+        Place()
         list:Show()
     end)
     b:HookScript("OnHide", function() list:Hide() end)
@@ -586,7 +624,10 @@ function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(320, 22)
     f:EnableMouse(true)
-    f:EnableMouseWheel(true)
+    -- the wheel changes the value only when switched on (General page) or on panels that don't scroll
+    -- (layout mode sets f.wheelAlways); otherwise it passes through and scrolls the settings window
+    local function WheelOn() return f.wheelAlways or (CysUIDB and CysUIDB.wheelSliders == true) end
+    f:EnableMouseWheel(false)
     f.hl = f:CreateTexture(nil, "BACKGROUND")
     f.hl:SetColorTexture(1, 1, 1, 0.045)
     f.hl:SetPoint("TOPLEFT", -6, 1)
@@ -710,7 +751,7 @@ function W.Stepper(parent, label, get, set, minValue, maxValue, step, suffix)
         if type(v) ~= "number" or f.dragging then return end
         Commit(v + (delta > 0 and step or -step))
     end)
-    f:SetScript("OnEnter", Hot)
+    f:SetScript("OnEnter", function() f:EnableMouseWheel(WheelOn() and true or false); Hot() end)
     f:SetScript("OnLeave", Hot)
 
     box:SetScript("OnEnter", function(s) s.hot = true; Hot() end)
