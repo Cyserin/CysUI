@@ -15,12 +15,15 @@ local T = W.T
 local F = {}
 CUI.Friends = F
 
-local floor, max, min = math.floor, math.max, math.min
+local floor, max, min, ceil = math.floor, math.max, math.min, math.ceil
 local format = string.format
 
-local ROW_H = 34
-local TOP = 86     -- space above the list (title, tabs, search)
-local BOTTOM = 44  -- space below the list (buttons)
+local ROW_H = 36                 -- row height: 36 Comfortable, 24 Compact (DB().density)
+local TILE_Y, TILE_H = 54, 42     -- the count tiles in the header
+local TAB_Y, TAB_H = 112, 26      -- the tab strip
+local SEARCH_Y, SEARCH_H = 146, 24 -- search box, row size, add button
+local TOP = 178                   -- space above the list
+local BOTTOM = 10                 -- space below the list (42 on the Guild tab: its Guild window button)
 
 local function DB()
     CysUIDB.friends = CysUIDB.friends or {}
@@ -29,6 +32,11 @@ local function DB()
     if d.takeKey == nil then d.takeKey = true end
     if d.groupByGame == nil then d.groupByGame = true end
     if d.guildInviteMenu == nil then d.guildInviteMenu = true end
+    if d.density ~= "compact" then d.density = "comfortable" end
+    if not d.foldInit then -- the Offline groups start folded (click their header to open them)
+        d.foldInit = true
+        d.collapsed.off, d.collapsed.goff = true, true
+    end
     return d
 end
 
@@ -296,8 +304,10 @@ end
 --------------------------------------------------------------------------------
 -- Window
 --------------------------------------------------------------------------------
-local f, list, rows, track, thumb, countText, searchBox, searchHint
-local tabFriends, tabWho, tabGuild, tabIgnore, footL, footM, footR, emptyText
+local f, list, rows, track, thumb, searchBox, searchHint
+local tabFriends, tabWho, tabGuild, tabIgnore, footM, emptyText
+local tabBar, tiles, me, statusDD, bcBox, bcHint, densityDD, addBtn, fline
+local Layout -- set further down
 local menu, catcher, popup
 local mode = "friends"
 local view, offset = {}, 0
@@ -360,13 +370,14 @@ local function SetIcon(r, kind, a, b, online, status)
         r.icon:SetTexture(CIRCLE)
         r.icon:SetTexCoord(0, 1, 0, 1)
         r.icon:SetVertexColor(0.32, 0.32, 0.32)
-        r.icon:SetSize(9, 9)
+        local dot = (r.iconSize or 24) >= 24 and 9 or 7
+        r.icon:SetSize(dot, dot)
         r.icon:SetDesaturated(false)
         r.icon:SetAlpha(1)
         r.iconBg:Hide()
     else
         r.icon:SetVertexColor(1, 1, 1)
-        r.icon:SetSize(24, 24)
+        r.icon:SetSize(r.iconSize or 24, r.iconSize or 24)
         r.icon:SetDesaturated(not online)
         r.icon:SetAlpha(online and 1 or 0.45)
         r.iconBg:SetAlpha(online and 1 or 0.4)
@@ -382,24 +393,137 @@ local function SetIcon(r, kind, a, b, online, status)
 end
 local STATUS_ON, STATUS_AWAY, STATUS_BUSY, STATUS_APP = { 0.30, 0.85, 0.40 }, { 1, 0.75, 0.15 }, { 0.95, 0.25, 0.25 }, { 0.35, 0.60, 0.95 }
 
+local function RowWidth(r)
+    local w = r:GetWidth()
+    if not w or w < 50 then w = ((f and f:GetWidth()) or 360) - 34 end
+    return w
+end
+
+-- group cards: every person sits on a soft panel with a thin outline; one group's rows stack into one card
+local function ShowCard(r, e)
+    r.card:Show(); r.bL:Show(); r.bR:Show(); r.bT:Show()
+    r.bT:SetAlpha(e._first and 1 or 0.5) -- the card's top edge, or a quieter line between two people
+    r.bB:SetShown(e._last and true or false)
+end
+local function HideCard(r)
+    r.card:Hide(); r.bL:Hide(); r.bR:Hide(); r.bT:Hide(); r.bB:Hide()
+end
+
+-- Comfortable (two lines, 36 px) or Compact (one line, 24 px): icon sizes follow the row height
+local function ApplyDensity(r)
+    local d = DB().density
+    if r.dens == d then return end
+    r.dens = d
+    local compact = d == "compact"
+    local bg, ring, dot = compact and 18 or 26, compact and 9 or 11, compact and 5 or 7
+    r.iconSize = compact and 16 or 24
+    r.iconBg:SetSize(bg, bg)
+    r.iconBg:ClearAllPoints()
+    r.iconBg:SetPoint("LEFT", compact and 7 or 8, 0)
+    r.statusRing:SetSize(ring, ring)
+    r.statusRing:ClearAllPoints()
+    r.statusRing:SetPoint("CENTER", r.iconBg, "BOTTOMRIGHT", compact and -2 or -3, compact and 2 or 3)
+    r.status:SetSize(dot, dot)
+    local bh = compact and 18 or 22
+    for _, b in ipairs(r.acts.all) do b:SetHeight(bh) end
+    r.acts:SetHeight(bh)
+end
+
+-- name / second line / zone / level for the row's density; the hover buttons take over the right side
+local function PlaceText(r)
+    local e = r.entry
+    if not e or e.kind == "header" then return end
+    local compact = r.dens == "compact"
+    local left = (e.kind == "motd") and 10 or (compact and 30 or 42)
+    local w = RowWidth(r)
+    local actsW = r.actsOn and (r.acts:GetWidth() + 12) or 0
+    r.name:ClearAllPoints(); r.sub:ClearAllPoints(); r.zone:ClearAllPoints(); r.right:ClearAllPoints()
+    r.right:SetShown(not r.actsOn)
+    r.right:SetWidth(30)
+    if compact then
+        r.sub:Hide()
+        r.right:SetPoint("RIGHT", -10, 0)
+        local zw = 0
+        local zt = r.zone:GetText()
+        if not r.actsOn and zt and zt ~= "" then
+            r.zone:SetWidth(0)
+            zw = min(ceil(r.zone:GetStringWidth() or 0) + 2, floor((w - left) * 0.45))
+            r.zone:SetWidth(zw)
+            r.zone:SetPoint("RIGHT", -44, 0)
+            r.zone:Show()
+        else
+            r.zone:Hide()
+        end
+        r.name:SetPoint("LEFT", left, 0)
+        r.name:SetWidth(max(20, w - left - (r.actsOn and actsW or (46 + (zw > 0 and zw + 8 or 0)))))
+    else
+        r.zone:Hide(); r.sub:Show()
+        r.right:SetPoint("TOPRIGHT", -10, -7)
+        r.name:SetPoint("TOPLEFT", left, -6)
+        r.sub:SetPoint("BOTTOMLEFT", left, 6)
+        r.name:SetWidth(max(20, w - left - (r.actsOn and actsW or 44)))
+        r.sub:SetWidth(max(20, w - left - (r.actsOn and actsW or 10)))
+    end
+end
+
+local function HideActs(r)
+    r.actsOn = false
+    r.acts:Hide()
+    if r.entry then PlaceText(r) end
+end
+
+-- hover buttons on the row you point at: Whisper / Invite / ... (more), or Unignore on the Ignore tab
+local function ShowActs(r)
+    local e = r.entry
+    if not e or e.kind == "header" or e.kind == "motd" then HideActs(r) return end
+    local a = r.acts
+    local want = {}
+    if e.kind == "ignore" then
+        want[1] = a.unignore
+    else
+        if e.online then want[#want + 1] = a.whisper end
+        if e.online and e.sameGame and e.char then want[#want + 1] = a.invite end
+        want[#want + 1] = a.more
+    end
+    for _, b in ipairs(a.all) do b:Hide() end
+    local x = 0
+    for i = #want, 1, -1 do
+        local b = want[i]
+        b:ClearAllPoints()
+        b:SetPoint("RIGHT", a, "RIGHT", -x, 0)
+        b:Show()
+        x = x + b:GetWidth() + 3
+    end
+    a:SetWidth(max(1, x - 3))
+    r.actsOn = true
+    a:Show()
+    PlaceText(r)
+end
+
 local function ShowEntry(r, e)
     r.entry = e
     r:Show()
     r:SetAlpha(1)
-    r.right:SetText("")
+    ApplyDensity(r)
+    local compact = r.dens == "compact"
+    r.right:SetText(""); r.zone:SetText(""); r.sub:SetText("")
     if e.kind == "header" then
         -- quiet section break: small gold caps, a thin rule, the count on the right
-        r.dot:Hide(); r.sub:Hide(); r.card:Hide(); r.hbg:Hide(); r.sel:Hide(); r.edge:Hide()
+        r.actsOn = false; r.acts:Hide()
+        HideCard(r)
+        r.sub:Hide(); r.zone:Hide(); r.sel:Hide(); r.edge:Hide(); r.right:Show()
         r.icon:Hide(); r.iconBg:Hide(); r.status:Hide(); r.statusRing:Hide()
         local label, n = (e.text or ""):match("^(.-) %((%d+)%)$")
         label = label or e.text or ""
         r.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "")
         r.name:ClearAllPoints()
-        r.name:SetPoint("BOTTOMLEFT", 4, 7)
+        r.name:SetWidth(0)
+        r.name:SetPoint("BOTTOMLEFT", 4, compact and 5 or 7)
         r.name:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
         r.name:SetText((DB().collapsed[e.group] and "+  " or "-  ") .. label:upper())
         r.right:ClearAllPoints()
-        r.right:SetPoint("BOTTOMRIGHT", -4, 7)
+        r.right:SetWidth(0)
+        r.right:SetPoint("BOTTOMRIGHT", -4, compact and 5 or 7)
         r.right:SetTextColor(T.dim[1], T.dim[2], T.dim[3])
         r.right:SetText(n or "")
         r.line:ClearAllPoints()
@@ -409,45 +533,30 @@ local function ShowEntry(r, e)
         r.line:Show()
         return
     end
-    r.dot:Hide(); r.sub:Show(); r.line:Hide(); r.hbg:Hide()
-    r.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(13), "")
-    r.sub:ClearAllPoints()
-    r.sub:SetPoint("BOTTOMLEFT", 40, 5)
-    r.sub:SetPoint("BOTTOMRIGHT", -8, 5)
-    r.right:ClearAllPoints()
-    r.right:SetPoint("TOPRIGHT", -8, -6)
+    r.line:Hide()
+    ShowCard(r, e)
+    r.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(compact and 12 or 13), "")
     r.right:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
-    r.name:ClearAllPoints()
-    r.name:SetPoint("TOPLEFT", 40, -5)
-    r.name:SetPoint("RIGHT", r.right, "LEFT", -6, 0)
-    r.card:Show()
     local isSel = selected == e.key
     r.sel:SetShown(isSel)
     r.edge:SetShown(isSel)
+    local sub, short = "", ""
 
     if e.kind == "ignore" then
         SetIcon(r, "none", nil, nil, true, STATUS_BUSY)
         r.name:SetTextColor(T.text[1], T.text[2], T.text[3])
         r.name:SetText(e.name)
-        r.sub:SetText(DIM .. "Ignored")
-        return
-    end
-
-    if e.kind == "motd" then
-        r.icon:Hide(); r.iconBg:Hide(); r.status:Hide(); r.statusRing:Hide(); r.edge:Hide()
-        r.name:ClearAllPoints()
-        r.name:SetPoint("TOPLEFT", 10, -4)
-        r.name:SetPoint("TOPRIGHT", -6, -4)
+        sub, short = DIM .. "Ignored", DIM .. "Ignored"
+    elseif e.kind == "motd" then
+        r.icon:Hide(); r.iconBg:Hide(); r.status:Hide(); r.statusRing:Hide(); r.edge:Hide(); r.sel:Hide()
         r.name:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
-        r.name:SetText("<" .. (e.guild or "Guild") .. ">  Message of the day")
-        r.sub:ClearAllPoints()
-        r.sub:SetPoint("BOTTOMLEFT", 10, 4)
-        r.sub:SetPoint("BOTTOMRIGHT", -6, 4)
-        r.sub:SetText(LIGHT .. (e.text or ""))
-        r.sel:Hide()
-        return
-    end
-    if e.kind == "guild" then
+        if compact then
+            r.name:SetText("Message of the day  " .. LIGHT .. (e.text or ""))
+        else
+            r.name:SetText("<" .. (e.guild or "Guild") .. ">  Message of the day")
+            sub = LIGHT .. (e.text or "")
+        end
+    elseif e.kind == "guild" then
         local cr, cg, cb = ClassColor(e.class, e.file)
         local st = nil
         if e.online then st = (e.dnd and STATUS_BUSY) or (e.afk and STATUS_AWAY) or STATUS_ON end
@@ -455,20 +564,17 @@ local function ShowEntry(r, e)
         if e.online then r.name:SetTextColor(cr, cg, cb) else r.name:SetTextColor(T.dim[1], T.dim[2], T.dim[3]); r:SetAlpha(0.75) end
         r.name:SetText(e.name .. DIM .. "   " .. (e.rank or ""))
         if e.level and e.online then r.right:SetText(e.level) end
-        local s
         if e.online then
-            s = format("%s%s", e.afk and "<Away> " or (e.dnd and "<Busy> " or ""), e.class or "")
-            if e.area and e.area ~= "" then s = s .. " - " .. e.area end
-            s = LIGHT .. s
+            sub = format("%s%s", e.afk and "<Away> " or (e.dnd and "<Busy> " or ""), e.class or "")
+            if e.area and e.area ~= "" then sub = sub .. " - " .. e.area end
+            sub = LIGHT .. sub
+            short = e.area or ""
         else
-            s = DIM .. "Offline" .. (e.ago and (" - " .. e.ago) or "")
+            sub = DIM .. "Offline" .. (e.ago and (" - " .. e.ago) or "")
+            short = DIM .. (e.ago or "Offline")
         end
-        if e.note and e.note ~= "" then s = s .. DIM .. '  "' .. e.note .. '"' end
-        r.sub:SetText(s)
-        return
-    end
-
-    if e.kind == "who" then
+        if e.note and e.note ~= "" then sub = sub .. DIM .. '  "' .. e.note .. '"' end
+    elseif e.kind == "who" then
         local cr, cg, cb = ClassColor(e.class, e.file)
         SetIcon(r, "class", e.class, e.file, true, nil)
         r.name:SetTextColor(cr, cg, cb)
@@ -476,55 +582,59 @@ local function ShowEntry(r, e)
         if e.level then r.right:SetText(e.level) end
         local s = format("%s %s", e.race or "", e.class or "")
         if e.area and e.area ~= "" then s = s .. " - " .. e.area end
-        r.sub:SetText(LIGHT .. s .. ((e.guild and e.guild ~= "") and (DIM .. "  <" .. e.guild .. ">") or ""))
-        return
-    end
-
-    local st = nil
-    if e.online then
-        st = (e.dnd and STATUS_BUSY) or (e.afk and STATUS_AWAY) or (Category(e) == "app" and STATUS_APP) or STATUS_ON
-    end
-    if e.online and e.sameGame then SetIcon(r, "class", e.class, nil, true, st)
-    elseif e.online then SetIcon(r, "game", e.client, nil, true, st)
-    elseif e.kind == "bnet" then SetIcon(r, "game", nil, nil, false, nil) -- Battle.net logo, faded
-    else SetIcon(r, "class", e.class, nil, false, nil) end
-    if not e.online then r:SetAlpha(0.75) end
-
-    local sub
-    if e.online and e.sameGame then
-        local cr, cg, cb = ClassColor(e.class)
-        local shown = e.char or e.name
-        r.name:SetTextColor(1, 1, 1)
-        local txt = Hex(cr, cg, cb) .. shown .. "|r"
-        if e.kind == "bnet" and e.account and e.account ~= shown then txt = txt .. DIM .. "  " .. e.account .. "|r" end
-        r.name:SetText(txt)
-        local parts = {}
-        if e.afk then parts[#parts + 1] = "<Away>" elseif e.dnd then parts[#parts + 1] = "<Busy>" end
-        if e.class and e.class ~= "" then parts[#parts + 1] = e.class end
-        if e.level and e.level > 0 then r.right:SetText(e.level) end
-        local s = table.concat(parts, " ")
-        if e.area and e.area ~= "" then
-            -- the zone in green when they are in the same zone as you
-            local here = GetRealZoneText and GetRealZoneText()
-            local zone = (here and here == e.area) and ("|cFF66DD77" .. e.area .. "|r") or e.area
-            s = s .. (s ~= "" and "  |cFF555555-|r  " or "") .. zone
-        end
-        sub = s
-    elseif e.online then
-        r.name:SetTextColor(T.text[1], T.text[2], T.text[3])
-        r.name:SetText(e.name)
-        local label = GameLabel(e)
-        sub = GameColor(e) .. label .. "|r"
-        if Category(e) ~= "app" and e.presence and e.presence ~= "" and e.presence ~= label then
-            sub = sub .. LIGHT .. " - " .. e.presence
-        end
+        sub = LIGHT .. s .. ((e.guild and e.guild ~= "") and (DIM .. "  <" .. e.guild .. ">") or "")
+        short = e.area or ""
     else
-        r.name:SetTextColor(T.dim[1], T.dim[2], T.dim[3])
-        r.name:SetText(e.name)
-        local ago = Ago(e.lastOnline)
-        sub = (e.note and e.note ~= "" and e.note) or ("Offline" .. (ago and (" - " .. ago) or ""))
+        local st = nil
+        if e.online then
+            st = (e.dnd and STATUS_BUSY) or (e.afk and STATUS_AWAY) or (Category(e) == "app" and STATUS_APP) or STATUS_ON
+        end
+        if e.online and e.sameGame then SetIcon(r, "class", e.class, nil, true, st)
+        elseif e.online then SetIcon(r, "game", e.client, nil, true, st)
+        elseif e.kind == "bnet" then SetIcon(r, "game", nil, nil, false, nil) -- Battle.net logo, faded
+        else SetIcon(r, "class", e.class, nil, false, nil) end
+        if not e.online then r:SetAlpha(0.75) end
+
+        if e.online and e.sameGame then
+            local cr, cg, cb = ClassColor(e.class)
+            local shown = e.char or e.name
+            r.name:SetTextColor(1, 1, 1)
+            local txt = Hex(cr, cg, cb) .. shown .. "|r"
+            if e.kind == "bnet" and e.account and e.account ~= shown then txt = txt .. DIM .. "  " .. e.account .. "|r" end
+            r.name:SetText(txt)
+            local parts = {}
+            if e.afk then parts[#parts + 1] = "|cFFFFBF26Away|r" elseif e.dnd then parts[#parts + 1] = "|cFFF07A6ABusy|r" end
+            if e.class and e.class ~= "" then table.insert(parts, 1, e.class) end
+            if e.level and e.level > 0 then r.right:SetText(e.level) end
+            local zone
+            if e.area and e.area ~= "" then
+                -- the zone in green when they are in the same zone as you
+                local here = GetRealZoneText and GetRealZoneText()
+                zone = (here and here == e.area) and ("|cFF66DD77" .. e.area .. "|r") or e.area
+                table.insert(parts, e.class and e.class ~= "" and 2 or 1, zone)
+            end
+            sub = DIM .. table.concat(parts, "  |cFF555555·|r  ")
+            short = zone or ""
+        elseif e.online then
+            r.name:SetTextColor(T.text[1], T.text[2], T.text[3])
+            r.name:SetText(e.name)
+            local label = GameLabel(e)
+            sub = GameColor(e) .. label .. "|r"
+            short = sub
+            if Category(e) ~= "app" and e.presence and e.presence ~= "" and e.presence ~= label then
+                sub = sub .. LIGHT .. " - " .. e.presence
+            end
+        else
+            r.name:SetTextColor(T.dim[1], T.dim[2], T.dim[3])
+            r.name:SetText(e.name)
+            local ago = Ago(e.lastOnline)
+            sub = DIM .. ((e.note and e.note ~= "" and e.note) or ("Offline" .. (ago and (" - " .. ago) or "")))
+            short = DIM .. (ago or "Offline")
+        end
     end
-    r.sub:SetText(DIM .. (sub or ""))
+    r.sub:SetText(sub or "")
+    r.zone:SetText(short or "")
+    if r.actsOn then ShowActs(r) else PlaceText(r) end
 end
 
 local function Update()
@@ -566,6 +676,83 @@ local function Update()
     end
 end
 
+-- your own line in the header: Battle.net status (Online / Away / Busy) and broadcast message
+local STATUS_OPTS = { { "online", "Online" }, { "away", "Away" }, { "busy", "Busy" } }
+local function MyStatus()
+    if BNGetInfo then
+        local ok, _, _, _, _, afk, dnd = pcall(BNGetInfo)
+        if ok then return (dnd and "busy") or (afk and "away") or "online" end
+    end
+    if UnitIsDND and UnitIsDND("player") then return "busy" end
+    if UnitIsAFK and UnitIsAFK("player") then return "away" end
+    return "online"
+end
+local function StatusColor(s) return (s == "busy" and STATUS_BUSY) or (s == "away" and STATUS_AWAY) or STATUS_ON end
+local function SetMyStatus(s)
+    if BNSetDND then pcall(BNSetDND, s == "busy") end
+    if BNSetAFK then pcall(BNSetAFK, s == "away") end
+end
+local function MyBroadcast()
+    if not BNGetInfo then return "" end
+    local ok, _, _, _, bc = pcall(BNGetInfo)
+    return (ok and type(bc) == "string") and bc or ""
+end
+
+local function UpdateSelf()
+    if not me then return end
+    local cname, file = UnitClass("player")
+    local cr, cg, cb = ClassColor(cname, file)
+    if not ClassIcon(me.icon, cname, file) then
+        me.icon:SetTexture(CIRCLE)
+        me.icon:SetTexCoord(0, 1, 0, 1)
+    end
+    me.name:SetText(Hex(cr, cg, cb) .. (UnitName("player") or "") .. "|r  " .. DIM .. (UnitLevel("player") or "") .. " " .. (cname or ""))
+    local c = StatusColor(MyStatus())
+    me.status:SetVertexColor(c[1], c[2], c[3])
+    if statusDD then
+        statusDD:Refresh()
+        statusDD.dot:SetVertexColor(c[1], c[2], c[3])
+    end
+    if bcBox and not bcBox:HasFocus() then
+        local bc = MyBroadcast()
+        bcBox:SetText(bc)
+        bcHint:SetShown(bc == "")
+    end
+end
+
+-- the three count tiles and the counts on the tabs
+local function UpdateHeader(all)
+    if not tiles then return end
+    all = all or CollectFriends()
+    local on, here = 0, 0
+    for _, e in ipairs(all) do
+        if e.online then
+            on = on + 1
+            if e.sameGame then here = here + 1 end
+        end
+    end
+    tiles[1].value:SetText(on .. "  |cFF8C8475/ " .. #all .. "|r")
+    tiles[2].value:SetText("|cFF7FD08A" .. here .. "|r")
+    local gOn
+    if IsInGuild and IsInGuild() and GetNumGuildMembers then
+        local _, o = GetNumGuildMembers()
+        gOn = tonumber(o)
+    end
+    tiles[3].value:SetText(gOn and (gOn .. "  |cFF8C8475on|r") or "|cFF8C8475No guild|r")
+    tabFriends:SetCount(on)
+    tabGuild:SetCount(gOn)
+    UpdateSelf()
+end
+
+-- an online friend who is in your party or raid
+local function InMyGroup(name)
+    if not name or not (IsInGroup and IsInGroup()) then return false end
+    local ok, a = pcall(UnitInParty, name)
+    if ok and a then return true end
+    local ok2, b = pcall(UnitInRaid, name)
+    return (ok2 and b) and true or false
+end
+
 local function Rebuild()
     if not f then return end
     view = {}
@@ -576,21 +763,27 @@ local function Rebuild()
         if not keepOrder then table.sort(items, SortName) end
         view[#view + 1] = { kind = "header", group = group, text = text .. " (" .. #items .. ")" }
         if not d.collapsed[group] then
+            items[1]._first = true
+            items[#items]._last = true
             for _, e in ipairs(items) do view[#view + 1] = e end
         end
     end
     if mode == "friends" then
         local all = CollectFriends()
-        local fav, on, off, online = {}, {}, {}, 0
-        local cats = { wow = {}, wowother = {}, game = {}, app = {} }
+        local fav, on, off = {}, {}, {}
+        local cats = { grp = {}, wow = {}, wowother = {}, game = {}, app = {} }
         for _, e in ipairs(all) do
-            if e.online then online = online + 1 end
             if Matches(e, q) then
                 if e.fav then fav[#fav + 1] = e
                 elseif e.online then
-                    on[#on + 1] = e
-                    local t = cats[Category(e)]
-                    t[#t + 1] = e
+                    local c = Category(e)
+                    if c == "wow" and InMyGroup(e.char) then
+                        cats.grp[#cats.grp + 1] = e
+                    else
+                        on[#on + 1] = e
+                        local t = cats[c]
+                        t[#t + 1] = e
+                    end
                 else off[#off + 1] = e end
             end
         end
@@ -602,6 +795,7 @@ local function Rebuild()
             return SortName(a, b)
         end)
         AddGroup("fav", "Favorites", fav, true)
+        AddGroup("grp", "In my group", cats.grp)
         if d.groupByGame then
             AddGroup("wow", CysUICompat.isForever and "Playing WoW Forever" or "Playing WoW Classic", cats.wow) -- the game you are in
             AddGroup("wowother", "Playing other WoW versions", cats.wowother)
@@ -616,16 +810,14 @@ local function Rebuild()
             AddGroup("on", "Online", on)
         end
         AddGroup("off", "Offline", off)
-        countText:SetText(format("|cFF4FD66B%d|r online  |cFF555555/|r  %d", online, #all))
+        UpdateHeader(all)
     elseif mode == "guild" then
-        if not (IsInGuild and IsInGuild()) then
-            countText:SetText("No guild")
-        else
-            local all, online = CollectGuild()
+        if IsInGuild and IsInGuild() then
+            local all = CollectGuild()
             local on, off = {}, {}
             for _, e in ipairs(all) do
                 if Matches(e, q) then
-                    if e.online then on[#on + 1] = e elseif not d.guildHideOffline then off[#off + 1] = e end
+                    if e.online then on[#on + 1] = e else off[#off + 1] = e end
                 end
             end
             local function ByRank(a, b)
@@ -641,25 +833,24 @@ local function Rebuild()
             end
             local motd = lastMOTD or ""
             if motd ~= "" and q == "" then
-                view[#view + 1] = { kind = "motd", guild = (GetGuildInfo and GetGuildInfo("player")) or "Guild", text = motd }
+                view[#view + 1] = { kind = "motd", guild = (GetGuildInfo and GetGuildInfo("player")) or "Guild", text = motd,
+                    _first = true, _last = true }
             end
             AddGroup("gon", "Online", on, true)
             AddGroup("goff", "Offline", off, true)
-            countText:SetText(format("|cFF4FD66B%d|r online  |cFF555555/|r  %d", online, #all))
         end
+        UpdateHeader()
     elseif mode == "who" then
-        local items, total = CollectWho()
+        local items = CollectWho()
         AddGroup("who", "Results", items, true)
-        if whoSearching and #items == 0 then countText:SetText("Searching...")
-        elseif total > #items then countText:SetText(format("%d of %d shown", #items, total))
-        else countText:SetText(format("%d found", #items)) end
+        UpdateHeader()
     else
         local items = {}
         for _, e in ipairs(CollectIgnores()) do
             if Matches(e, q) then items[#items + 1] = e end
         end
         AddGroup("ign", "Ignored", items)
-        countText:SetText(format("%d ignored", #items))
+        UpdateHeader()
     end
     Update()
 end
@@ -805,22 +996,28 @@ local function RunWho()
     Rebuild()
 end
 
--- two footer buttons normally; the Guild tab adds a third one that opens Blizzard's Guild & Communities window
+-- the Guild tab gets one button at the bottom (Blizzard's Guild & Communities window); the other tabs use the full height
 local function FooterLayout()
-    if not (f and footL and footM and footR) then return end
-    footL:ClearAllPoints(); footM:ClearAllPoints(); footR:ClearAllPoints()
-    if mode == "guild" then
-        local w = max(60, (f:GetWidth() - 20 - 8) / 3)
-        footL:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 12); footL:SetWidth(w)
-        footM:SetPoint("BOTTOMLEFT", footL, "BOTTOMRIGHT", 4, 0); footM:SetWidth(w)
-        footR:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 12); footR:SetWidth(w)
-        footM:Show()
-    else
-        footM:Hide()
-        footL:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 12)
-        footL:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -3, 12)
-        footR:SetPoint("BOTTOMLEFT", f, "BOTTOM", 3, 12)
-        footR:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 12)
+    if not (f and footM) then return end
+    local guild = mode == "guild"
+    BOTTOM = guild and 42 or 10
+    footM:ClearAllPoints()
+    footM:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 10)
+    footM:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
+    footM:SetShown(guild)
+    if fline then fline:SetShown(guild) end
+    if addBtn then
+        -- the gold button: add a friend / ignore a player, or run the search on the Who tab; none on the Guild tab
+        addBtn:SetShown(not guild)
+        addBtn.glyph:SetKind(mode == "who" and "right" or "plus")
+        densityDD:ClearAllPoints()
+        if guild then densityDD:SetPoint("TOPRIGHT", f, "TOPRIGHT", -12, -SEARCH_Y)
+        else densityDD:SetPoint("TOPRIGHT", addBtn, "TOPLEFT", -6, 0) end
+    end
+    if list then
+        list:ClearAllPoints()
+        list:SetPoint("TOPLEFT", 12, -TOP)
+        list:SetPoint("BOTTOMRIGHT", -12, BOTTOM)
     end
 end
 
@@ -841,8 +1038,6 @@ local function RequestRoster()
     elseif GuildRoster then pcall(GuildRoster) end
 end
 
-local function GuildLabel() return DB().guildHideOffline and "Show Offline" or "Hide Offline" end
-
 local function SetMode(m)
     if mode == "guild" and m ~= "guild" then LeaveGuild() end
     mode = m
@@ -852,17 +1047,15 @@ local function SetMode(m)
     tabIgnore:SetPrimary(m == "ignore")
     if m == "guild" then
         if savedShowOffline == nil and GetGuildRosterShowOffline then savedShowOffline = GetGuildRosterShowOffline() end
-        if SetGuildRosterShowOffline then SetGuildRosterShowOffline(true) end -- we filter offline members ourselves
+        if SetGuildRosterShowOffline then SetGuildRosterShowOffline(true) end -- we sort online / offline ourselves
         RequestRoster()
     end
-    footL:SetLabel(m == "friends" and "Add Friend" or (m == "who" and "Search" or (m == "guild" and GuildLabel() or "Add Ignore")))
-    footR:SetLabel(m == "ignore" and "Remove" or "Whisper")
-    searchHint:SetText(m == "who" and "Search players... (press Enter)" or "Search...")
-    FooterLayout()
+    searchHint:SetText(m == "who" and "Search players... (press Enter)" or (m == "friends" and "Search name, zone, note" or "Search..."))
     selected, offset, query = nil, 0, ""
     searchBox:SetText("")
     searchHint:Show()
     CloseMenu()
+    Layout()
     Rebuild()
 end
 
@@ -870,66 +1063,83 @@ local function MakeRow(i)
     local r = CreateFrame("Button", nil, list)
     r:SetHeight(ROW_H)
     r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    r.hl = W.Texture(r, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.07 })
-    r.hl:SetAllPoints(); r.hl:Hide()
-    r.sel = W.Texture(r, "BACKGROUND", { T.brand[1], T.brand[2], T.brand[3], 0.22 })
-    r.sel:SetAllPoints(); r.sel:Hide()
-    r.dot = W.Texture(r, "ARTWORK", T.green)
-    r.dot:SetSize(3, ROW_H - 12)
-    r.dot:SetPoint("LEFT", 6, 0)
-    r.dot:Hide()
+    -- the group card: a soft panel and a thin outline (top / bottom edges only on a group's first / last row)
+    r.card = W.Texture(r, "BACKGROUND", T.card, -2)
+    r.card:SetAllPoints()
+    r.bL = W.Texture(r, "BORDER", T.line); r.bL:SetWidth(1); r.bL:SetPoint("TOPLEFT"); r.bL:SetPoint("BOTTOMLEFT")
+    r.bR = W.Texture(r, "BORDER", T.line); r.bR:SetWidth(1); r.bR:SetPoint("TOPRIGHT"); r.bR:SetPoint("BOTTOMRIGHT")
+    r.bT = W.Texture(r, "BORDER", T.line); r.bT:SetHeight(1); r.bT:SetPoint("TOPLEFT"); r.bT:SetPoint("TOPRIGHT")
+    r.bB = W.Texture(r, "BORDER", T.line); r.bB:SetHeight(1); r.bB:SetPoint("BOTTOMLEFT"); r.bB:SetPoint("BOTTOMRIGHT")
+    HideCard(r)
+    r.hl = W.Texture(r, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.06 })
+    r.hl:SetPoint("TOPLEFT", 1, -1); r.hl:SetPoint("BOTTOMRIGHT", -1, 0); r.hl:Hide()
+    r.sel = W.Texture(r, "BACKGROUND", { T.brand[1], T.brand[2], T.brand[3], 0.16 })
+    r.sel:SetPoint("TOPLEFT", 1, -1); r.sel:SetPoint("BOTTOMRIGHT", -1, 0); r.sel:Hide()
     -- round icon: a dark disc, the class / game icon on it, a status dot on its lower-right corner
     r.iconBg = r:CreateTexture(nil, "ARTWORK", nil, 1)
-    r.iconBg:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    r.iconBg:SetTexture(CIRCLE)
     r.iconBg:SetVertexColor(T.border[1], T.border[2], T.border[3], 0.8)
     r.iconBg:SetSize(26, 26)
-    r.iconBg:SetPoint("LEFT", 7, 0)
+    r.iconBg:SetPoint("LEFT", 8, 0)
     r.icon = r:CreateTexture(nil, "ARTWORK", nil, 2)
     r.icon:SetSize(24, 24)
     r.icon:SetPoint("CENTER", r.iconBg, "CENTER", 0, 0)
     pcall(function()
         local mask = r:CreateMaskTexture()
-        mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         mask:SetAllPoints(r.icon)
         r.icon:AddMaskTexture(mask)
     end)
     r.statusRing = r:CreateTexture(nil, "OVERLAY", nil, 1)
-    r.statusRing:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
-    r.statusRing:SetVertexColor(T.bg[1], T.bg[2], T.bg[3])
+    r.statusRing:SetTexture(CIRCLE)
+    r.statusRing:SetVertexColor(T.card[1], T.card[2], T.card[3])
     r.statusRing:SetSize(11, 11)
     r.statusRing:SetPoint("CENTER", r.iconBg, "BOTTOMRIGHT", -3, 3)
     r.status = r:CreateTexture(nil, "OVERLAY", nil, 2)
-    r.status:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    r.status:SetTexture(CIRCLE)
     r.status:SetSize(7, 7)
     r.status:SetPoint("CENTER", r.statusRing, "CENTER", 0, 0)
     -- gold edge on the left of the selected row
     r.edge = W.Texture(r, "ARTWORK", T.accent)
     r.edge:SetWidth(2)
-    r.edge:SetPoint("TOPLEFT", 0, -1)
-    r.edge:SetPoint("BOTTOMLEFT", 0, 1)
+    r.edge:SetPoint("TOPLEFT", 1, -1)
+    r.edge:SetPoint("BOTTOMLEFT", 1, 1)
     r.edge:Hide()
-    -- every person sits on a soft card; headers get their own darker bar
-    r.card = W.Texture(r, "BACKGROUND", { T.card[1], T.card[2], T.card[3], 0.40 }, -2)
-    r.card:SetPoint("TOPLEFT", 0, -1)
-    r.card:SetPoint("BOTTOMRIGHT", 0, 1)
-    r.hbg = W.Texture(r, "BACKGROUND", { T.accent[1], T.accent[2], T.accent[3], 0.07 }, -2)
-    r.hbg:SetPoint("TOPLEFT", 0, -4)
-    r.hbg:SetPoint("BOTTOMRIGHT", 0, 1)
-    r.hbg:Hide()
     r.name = W.Text(r, 13, T.text)
     r.name:SetWordWrap(false)
     r.right = W.Text(r, 11, T.accent, "RIGHT") -- level (gold) on people, the count on headers
     r.sub = W.Text(r, 11, T.dim)
     r.sub:SetWordWrap(false)
-    r.sub:SetPoint("BOTTOMLEFT", 18, 5)
-    r.sub:SetPoint("BOTTOMRIGHT", -6, 5)
+    r.zone = W.Text(r, 11, T.dim, "RIGHT") -- Compact rows: zone / game / last seen, before the level
+    r.zone:SetWordWrap(false)
     r.line = W.Texture(r, "ARTWORK", T.line)
     r.line:SetHeight(1)
-    r.line:SetPoint("BOTTOMLEFT", 0, 0)
-    r.line:SetPoint("BOTTOMRIGHT", 0, 0)
     r.line:Hide()
+
+    -- hover buttons
+    local a = CreateFrame("Frame", nil, r)
+    a:SetPoint("RIGHT", -6, 0)
+    a:SetSize(1, 22)
+    a:Hide()
+    a.all = {}
+    local function Act(label, w, fn)
+        local b = W.Button(a, w, 22, label)
+        b:SetScript("OnClick", function() local e = r.entry; if e then fn(e) end end)
+        b:HookScript("OnLeave", function() if not r:IsMouseOver() then r.hl:Hide(); HideActs(r) end end)
+        b:Hide()
+        a.all[#a.all + 1] = b
+        return b
+    end
+    a.whisper = Act("Whisper", 54, Whisper)
+    a.invite = Act("Invite", 44, Invite)
+    a.more = Act("...", 26, function(e) Select(e); OpenMenu(r, e) end)
+    a.unignore = Act("Unignore", 66, function(e) Remove(e); dirty = true end)
+    r.acts = a
+    ApplyDensity(r)
+
     r:SetScript("OnEnter", function(s)
         s.hl:Show()
+        ShowActs(s)
         local e = s.entry
         if e and e.kind == "motd" and GameTooltip then
             GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
@@ -950,8 +1160,10 @@ local function MakeRow(i)
         end
     end)
     r:SetScript("OnLeave", function(s)
-        s.hl:Hide()
         if GameTooltip and GameTooltip:GetOwner() == s then GameTooltip:Hide() end
+        if s:IsMouseOver() then return end -- moved onto one of its own hover buttons
+        s.hl:Hide()
+        HideActs(s)
     end)
     r:SetScript("OnClick", function(s, button)
         local e = s.entry
@@ -976,13 +1188,32 @@ local function MakeRow(i)
     return r
 end
 
-local function Layout()
+function Layout()
     if not f then return end
+    ROW_H = DB().density == "compact" and 24 or 36
     FooterLayout()
+    local w = f:GetWidth() - 24
+    if tiles then
+        local tw = (w - 12) / 3
+        for i, t in ipairs(tiles) do
+            t:ClearAllPoints()
+            t:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + (i - 1) * (tw + 6), -TILE_Y)
+            t:SetWidth(tw)
+        end
+    end
+    local shown = {}
+    for _, b in ipairs({ tabFriends, tabWho, tabGuild, tabIgnore }) do if b.usable then shown[#shown + 1] = b end end
+    local bw = (w - 6 - (#shown - 1) * 2) / max(1, #shown)
+    for i, b in ipairs(shown) do
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", tabBar, "TOPLEFT", 3 + (i - 1) * (bw + 2), -3)
+        b:SetWidth(bw)
+    end
     local vis = Visible()
     for i = 1, vis do
         if not rows[i] then rows[i] = MakeRow(i) end
         local r = rows[i]
+        r:SetHeight(ROW_H)
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -(i - 1) * ROW_H)
         r:SetPoint("TOPRIGHT", list, "TOPRIGHT", -10, -(i - 1) * ROW_H)
@@ -990,108 +1221,214 @@ local function Layout()
     Update()
 end
 
-local function Build()
-    BuildClassMap()
-    f = CreateFrame("Frame", "CysFriendsFrame", UIParent)
-    f:SetSize(340, 460)
-    f:SetFrameStrata("MEDIUM")
-    f:SetClampedToScreen(true)
-    f:EnableMouse(true)
-    f:SetToplevel(true)
-    f:Hide()
-    W.Texture(f, "BACKGROUND", T.bg):SetAllPoints()
-    W.Border(f, 1, T.border, "BORDER")
-    rows = {}
+local DENSITY_OPTS = { { "comfortable", "Comfortable" }, { "compact", "Compact" } }
 
-    local strip = W.Texture(f, "BACKGROUND", { T.card[1], T.card[2], T.card[3], 1 }, -1)
-    strip:SetPoint("TOPLEFT", 1, -1)
-    strip:SetPoint("TOPRIGHT", -1, -1)
-    strip:SetHeight(29)
-    local sline = W.Texture(f, "BORDER", T.border)
-    sline:SetHeight(1)
-    sline:SetPoint("TOPLEFT", 1, -30)
-    sline:SetPoint("TOPRIGHT", -1, -30)
-    local fline = W.Texture(f, "BORDER", T.line)
-    fline:SetHeight(1)
-    fline:SetPoint("BOTTOMLEFT", 1, 44)
-    fline:SetPoint("BOTTOMRIGHT", -1, 44)
-    local title = W.Text(f, 14, T.accent, "CENTER")
-    title:SetPoint("TOP", 0, -9)
-    title:SetText("Friends")
+local function BuildHeader()
+    -- header: you (class icon, name, level, broadcast), your status and close; then three count tiles
+    local hbg = W.Texture(f, "BACKGROUND", T.header, -1)
+    hbg:SetPoint("TOPLEFT", 1, -1)
+    hbg:SetPoint("TOPRIGHT", -1, -1)
+    hbg:SetHeight(TILE_Y + TILE_H + 6)
+    local hline = W.Texture(f, "BORDER", T.line)
+    hline:SetHeight(1)
+    hline:SetPoint("TOPLEFT", 1, -(TILE_Y + TILE_H + 7))
+    hline:SetPoint("TOPRIGHT", -1, -(TILE_Y + TILE_H + 7))
+
+    me = {}
+    me.ring = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    me.ring:SetTexture(CIRCLE)
+    me.ring:SetSize(36, 36)
+    me.ring:SetPoint("TOPLEFT", 12, -10)
+    me.ring:SetVertexColor(T.brand[1], T.brand[2], T.brand[3])
+    me.icon = f:CreateTexture(nil, "ARTWORK", nil, 2)
+    me.icon:SetSize(32, 32)
+    me.icon:SetPoint("CENTER", me.ring, "CENTER", 0, 0)
+    pcall(function()
+        local mask = f:CreateMaskTexture()
+        mask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(me.icon)
+        me.icon:AddMaskTexture(mask)
+    end)
+    me.statusRing = f:CreateTexture(nil, "OVERLAY", nil, 1)
+    me.statusRing:SetTexture(CIRCLE)
+    me.statusRing:SetVertexColor(T.header[1], T.header[2], T.header[3])
+    me.statusRing:SetSize(13, 13)
+    me.statusRing:SetPoint("CENTER", me.ring, "BOTTOMRIGHT", -5, 5)
+    me.status = f:CreateTexture(nil, "OVERLAY", nil, 2)
+    me.status:SetTexture(CIRCLE)
+    me.status:SetSize(9, 9)
+    me.status:SetPoint("CENTER", me.statusRing, "CENTER", 0, 0)
+    me.name = W.Text(f, 14, T.text)
+    me.name:SetWordWrap(false)
+    me.name:SetPoint("TOPLEFT", 56, -12)
+    me.name:SetPoint("TOPRIGHT", f, "TOPRIGHT", -138, -12)
+
+    if BNSetCustomMessage then
+        local holder = CreateFrame("Frame", nil, f)
+        holder:SetPoint("TOPLEFT", 56, -31)
+        holder:SetPoint("TOPRIGHT", f, "TOPRIGHT", -138, -31)
+        holder:SetHeight(16)
+        bcBox = CreateFrame("EditBox", nil, holder)
+        bcBox:SetAllPoints()
+        bcBox:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "")
+        bcBox:SetTextColor(0.85, 0.82, 0.77)
+        bcBox:SetAutoFocus(false)
+        bcBox:SetMaxLetters(127)
+        bcHint = W.Text(holder, 11, T.dim)
+        bcHint:SetPoint("LEFT", 0, 0)
+        bcHint:SetText("Set a broadcast message")
+        bcBox:SetScript("OnEditFocusGained", function() bcHint:Hide() end)
+        bcBox:SetScript("OnEditFocusLost", function(s) bcHint:SetShown((s:GetText() or "") == "") end)
+        bcBox:SetScript("OnEscapePressed", function(s) s:SetText(MyBroadcast()); s:ClearFocus() end)
+        bcBox:SetScript("OnEnterPressed", function(s)
+            local t = s:GetText() or ""
+            if strtrim then t = strtrim(t) end
+            pcall(BNSetCustomMessage, t)
+            s:ClearFocus()
+        end)
+        bcBox:SetScript("OnEnter", function(s)
+            if s:HasFocus() then return end
+            GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+            GameTooltip:AddLine("Broadcast message", 1, 0.82, 0)
+            GameTooltip:AddLine("Shown to your Battle.net friends. Enter saves, Esc cancels.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        bcBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
+    if BNGetInfo and BNSetAFK then
+        statusDD = W.Dropdown(f, 88, STATUS_OPTS, MyStatus, function(v)
+            SetMyStatus(v)
+            local c = StatusColor(v)
+            statusDD.dot:SetVertexColor(c[1], c[2], c[3])
+            me.status:SetVertexColor(c[1], c[2], c[3])
+        end)
+        statusDD:SetPoint("TOPRIGHT", -40, -14)
+        statusDD.dot = statusDD:CreateTexture(nil, "OVERLAY")
+        statusDD.dot:SetTexture(CIRCLE)
+        statusDD.dot:SetSize(8, 8)
+        statusDD.dot:SetPoint("LEFT", 9, 0)
+        statusDD.label:ClearAllPoints()
+        statusDD.label:SetPoint("LEFT", 22, 0)
+        statusDD.label:SetPoint("RIGHT", -20, 0)
+    end
 
     local close = CreateFrame("Button", nil, f)
     close:SetSize(22, 22)
-    close:SetPoint("TOPRIGHT", -4, -4)
+    close:SetPoint("TOPRIGHT", -12, -14)
+    W.Border(close, 1, T.line, "BORDER")
     local x = CysUI.W.CloseGlyph(close, T.text)
     close:SetScript("OnEnter", function() x:SetTextColor(1, 0.3, 0.3) end)
     close:SetScript("OnLeave", function() x:SetTextColor(T.text[1], T.text[2], T.text[3]) end)
     close:SetScript("OnClick", function() CUI:HideWindow(f) end)
+end
 
-    -- tabs: plain words, the open one in gold with a gold line under it
-    local tabRule = W.Texture(f, "BORDER", T.line)
-    tabRule:SetHeight(1)
-    tabRule:SetPoint("TOPLEFT", 10, -55)
-    tabRule:SetPoint("TOPRIGHT", -10, -55)
+local function BuildControls()
+    -- count tiles: friends online, friends in this game, guild online (click Guild to open that tab)
+    tiles = {}
+    local TILE_LABELS = { "ONLINE", CysUICompat.isForever and "IN FOREVER" or "IN THIS GAME", "GUILD" }
+    for i = 1, 3 do
+        local t = CreateFrame("Button", nil, f)
+        t:SetHeight(TILE_H)
+        t.bg = W.Texture(t, "BACKGROUND", T.card)
+        t.bg:SetAllPoints()
+        t.edges = W.Border(t, 1, T.line, "BORDER")
+        t.label = W.Text(t, 9, T.dim)
+        t.label:SetPoint("TOPLEFT", 9, -7)
+        t.label:SetText(TILE_LABELS[i])
+        t.value = W.Text(t, 16, T.text)
+        t.value:SetPoint("BOTTOMLEFT", 9, 6)
+        t:SetScript("OnEnter", function(s) W.SetBorder(s.edges, T.glow) end)
+        t:SetScript("OnLeave", function(s) W.SetBorder(s.edges, T.line) end)
+        t:SetScript("OnClick", function() SetMode(i == 3 and "guild" or "friends") end)
+        tiles[i] = t
+    end
+
+    -- tabs: one dark strip, the open tab filled with a soft gold, online counts in the labels
+    tabBar = CreateFrame("Frame", nil, f)
+    tabBar:SetPoint("TOPLEFT", 12, -TAB_Y)
+    tabBar:SetPoint("TOPRIGHT", -12, -TAB_Y)
+    tabBar:SetHeight(TAB_H)
+    W.Texture(tabBar, "BACKGROUND", T.field):SetAllPoints()
+    W.Border(tabBar, 1, T.line, "BORDER")
     local function Tab(label)
-        local b = CreateFrame("Button", nil, f)
-        b:SetSize(10, 22)
+        local b = CreateFrame("Button", nil, tabBar)
+        b:SetSize(60, TAB_H - 6)
+        b.usable = true
+        b.fill = W.Texture(b, "BACKGROUND", { T.brand[1], T.brand[2], T.brand[3], 0.16 })
+        b.fill:SetAllPoints()
+        b.fill:Hide()
         b.text = W.Text(b, 12, T.dim, "CENTER")
-        b.text:SetPoint("CENTER", 0, 1)
-        b.text:SetText(label)
-        b:SetWidth(b.text:GetStringWidth() + 16)
-        b.bar = W.Texture(b, "ARTWORK", T.accent)
-        b.bar:SetHeight(2)
-        b.bar:SetPoint("BOTTOMLEFT", 4, -1)
-        b.bar:SetPoint("BOTTOMRIGHT", -4, -1)
-        b.bar:Hide()
-        function b:SetPrimary(on)
-            self.on = on
-            self.bar:SetShown(on)
-            local c = on and T.accent or T.dim
+        b.text:SetPoint("CENTER", 0, 0)
+        b.label = label
+        function b:Paint()
+            local c = self.on and T.accent or (self.hot and T.text or T.dim)
             self.text:SetTextColor(c[1], c[2], c[3])
+            local n = self.count
+            self.text:SetText(self.label .. ((n and n > 0) and ("  " .. (self.on and "|cFFC9A55E" or "|cFF8C8475") .. n .. "|r") or ""))
+            self.fill:SetShown(self.on and true or false)
         end
-        b:SetScript("OnEnter", function(s) if not s.on then s.text:SetTextColor(1, 1, 1) end end)
-        b:SetScript("OnLeave", function(s) s:SetPrimary(s.on) end)
+        function b:SetPrimary(on) self.on = on; self:Paint() end
+        function b:SetCount(n) self.count = n; self:Paint() end
+        b:SetScript("OnEnter", function(s) s.hot = true; s:Paint() end)
+        b:SetScript("OnLeave", function(s) s.hot = false; s:Paint() end)
+        b:Paint()
         return b
     end
     tabFriends = Tab("Friends")
-    tabFriends:SetPoint("TOPLEFT", 10, -32)
     tabFriends:SetScript("OnClick", function() SetMode("friends") end)
     tabWho = Tab("Who")
-    tabWho:SetPoint("LEFT", tabFriends, "RIGHT", 2, 0)
     tabWho:SetScript("OnClick", function() SetMode("who") end)
-    tabGuild = Tab("Guild")
-    tabGuild:SetPoint("LEFT", tabWho, "RIGHT", 2, 0)
     -- WoW Forever: /who lives in Blizzard's Looking For Group window there, so ours steps aside
-    if CysUICompat.isForever then
-        tabWho:Hide()
-        tabGuild:ClearAllPoints()
-        tabGuild:SetPoint("LEFT", tabFriends, "RIGHT", 2, 0)
-    end
+    if CysUICompat.isForever then tabWho.usable = false; tabWho:Hide() end
+    tabGuild = Tab("Guild")
     tabGuild:SetScript("OnClick", function() SetMode("guild") end)
     tabIgnore = Tab("Ignore")
-    tabIgnore:SetPoint("LEFT", tabGuild, "RIGHT", 2, 0)
     tabIgnore:SetScript("OnClick", function() SetMode("ignore") end)
 
-    countText = W.Text(f, 10, T.dim, "RIGHT")
-    countText:SetPoint("TOPRIGHT", -12, -38)
+    -- search row: search box, row size dropdown, gold add button
+    addBtn = CreateFrame("Button", nil, f)
+    addBtn:SetSize(SEARCH_H, SEARCH_H)
+    addBtn:SetPoint("TOPRIGHT", -12, -SEARCH_Y)
+    addBtn.bg = W.Texture(addBtn, "BACKGROUND", T.brand)
+    addBtn.bg:SetAllPoints()
+    addBtn.glyph = W.Glyph(addBtn, "plus", 10, T.dark, 2)
+    addBtn.glyph:SetPoint("CENTER", 0, 0)
+    addBtn:SetScript("OnEnter", function(s)
+        s.bg:SetAlpha(0.8)
+        GameTooltip:SetOwner(s, "ANCHOR_TOP")
+        GameTooltip:AddLine(mode == "who" and "Search" or (mode == "ignore" and "Ignore a player" or "Add a friend"), 1, 0.82, 0)
+        GameTooltip:Show()
+    end)
+    addBtn:SetScript("OnLeave", function(s) s.bg:SetAlpha(1); GameTooltip:Hide() end)
+    addBtn:SetScript("OnClick", function()
+        if mode == "who" then RunWho()
+        elseif mode == "ignore" then OpenPopup("Ignore Player", "Character name", AddIgnore)
+        else OpenPopup("Add Friend", "Character name, or a BattleTag like Name#1234", AddFriend) end
+    end)
 
-    -- search
+    densityDD = W.Dropdown(f, 112, DENSITY_OPTS, function() return DB().density end, function(v)
+        DB().density = v
+        Layout()
+    end)
+    densityDD:SetHeight(SEARCH_H)
+    densityDD:SetPoint("TOPRIGHT", addBtn, "TOPLEFT", -6, 0)
+
     local sbox = CreateFrame("Frame", nil, f)
-    sbox:SetPoint("TOPLEFT", 10, -60)
-    sbox:SetPoint("TOPRIGHT", -10, -60)
-    sbox:SetHeight(22)
+    sbox:SetPoint("TOPLEFT", 12, -SEARCH_Y)
+    sbox:SetPoint("TOPRIGHT", densityDD, "TOPLEFT", -6, 0)
+    sbox:SetHeight(SEARCH_H)
     W.Texture(sbox, "BACKGROUND", T.field):SetAllPoints()
     W.Border(sbox, 1, T.line, "BORDER")
     searchBox = CreateFrame("EditBox", nil, sbox)
-    searchBox:SetPoint("TOPLEFT", 6, 0)
+    searchBox:SetPoint("TOPLEFT", 8, 0)
     searchBox:SetPoint("BOTTOMRIGHT", -6, 0)
     searchBox:SetFont(CysUICompat.Font(), CysUICompat.FontSize(12), "")
     searchBox:SetTextColor(T.text[1], T.text[2], T.text[3])
     searchBox:SetAutoFocus(false)
     searchBox:SetMaxLetters(40)
     searchHint = W.Text(sbox, 11, T.dim)
-    searchHint:SetPoint("LEFT", 8, 0)
+    searchHint:SetPoint("LEFT", 9, 0)
     searchHint:SetText("Search...")
     searchBox:SetScript("OnTextChanged", function(s)
         query = s:GetText() or ""
@@ -1104,6 +1441,22 @@ local function Build()
     searchBox:SetScript("OnEditFocusLost", function(s) searchHint:SetShown((s:GetText() or "") == "") end)
     searchBox:SetScript("OnEscapePressed", function(s) s:SetText(""); s:ClearFocus() end)
     searchBox:SetScript("OnEnterPressed", function(s) if mode == "who" then RunWho() end s:ClearFocus() end)
+end
+
+local function Build()
+    BuildClassMap()
+    f = CreateFrame("Frame", "CysFriendsFrame", UIParent)
+    f:SetSize(360, 600)
+    f:SetFrameStrata("MEDIUM")
+    f:SetClampedToScreen(true)
+    f:EnableMouse(true)
+    f:SetToplevel(true)
+    f:Hide()
+    W.Texture(f, "BACKGROUND", T.bg):SetAllPoints()
+    W.Border(f, 1, T.border, "BORDER")
+    rows = {}
+    BuildHeader()
+    BuildControls()
 
     -- list + scrollbar
     list = CreateFrame("Frame", nil, f)
@@ -1142,24 +1495,13 @@ local function Build()
     end)
     thumb:SetScript("OnDragStop", function(s) s:SetScript("OnUpdate", nil) end)
 
-    -- footer
-    footL = W.Button(f, 100, 24, "Add Friend")
-    footL:SetPoint("BOTTOMLEFT", 10, 12)
-    footL:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -3, 12)
-    footL:SetScript("OnClick", function()
-        if mode == "friends" then
-            OpenPopup("Add Friend", "Character name, or a BattleTag like Name#1234", AddFriend)
-        elseif mode == "who" then
-            RunWho()
-        elseif mode == "guild" then
-            DB().guildHideOffline = not DB().guildHideOffline
-            footL:SetLabel(GuildLabel())
-            Rebuild()
-        else
-            OpenPopup("Ignore Player", "Character name", AddIgnore)
-        end
-    end)
-    footM = W.Button(f, 100, 24, "Guild Window")
+    -- footer (Guild tab only): Blizzard's Guild & Communities window
+    fline = W.Texture(f, "BORDER", T.line)
+    fline:SetHeight(1)
+    fline:SetPoint("BOTTOMLEFT", 1, 42)
+    fline:SetPoint("BOTTOMRIGHT", -1, 42)
+    fline:Hide()
+    footM = W.Button(f, 100, 24, "Open Guild & Communities")
     footM:SetPoint("BOTTOM", f, "BOTTOM", 0, 12)
     footM:SetScript("OnClick", OpenGuildWindow)
     footM:Hide()
@@ -1215,18 +1557,10 @@ local function Build()
             CUI:Print("The guild window opens from here after combat (or use your guild key).")
         end)
     end
-    footR = W.Button(f, 100, 24, "Whisper")
-    footR:SetPoint("BOTTOMLEFT", f, "BOTTOM", 3, 12)
-    footR:SetPoint("BOTTOMRIGHT", -10, 12)
-    footR:SetScript("OnClick", function()
-        local e = SelectedEntry()
-        if not e then Print("Pick someone in the list first.") return end
-        if mode == "ignore" then Remove(e); dirty = true else Whisper(e) end
-    end)
-
     -- events: refresh when the lists change (batched)
     for _, ev in ipairs({ "FRIENDLIST_UPDATE", "BN_FRIEND_LIST_SIZE_CHANGED", "BN_FRIEND_INFO_CHANGED",
-        "BN_FRIEND_ACCOUNT_ONLINE", "BN_FRIEND_ACCOUNT_OFFLINE", "IGNORELIST_UPDATE", "WHO_LIST_UPDATE", "GUILD_ROSTER_UPDATE", "GUILD_MOTD", "PLAYER_GUILD_UPDATE" }) do
+        "BN_FRIEND_ACCOUNT_ONLINE", "BN_FRIEND_ACCOUNT_OFFLINE", "IGNORELIST_UPDATE", "WHO_LIST_UPDATE", "GUILD_ROSTER_UPDATE", "GUILD_MOTD", "PLAYER_GUILD_UPDATE",
+        "BN_INFO_CHANGED", "PLAYER_LEVEL_UP", "GROUP_ROSTER_UPDATE" }) do
         if not (ev == "WHO_LIST_UPDATE" and CysUICompat.isForever) then pcall(f.RegisterEvent, f, ev) end
     end
     f:SetScript("OnEvent", function(_, event)
@@ -1261,20 +1595,19 @@ local function Build()
     CUI:ManageWindow(f, "left", 0) -- the same spot as Blizzard's Friends window
 
     SetMode("friends")
-    Layout()
 
     CUI:RegisterMovable(f, "friends", "Friends Window", {
         point = "LEFT", x = 40, y = 0,
-        resizable = true, minW = 300, maxW = 600, minH = 320, maxH = 900,
+        resizable = true, minW = 320, maxW = 600, minH = 440, maxH = 900,
         onResize = function() Layout() end,
         freeMove = true, -- dragged by the title strip, resized by the corner grip
     })
     CUI:MakeResizeGrip("friends")
-    -- drag the title strip to move the window (the close button keeps its clicks)
+    -- drag the top of the header to move the window (the broadcast box, status and close keep their clicks)
     local drag = CreateFrame("Frame", nil, f)
     drag:SetPoint("TOPLEFT", 1, -1)
-    drag:SetPoint("TOPRIGHT", -30, -1)
-    drag:SetHeight(29)
+    drag:SetPoint("TOPRIGHT", -138, -1)
+    drag:SetHeight(48)
     drag:SetFrameLevel(f:GetFrameLevel())
     CUI:MakeDragHandle(drag, "friends")
 end
@@ -1467,7 +1800,9 @@ CUI:RegisterPage("Friends", function(page)
     local note = W.Notes(page, 4, -122, width, "", {
             "Guild invite shows on players who are not in a guild, and only if your rank can invite.",
             { "/cfriends", "opens the window any time; drag its title to move it, the corner grip to resize it." },
-            "Click a name to select, double-click to whisper, right-click for more.",
+            "Point at someone for Whisper / Invite / more buttons; double-click a name to whisper, right-click for the menu.",
+            "Row size (Comfortable or Compact) is the dropdown next to the search box.",
+            "Your status (Online / Away / Busy) and Battle.net broadcast are at the top of the window.",
             "The Who tab searches players (name, level range, class or zone) when you press Enter.",
             "Blizzard's own friends window is untouched and still opens from the micro menu.",
         })
