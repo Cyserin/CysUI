@@ -419,7 +419,7 @@ local function UpdatePower(f)
     if f.isParty and not PartyPowerShown(f, CysUICompat.Plain(UnitPowerType(unit))) then return end
     local mx = UnitPowerMax(unit)
     local r, g, b = PowerColor(unit)
-    f.power:SetStatusBarColor(r, g, b)
+    UF.Paint(f.power, f.powerBg, r, g, b, UF.HealthStyle() == "gradient" and "gradient" or "bright")
     local pcur = UnitPower(unit)
     if Secret(mx) or Secret(pcur) then
         -- WoW Forever: this unit's power is locked. The bar can still show it; the math and text can't run.
@@ -558,14 +558,39 @@ local function Step(label, fn, f)
         end
     end
 end
--- Darker fill (on by default): the class / reaction color pulled toward black, so the white text on top reads
--- easily even on pale colors (Warrior tan, Priest white, Rogue yellow).
+-- Health bar look (Unit Frames > Health bar look):
+--   gradient (default) - the full class / reaction color, a touch brighter at the top and deeper at the bottom
+--   dark   - the older look: the color pulled toward black (flat)
+--   bright - the plain class color (flat)
+-- The empty part of the bar is a very dark shade of the same color, so missing health reads at a glance.
+-- Colors are only re-applied when they change (this runs on every health update).
 local DARK = 0.6
+local function HealthStyle()
+    local db = DB()
+    return db.healthStyle or (db.darkFill == false and "bright" or "gradient")
+end
+UF.HealthStyle = HealthStyle
+
+-- paints a bar's fill + backdrop: vertical gradient or flat, with a tinted dark backdrop
+local function Paint(bar, bg, r, g, b, style)
+    if bar.cysPaint == style and bar.cysR == r and bar.cysG == g and bar.cysB == b then return end
+    bar.cysPaint, bar.cysR, bar.cysG, bar.cysB = style, r, g, b
+    if style == "dark" then r, g, b = r * DARK, g * DARK, b * DARK end
+    bar:SetStatusBarColor(r, g, b)
+    local tex = bar:GetStatusBarTexture()
+    if style == "gradient" and tex and tex.SetGradient and CreateColor then
+        pcall(tex.SetGradient, tex, "VERTICAL",
+            CreateColor(r * 0.62, g * 0.62, b * 0.62, 1),                                  -- bottom
+            CreateColor(min(1, r * 1.05 + 0.04), min(1, g * 1.05 + 0.04), min(1, b * 1.05 + 0.04), 1)) -- top
+    end
+    if bg then bg:SetColorTexture(r * 0.16 + 0.02, g * 0.16 + 0.02, b * 0.16 + 0.02, 1) end
+end
+UF.Paint = Paint
+
 local function ApplyColor(f)
     local r, g, b = UnitColor(f.unit)
     if not DB().classColors then r, g, b = T.accent[1], T.accent[2], T.accent[3] end
-    if DB().darkFill ~= false then r, g, b = r * DARK, g * DARK, b * DARK end
-    f.health:SetStatusBarColor(r, g, b)
+    Paint(f.health, f.healthBg, r, g, b, HealthStyle())
 end
 
 --------------------------------------------------------------------------------
@@ -757,7 +782,8 @@ local function CreateUnitFrame(def)
         f.power:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
         f.power:SetHeight(def.powerH or 7)
         f.cysPowerH = def.powerH or 7
-        W.Texture(f.power, "BACKGROUND", { T.field[1], T.field[2], T.field[3], 1 }):SetAllPoints()
+        f.powerBg = W.Texture(f.power, "BACKGROUND", { T.field[1], T.field[2], T.field[3], 1 })
+        f.powerBg:SetAllPoints()
         f.costTex = f.power:CreateTexture(nil, "ARTWORK", nil, 2)
         f.costTex:SetTexture(FLAT)
         f.costTex:SetVertexColor(1, 1, 1, 0.85)
@@ -776,7 +802,8 @@ local function CreateUnitFrame(def)
         f.health:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
         f.health:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     end
-    W.Texture(f.health, "BACKGROUND", { T.field[1], T.field[2], T.field[3], 1 }):SetAllPoints()
+    f.healthBg = W.Texture(f.health, "BACKGROUND", { T.field[1], T.field[2], T.field[3], 1 })
+    f.healthBg:SetAllPoints()
 
     -- Heal prediction: starts at the end of the health fill (see UpdateHealth)
     f.healTex = f.health:CreateTexture(nil, "ARTWORK", nil, 1)
@@ -1106,10 +1133,9 @@ local function FillPartyPreview(f, d)
     local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[d.class] or { r = 0.6, g = 0.6, b = 0.6 }
     local r, g, b = c.r, c.g, c.b
     if not db.classColors then r, g, b = T.accent[1], T.accent[2], T.accent[3] end
-    if db.darkFill ~= false then r, g, b = r * DARK, g * DARK, b * DARK end
     f.health:SetMinMaxValues(0, 4200)
     f.health:SetValue(floor(4200 * d.pct))
-    f.health:SetStatusBarColor(r, g, b)
+    Paint(f.health, f.healthBg, r, g, b, HealthStyle())
     if f.healTex then f.healTex:Hide(); f.overhealTex:Hide() end
     f.name:SetText(format("|cFFFFD100%d|r %s", d.level, d.name))
     f.healthText:SetText(f.noHealthText and "" or HealthString(floor(4200 * d.pct), 4200))
@@ -1118,7 +1144,8 @@ local function FillPartyPreview(f, d)
         local fb = FALLBACK_POWER[d.ptype] or { 0.6, 0.6, 0.6 }
         f.power:SetMinMaxValues(0, 100)
         f.power:SetValue(d.power)
-        if pc and pc.r then f.power:SetStatusBarColor(pc.r, pc.g, pc.b) else f.power:SetStatusBarColor(fb[1], fb[2], fb[3]) end
+        if pc and pc.r then Paint(f.power, f.powerBg, pc.r, pc.g, pc.b, HealthStyle() == "gradient" and "gradient" or "bright")
+        else Paint(f.power, f.powerBg, fb[1], fb[2], fb[3], HealthStyle() == "gradient" and "gradient" or "bright") end
         if f.costTex then f.costTex:Hide() end
     end
     if f.raidIcon then f.raidIcon:Hide() end
@@ -1667,13 +1694,25 @@ CUI:RegisterPage("Unit Frames", function(page)
         { "eliteTag", "Elite / Rare / Boss tag beside the name", RefreshAll },
         { "targetAccent", "Soft gold line along the top of the target frame", function() UF.ApplyTargetAccent() end },
         { "leaderIcon", "Crown beside the group leader (player and party frames)", function() UF.UpdateLeaders() end },
-        { "darkFill", "Darker health bars so the white text reads easily", RefreshAll },
     }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
             function(on) db[row[1]] = on and true or false; row[3]() end)
         cb:SetPoint("TOPLEFT", 4, y - 4)
         y = y - 26
     end
+    local function Repaint()
+        for _, f in pairs(UF.frames) do
+            if f.health then f.health.cysPaint = nil end
+            if f.power then f.power.cysPaint = nil end
+        end
+        RefreshAll(); UF.RefreshPartyPreview()
+    end
+    local styleBtn = W.Dropdown(page, 340, {
+            { "gradient", "Gradient (modern, default)" }, { "dark", "Dark (flat, deep colors)" }, { "bright", "Bright (flat class colors)" } },
+        function() return HealthStyle() end,
+        function(v) db.healthStyle = v; Repaint() end, "Health bar look: ")
+    styleBtn:SetPoint("TOPLEFT", 4, y - 6)
+    y = y - 34
     local ppBtn = W.Dropdown(page, 340, {
             { "auto", "hide while Cys's Resource Bar is on" }, { "show", "always show" }, { "hide", "always hide" } },
         function() return db.playerPower or "auto" end,
