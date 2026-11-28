@@ -698,7 +698,19 @@ local function LayCards(page)
         local x = (h:GetLeft() or pLeft) - pLeft - CARD_PAD
         local w = (h:GetWidth() or 300) + CARD_PAD + 2
         local y1 = math.min(top - pTop + 6, 0) -- never above the page (the scroll area would cut it off)
-        local hgt = (pTop + y1) - bottom + 12
+        -- keep a gap to the card below (the next section in the same column): when two sections sit close
+        -- together, this card's bottom padding shrinks instead of the cards touching or overlapping
+        local pad = 12
+        local l1, r1 = h:GetLeft() or 0, h:GetRight() or 0
+        for j = i + 1, #heads do
+            local hj = heads[j]
+            local tj, l2, r2 = hj:GetTop(), hj:GetLeft() or 0, hj:GetRight() or 0
+            if tj and tj < top - 1 and l2 < r1 and r2 > l1 then
+                pad = math.max(2, math.min(12, bottom - (tj + 6) - 6))
+                break
+            end
+        end
+        local hgt = (pTop + y1) - bottom + pad
         card.bg:ClearAllPoints()
         card.bg:SetPoint("TOPLEFT", page, "TOPLEFT", x, y1)
         card.bg:SetSize(w, hgt)
