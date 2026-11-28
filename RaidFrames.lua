@@ -39,8 +39,12 @@ local MODES = {
 }
 RF.MODES = MODES
 
-local DEFAULTS = { mode = "auto", classColors = true, healthText = "deficit", rangeFade = true,
+local DEFAULTS = { mode = "auto", classColors = true, darkFill = true, healthText = "deficit", rangeFade = true,
                    debuffIcons = true, dispelBorder = true, dispelOnly = true, roleIcons = "all", roles = {}, powerBar = true, wAdj = 0, hAdj = 0 }
+
+-- Darker fill (on by default, same as the party frames): the class color pulled toward black, so white names and
+-- the red missing-health number read easily even on pale colors (Priest white, Rogue yellow, Warrior tan)
+local DARK = 0.6
 
 local function DB()
     CysUIDB = CysUIDB or {}
@@ -321,6 +325,7 @@ local function Refresh(b)
     local db = DB()
     local r, g, bl = UnitColor(unit)
     if not db.classColors then r, g, bl = T.accent[1], T.accent[2], T.accent[3] end
+    if db.darkFill then r, g, bl = r * DARK, g * DARK, bl * DARK end
     b.health:SetStatusBarColor(r, g, bl)
     UpdateName(b)
     UpdateHealth(b)
@@ -475,6 +480,7 @@ local function FillPreview(b, i)
     local r, g, bl = c.r, c.g, c.b
     if dead then r, g, bl = 0.45, 0.45, 0.45 elseif off then r, g, bl = 0.3, 0.3, 0.3 end
     if not db.classColors then r, g, bl = T.accent[1], T.accent[2], T.accent[3] end
+    if db.darkFill then r, g, bl = r * DARK, g * DARK, bl * DARK end
     b.health:SetStatusBarColor(r, g, bl)
     b.name:SetText(FAKE_NAMES[(i - 1) % #FAKE_NAMES + 1] .. (i > #FAKE_NAMES and tostring(floor(i / #FAKE_NAMES) + 1) or ""))
     local text = ""
@@ -851,6 +857,7 @@ CUI:RegisterPage("Raid Frames", function(page)
     local function All() EachActive(Refresh); if RF.previewing then RF:LayoutPreview() end end
     local rows = {
         { "Class colored health bars", "classColors" },
+        { "Darker fill (easier to read names and numbers)", "darkFill" },
         { "Fade members who are out of range", "rangeFade" },
         { "Show debuff icons (10 and 20-man)", "debuffIcons" },
         { "Border colored by debuff type (Magic / Curse / Disease / Poison)", "dispelBorder" },

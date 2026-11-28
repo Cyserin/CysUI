@@ -400,10 +400,23 @@ local function CastCostNow(unit)
     return cost
 end
 
+-- Party: only mana matters to a healer, so a rage / energy bar is folded away and the health bar takes its room
+-- (Unit Frames > Party). Only the bar's height changes, so it is safe in combat (druid forms switch it mid-fight).
+local function PartyPowerShown(f, ptype)
+    local show = ptype == nil or ptype == 0 or DB().partyManaOnly == false
+    if f.cysPowerShown ~= show then
+        f.cysPowerShown = show
+        f.power:SetHeight(show and (f.cysPowerH or 7) or 0.001)
+        f.power:SetShown(show)
+    end
+    return show
+end
+
 local function UpdatePower(f)
     if not f.power or f.powerHidden then return end
     local unit = f.unit
     if not UnitExists(unit) then return end
+    if f.isParty and not PartyPowerShown(f, CysUICompat.Plain(UnitPowerType(unit))) then return end
     local mx = UnitPowerMax(unit)
     local r, g, b = PowerColor(unit)
     f.power:SetStatusBarColor(r, g, b)
@@ -560,7 +573,7 @@ end
 -- debuff type (magic, curse, disease, poison) - by default only for types you can remove right now.
 -- WoW Forever: the game draws both itself (aura container), so they keep working in combat.
 --------------------------------------------------------------------------------
-local PARTY_ICON, PARTY_MAX = 18, 4
+local PARTY_ICON, PARTY_MAX = 22, 4
 local DISPELLABLE = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
 local function UpdatePartyAuras(f)
@@ -580,7 +593,7 @@ local function UpdatePartyAuras(f)
             })
             f.cysAuraBox = box or false
             if box then
-                f.cysDispel = CysUICompat.AuraDispelEdges(box, "dispel", DISPELLABLE, f, 2) or false
+                f.cysDispel = CysUICompat.AuraDispelEdges(box, "dispel", DISPELLABLE, f, 3) or false
                 f.cysDispelFilter = DISPELLABLE
             end
         end
@@ -609,7 +622,7 @@ local function UpdatePartyAuras(f)
     -- Classic Era (and Forever if the game's containers are missing): read the debuffs ourselves
     f.partyIcons = f.partyIcons or {}
     if not f.dispelEdges then
-        f.dispelEdges = W.Border(f, 2, { 1, 1, 1 }, "OVERLAY", 4)
+        f.dispelEdges = W.Border(f.overlay or f, 3, { 1, 1, 1 }, "OVERLAY", 4) -- above the health bar
     end
     local outlineType
     local shown = 0
@@ -743,6 +756,7 @@ local function CreateUnitFrame(def)
         f.power:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
         f.power:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
         f.power:SetHeight(def.powerH or 7)
+        f.cysPowerH = def.powerH or 7
         W.Texture(f.power, "BACKGROUND", { T.field[1], T.field[2], T.field[3], 1 }):SetAllPoints()
         f.costTex = f.power:CreateTexture(nil, "ARTWORK", nil, 2)
         f.costTex:SetTexture(FLAT)
@@ -940,6 +954,17 @@ local function Build(key)
     UF:Update(f)
 end
 
+local PARTY_ROLE_COORDS = {
+    TANK = { 0, 0.296875, 0.34375, 0.640625 },
+    HEALER = { 0.3125, 0.609375, 0.015625, 0.3125 },
+}
+function UF.SetPartyRole(f, role)
+    if not (f and f.cysHealer) then return end
+    local c = role and PARTY_ROLE_COORDS[role]
+    if c then f.cysHealer:SetTexCoord(c[1], c[2], c[3], c[4]) end
+    f.cysHealer:SetShown(c and true or false)
+end
+
 local function BuildParty()
     local anchor = CreateFrame("Frame", "CysUIPartyAnchor", UIParent)
     anchor:SetSize(180, 4 * 44 - 6)
@@ -965,8 +990,9 @@ local function BuildParty()
         end
         UF.party[i] = f
         UF.frames["party" .. i] = f
-        -- healer marker: a small healer icon in the top-right corner of a party member who heals
-        local role = f:CreateTexture(nil, "OVERLAY", nil, 7)
+        -- role marker: a small tank shield or healer cross in the top-right corner. It sits on the text layer;
+        -- on the frame itself the health bar covered it (it only showed through when the frame faded out of range).
+        local role = (f.overlay or f):CreateTexture(nil, "OVERLAY", nil, 7)
         role:SetSize(14, 14)
         role:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -2)
         role:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
@@ -986,15 +1012,6 @@ local function BuildParty()
         local okC, _, class = pcall(UnitClass, unit)
         return okC and class == "PRIEST"
     end
-    local function UpdateHealers()
-        for i = 1, 4 do
-            local f = UF.party[i]
-            if f and f.cysHealer then
-                local on = UnitExists("party" .. i) and IsHealer("party" .. i)
-                f.cysHealer:SetShown(on and true or false)
-            end
-        end
-    end
     -- party order: tank, then healer, then damage (by role), so the tank and healer sit in the top two spots.
     -- The frames are secure, so they are only moved out of combat; a change mid-fight is applied after it.
     local function Rank(unit)
@@ -1009,6 +1026,15 @@ local function BuildParty()
         if r == "TANK" then return 1 end
         if r == "HEALER" or (r ~= "DAMAGER" and IsHealer(unit)) then return 2 end
         return 3
+    end
+    local function UpdateHealers()
+        for i = 1, 4 do
+            local f = UF.party[i]
+            if f and f.cysHealer then
+                local rank = UnitExists("party" .. i) and Rank("party" .. i)
+                UF.SetPartyRole(f, rank == 1 and "TANK" or rank == 2 and "HEALER" or nil)
+            end
+        end
     end
     local sortPending = false
     local function LayoutParty()
@@ -1054,8 +1080,8 @@ end
 -- The frames' show / hide rules are paused while it is on and put back when it is turned off (out of combat only).
 --------------------------------------------------------------------------------
 local PARTY_FAKE = {
-    { name = "Tankzilla", class = "WARRIOR", level = 60, pct = 0.82, power = 35, ptype = 1 },
-    { name = "Healbot", class = "PRIEST", level = 60, pct = 1, power = 70, ptype = 0, healer = true, debuff = "Magic" },
+    { name = "Tankzilla", class = "WARRIOR", level = 60, pct = 0.82, power = 35, ptype = 1, role = "TANK" },
+    { name = "Healbot", class = "PRIEST", level = 60, pct = 1, power = 70, ptype = 0, role = "HEALER", debuff = "Magic" },
     { name = "Backstab", class = "ROGUE", level = 59, pct = 0.46, power = 90, ptype = 3, debuff = "Poison" },
     { name = "Frostbolt", class = "MAGE", level = 58, pct = 0.68, power = 55, ptype = 0, debuff = "Curse", faded = true },
 }
@@ -1087,7 +1113,7 @@ local function FillPartyPreview(f, d)
     if f.healTex then f.healTex:Hide(); f.overhealTex:Hide() end
     f.name:SetText(format("|cFFFFD100%d|r %s", d.level, d.name))
     f.healthText:SetText(f.noHealthText and "" or HealthString(floor(4200 * d.pct), 4200))
-    if f.power then
+    if f.power and PartyPowerShown(f, d.ptype) then
         local pc = PowerBarColor and PowerBarColor[d.ptype]
         local fb = FALLBACK_POWER[d.ptype] or { 0.6, 0.6, 0.6 }
         f.power:SetMinMaxValues(0, 100)
@@ -1096,7 +1122,7 @@ local function FillPartyPreview(f, d)
         if f.costTex then f.costTex:Hide() end
     end
     if f.raidIcon then f.raidIcon:Hide() end
-    if f.cysHealer then f.cysHealer:SetShown(d.healer and true or false) end
+    UF.SetPartyRole(f, d.role)
 
     -- debuff icon beside the frame, and the outline colored by its type (same rules as the real thing)
     f.cysPreviewIcons = f.cysPreviewIcons or {}
@@ -1116,7 +1142,7 @@ local function FillPartyPreview(f, d)
     elseif a then
         a:Hide()
     end
-    if not f.cysPreviewEdges then f.cysPreviewEdges = W.Border(f, 2, { 1, 1, 1 }, "OVERLAY", 4) end
+    if not f.cysPreviewEdges then f.cysPreviewEdges = W.Border(f.overlay or f, 3, { 1, 1, 1 }, "OVERLAY", 4) end
     local showOutline = d.debuff and db.partyDispel ~= false
         and (db.partyDispelOnly == false or CysUICompat.CanDispel(d.debuff))
     local er, eg, eb
@@ -1679,6 +1705,7 @@ CUI:RegisterPage("Unit Frames", function(page)
     y = y - 26
     local function PartyRefresh() for i = 1, 4 do local pf = UF.frames["party" .. i]; if pf then UF:Update(pf) end end end
     for _, row in ipairs({
+        { "partyManaOnly", "Power bars for mana users only (no rage / energy)" },
         { "partyDebuffs", "Show debuffs beside each party member" },
         { "partyDispel", "Color the outline by debuff type" },
         { "partyDispelOnly", "Only outline debuffs I can remove" },
