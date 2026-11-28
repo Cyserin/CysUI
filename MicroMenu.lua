@@ -168,6 +168,20 @@ function MM.Enable()
         if InCombatLockdown() then holder.cysPending = true return end
         holder.cysPending = nil
         local w, h = holder:GetWidth(), holder:GetHeight()
+        if DB().popup then
+            -- popup: a short vertical list over the Menu button, like a dropdown
+            local rowH = floor((h - padding * 2) / numButtons)
+            for i, btn in ipairs(btns) do
+                btn:SetSize(w - padding * 2, rowH)
+                btn:ClearAllPoints()
+                btn:SetPoint("TOPLEFT", holder, "TOPLEFT", padding, -padding - (i - 1) * rowH)
+                btn.label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "OUTLINE")
+                btn.label:ClearAllPoints()
+                btn.label:SetPoint("LEFT", btn, "LEFT", 10, 0)
+                if seps[i] then seps[i]:Hide() end
+            end
+            return
+        end
         local bh = max(h - padding * 2, 8)
         local function Edge(i) return floor((i - 1) * w / numButtons + 0.5) end -- whole pixels: every cell the same, text dead centre
         local size = max(8, min(10, floor(bh * 0.5 + 0.5)))
@@ -186,7 +200,10 @@ function MM.Enable()
             btn:ClearAllPoints()
             btn:SetPoint("LEFT", holder, "LEFT", Edge(i), 0)
             btn.label:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "OUTLINE")
+            btn.label:ClearAllPoints()
+            btn.label:SetPoint("CENTER", btn, "CENTER", 0, 0)
             if seps[i] then
+                seps[i]:Show()
                 seps[i]:SetSize(1, max(bh - 4, 4))
                 seps[i]:ClearAllPoints()
                 seps[i]:SetPoint("LEFT", holder, "LEFT", Edge(i + 1), 0)
@@ -262,6 +279,7 @@ function MM.Enable()
             seps[i] = sep
         end
     end
+    MM.Relayout = Relayout
     Relayout()
     if db.popup then holder:Hide() end
     -- popup: Layout mode puts the panel back on its own box; pin it over the Menu button again
@@ -293,8 +311,14 @@ function MM.PlaceAbove(btn)
     MM.anchorBtn = btn
     local m = CUI.movers and CUI.movers.micromenu
     if not (holder and m and btn and DB().popup) or InCombatLockdown() then return end
+    -- a compact list on a high layer, so bars and icon columns near the button never cover it
+    local rows = #buttons
+    holder:SetSize(120, rows * 20 + 4)
+    holder:SetFrameStrata("DIALOG")
+    m.mover:SetSize(120, rows * 20 + 4)
     m.mover:ClearAllPoints()
-    m.mover:SetPoint("BOTTOMRIGHT", btn, "TOPRIGHT", 0, 6)
+    m.mover:SetPoint("BOTTOMRIGHT", btn, "TOPRIGHT", 0, 4)
+    if MM.Relayout then MM.Relayout() end
 end
 
 function MM.SetPopup(on)
@@ -305,6 +329,7 @@ function MM.SetPopup(on)
         holder:Hide()
         if MM.anchorBtn then MM.PlaceAbove(MM.anchorBtn) end
     else
+        holder:SetFrameStrata("MEDIUM")
         holder:Show()
         CUI:ApplyLayout("micromenu")
     end

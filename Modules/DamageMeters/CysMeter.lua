@@ -328,10 +328,22 @@ local function FitBack(win)
     if db.fit and not win.resizing and not CUI.layoutMode then
         h = HEAD + math.min(cfg.rows, max(win.count or 0, 1)) * (db.rowH + 1) + 2
     end
-    if win.backH ~= h then
-        win.backH = h
-        win.back:SetHeight(h)
-        win.holder:SetHitRectInsets(0, 0, 0, full - h)
+    -- grow up: the window's bottom edge stays put and the title strip rises as rows are added
+    local up = db.growUp and true or false
+    if win.backH ~= h or win.backUp ~= up then
+        win.backH, win.backUp = h, up
+        local back = win.back
+        back:ClearAllPoints()
+        if up then
+            back:SetPoint("BOTTOMLEFT", 0, 0)
+            back:SetPoint("BOTTOMRIGHT", 0, 0)
+            win.holder:SetHitRectInsets(0, 0, full - h, 0)
+        else
+            back:SetPoint("TOPLEFT", 0, 0)
+            back:SetPoint("TOPRIGHT", 0, 0)
+            win.holder:SetHitRectInsets(0, 0, 0, full - h)
+        end
+        back:SetHeight(h)
     end
 end
 
@@ -347,8 +359,8 @@ local function Layout(win)
         local r = Row(win, i)
         local y = -(HEAD + 1) - (i - 1) * (db.rowH + 1)
         r:ClearAllPoints()
-        r:SetPoint("TOPLEFT", win.holder, "TOPLEFT", 1, y)
-        r:SetPoint("TOPRIGHT", win.holder, "TOPRIGHT", -1, y)
+        r:SetPoint("TOPLEFT", win.back, "TOPLEFT", 1, y) -- rows ride with the window's look (grow up / down)
+        r:SetPoint("TOPRIGHT", win.back, "TOPRIGHT", -1, y)
         r:SetHeight(db.rowH)
         r.icon:SetSize(db.rowH, db.rowH)
         r.icon:SetShown(db.icons)
@@ -561,8 +573,8 @@ function CreateWindow(cfg)
 
     local head = CreateFrame("Button", nil, holder)
     win.head = head
-    head:SetPoint("TOPLEFT", 1, -1)
-    head:SetPoint("TOPRIGHT", -1, -1)
+    head:SetPoint("TOPLEFT", back, "TOPLEFT", 1, -1)
+    head:SetPoint("TOPRIGHT", back, "TOPRIGHT", -1, -1)
     head:SetHeight(HEAD)
     head:RegisterForClicks("AnyUp")
     local headBg = W.Texture(head, "BACKGROUND", T.header) -- a slightly lighter title strip
@@ -1166,6 +1178,13 @@ CUI:RegisterPage("Damage Meter", function(page)
     Check("Class icons", "icons")
     Check("Number each row (1. 2. 3.)", "rank")
     Check("Shrink each window to the rows it uses", "fit", function() for _, w in ipairs(wins) do FitBack(w) end end)
+    local labG = W.Text(page, 12, T.accent)
+    labG:SetPoint("TOPLEFT", 24, y - 4)
+    labG:SetText("Grow")
+    W.Dropdown(page, 230, { { "down", "down from the title" }, { "up", "up from the bottom" } },
+        function() return db.growUp and "up" or "down" end,
+        function(v) db.growUp = (v == "up"); for _, w in ipairs(wins) do FitBack(w) end end):SetPoint("TOPLEFT", 120, y)
+    y = y - 32
     Check("Title strip buttons show only when you point at it", "quietHead", function()
         for _, w in ipairs(wins) do w.headHot = not db.quietHead; w.PaintHead() end
     end)
