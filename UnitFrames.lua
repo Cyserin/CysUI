@@ -575,13 +575,20 @@ UF.HealthStyle = HealthStyle
 local function Paint(bar, bg, r, g, b, style)
     if bar.cysPaint == style and bar.cysR == r and bar.cysG == g and bar.cysB == b then return end
     bar.cysPaint, bar.cysR, bar.cysG, bar.cysB = style, r, g, b
-    if style == "dark" then r, g, b = r * DARK, g * DARK, b * DARK end
+    if style == "dark" then r, g, b = r * DARK, g * DARK, b * DARK
+    elseif style == "gradient" then
+        -- pale colors (Priest white, Rogue yellow) are toned down so the white text on top keeps reading
+        local lum = 0.299 * r + 0.587 * g + 0.114 * b
+        -- yellows (Rogue) keep more of their pop: they read fine a bit brighter than white does
+        local cap = (b < 0.6 * min(r, g)) and 0.74 or 0.6
+        if lum > cap then local k = cap / lum; r, g, b = r * k, g * k, b * k end
+    end
     bar:SetStatusBarColor(r, g, b)
     local tex = bar:GetStatusBarTexture()
     if style == "gradient" and tex and tex.SetGradient and CreateColor then
         pcall(tex.SetGradient, tex, "VERTICAL",
             CreateColor(r * 0.62, g * 0.62, b * 0.62, 1),                                  -- bottom
-            CreateColor(min(1, r * 1.05 + 0.04), min(1, g * 1.05 + 0.04), min(1, b * 1.05 + 0.04), 1)) -- top
+            CreateColor(min(1, r * 1.08 + 0.03), min(1, g * 1.08 + 0.03), min(1, b * 1.08 + 0.03), 1)) -- top
     end
     if bg then bg:SetColorTexture(r * 0.16 + 0.02, g * 0.16 + 0.02, b * 0.16 + 0.02, 1) end
 end
@@ -774,6 +781,15 @@ local function CreateUnitFrame(def)
     -- body
     W.Texture(f, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.9 }):SetAllPoints()
     f.edges = W.Border(f, 1, T.border, "BORDER")
+    -- soft drop shadow just outside the frame, so it lifts off busy ground
+    f.shadow = {}
+    for i, a in ipairs({ 0.45, 0.22, 0.1 }) do
+        local sh = f:CreateTexture(nil, "BACKGROUND", nil, -8 + i)
+        sh:SetColorTexture(0, 0, 0, a)
+        sh:SetPoint("TOPLEFT", f, "TOPLEFT", -i, i)
+        sh:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", i, -i)
+        f.shadow[i] = sh
+    end
 
     if def.power then
         f.power = CreateFrame("StatusBar", nil, f)
@@ -820,6 +836,10 @@ local function CreateUnitFrame(def)
     f.overhealTex:SetPoint("BOTTOMLEFT", f.health, "BOTTOMRIGHT", 1, 0)
     f.overhealTex:Hide()
     f.health:SetScript("OnSizeChanged", function() if f.unit and UnitExists(f.unit) then UpdateHealth(f) end end)
+    -- a faint top highlight on the health bar: a modern glassy edge without a texture
+    local hl = f.health:CreateTexture(nil, "ARTWORK", nil, 3)
+    hl:SetColorTexture(1, 1, 1, 0.08)
+    hl:SetPoint("TOPLEFT"); hl:SetPoint("TOPRIGHT"); hl:SetHeight(1)
 
     -- text lives on a frame above the bars
     local overlay = CreateFrame("Frame", nil, f)
@@ -828,7 +848,7 @@ local function CreateUnitFrame(def)
     f.overlay = overlay
     f.healthText = overlay:CreateFontString(nil, "OVERLAY")
     f.healthText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(def.fontSize or 11), "OUTLINE")
-    f.healthText:SetPoint("RIGHT", f.health, "RIGHT", -5, 0)
+    f.healthText:SetPoint("RIGHT", f.health, "RIGHT", def.party and -19 or -5, 0) -- party: clear of the role icon
     if def.powerH and f.power then
         f.powerText = overlay:CreateFontString(nil, "OVERLAY")
         f.powerText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(9), "OUTLINE")
@@ -1341,15 +1361,29 @@ function UF.ApplyTargetAccent()
     local f = UF.frames.target
     if not f or not f.overlay then return end
     if not f.accentLine then
-        local t = f.overlay:CreateTexture(nil, "ARTWORK")
-        t:SetTexture(FLAT)
-        t:SetVertexColor(T.accent[1], T.accent[2], T.accent[3], 0.75)
+        -- a crisp 1 px line in the theme color (follows the Border color setting) with a soft glow fading down
+        local t = W.Texture(f.overlay, "ARTWORK", T.glow)
         t:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
         t:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
-        t:SetHeight(2)
+        t:SetHeight(1)
         f.accentLine = t
+        local g = f.overlay:CreateTexture(nil, "ARTWORK", nil, -1)
+        g:SetTexture(FLAT)
+        g:SetPoint("TOPLEFT", f.health, "TOPLEFT", 0, 0)
+        g:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", 0, 0)
+        g:SetHeight(9)
+        f.accentGlow = g
     end
-    f.accentLine:SetShown(DB().targetAccent ~= false)
+    local c = T.glow
+    if f.accentGlow.SetGradient and CreateColor then
+        f.accentGlow:SetVertexColor(1, 1, 1, 1)
+        pcall(f.accentGlow.SetGradient, f.accentGlow, "VERTICAL", CreateColor(c[1], c[2], c[3], 0), CreateColor(c[1], c[2], c[3], 0.32))
+    else
+        f.accentGlow:SetVertexColor(c[1], c[2], c[3], 0.15)
+    end
+    local on = DB().targetAccent ~= false
+    f.accentLine:SetShown(on)
+    f.accentGlow:SetShown(on)
 end
 
 -- Names on the player and target frames: small in the top-left corner of the health bar (the default), which
@@ -1692,7 +1726,7 @@ CUI:RegisterPage("Unit Frames", function(page)
     for _, row in ipairs({
         { "nameCornerSmall", "Corner names on target of target, pet and party too", UF.ApplyNameStyle },
         { "eliteTag", "Elite / Rare / Boss tag beside the name", RefreshAll },
-        { "targetAccent", "Soft gold line along the top of the target frame", function() UF.ApplyTargetAccent() end },
+        { "targetAccent", "Gold accent and soft glow along the top of the target frame", function() UF.ApplyTargetAccent() end },
         { "leaderIcon", "Crown beside the group leader (player and party frames)", function() UF.UpdateLeaders() end },
     }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
