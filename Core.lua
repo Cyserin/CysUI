@@ -546,7 +546,7 @@ if CysChangelog then
                   "Profiles: save whole setups (settings, frame positions and which modules are on) under a name and swap between them, for example a General and a Healer layout. New Profiles page under Home, and a Profile dropdown at the top of the settings window. A swap loads when you press Reload UI. Copy, rename, delete, and share one profile as a text line.",
                   "Swap by spec: tie a profile to your Primary and Secondary spec (Profiles page). When you change spec, a small box asks whether to load that profile.",
                   "Bottom data panels (Info Bar page, ElvUI style): one switch moves the main bar's readouts to two thin panels under the chat and damage meter, hides the micro menu behind a Menu button on the right panel, and lays a slim XP bar along the top of your action bars. Each piece also has its own switch: the bar button per readout now steps Main bar, Left panel, Right panel, Minimap bar; Micro Menu page: open it from the Menu button; XP Bar page: thin line on the action bars.",
-                  "Unit frames, new look: health bars fill with a soft gradient of the class color, and the empty part is a deep shade of the same color so missing health reads at a glance. Power bars match. A Health bar look dropdown on the Unit Frames page picks Gradient, Dark or Bright, and names and numbers stay white with a shadow.",
+                  "Unit frames, new look: health bars fill with a soft gradient of the class color, and the empty part is a deep shade of the same color so missing health reads at a glance. Power bars match, frames get a soft shadow and a faint top highlight, the target frame has a cleaner gold accent with a soft glow, and party health numbers stay clear of the role icon. A Health bar look dropdown on the Unit Frames page picks Gradient, Dark or Bright, and names and numbers stay white with a shadow.",
                   "Layout mode: Attach to. Pin a HUD piece (a cooldown bar, alerts, timers) to the player frame, target frame, resource bar, another cooldown bar and more. It moves with that piece and grows away from the corner you pin it by, so a bar that gains an icon no longer shifts both ways. X and Y become the gap.",
               },
               improved = {
@@ -564,6 +564,9 @@ if CysChangelog then
                   "Damage Meter: new Grow dropdown (under the shrink option). Up from the bottom keeps the window's bottom edge in place and raises the title strip as players are added, so a 5-row window sits low and grows to fit a dungeon group.",
                   "Micro menu: the data panel's Menu button now opens a short list above the button, on top of nearby bars and icons.",
                   "Waypoints: drop one with Alt + left-click on the world map (was Ctrl, which is the game's own map marker).",
+                  "Player and target frames: with the player power bar hidden, the player frame now matches the target's health bar height, so both bars line up (Unit Frames page switch).",
+                  "Target of target: docks flush under the target frame's right edge and moves with it (under the target cast bar when that is joined). Switch it off on the Unit Frames page to place it yourself.",
+                  "Mana bars: a softer, brighter blue in place of the game's deep pure blue.",
               },
               fixed = {
                   "Dropdown lists (layout panel, settings) no longer open underneath the window they belong to, are wide enough for long choices, and open upward near the bottom of the screen. A choice cut off in its box shows in full when you point at it.",

@@ -37,6 +37,7 @@ local FALLBACK_POWER = { [0] = { 0.3, 0.5, 1 }, [1] = { 0.9, 0.2, 0.2 }, [2] = {
 
 local function PowerColor(unit)
     local t = UnitPowerType(unit)
+    if t == 0 then return 0.24, 0.52, 1 end -- mana: a softer, brighter blue than the game's pure blue
     local c = PowerBarColor and PowerBarColor[t]
     if c and c.r then return c.r, c.g, c.b end
     local d = FALLBACK_POWER[t] or { 0.6, 0.6, 0.6 }
@@ -419,6 +420,7 @@ local function UpdatePower(f)
     if f.isParty and not PartyPowerShown(f, CysUICompat.Plain(UnitPowerType(unit))) then return end
     local mx = UnitPowerMax(unit)
     local r, g, b = PowerColor(unit)
+    r, g, b = r * 0.8, g * 0.8, b * 0.8 -- a touch calmer than health, so health stays the focus
     UF.Paint(f.power, f.powerBg, r, g, b, UF.HealthStyle() == "gradient" and "gradient" or "bright")
     local pcur = UnitPower(unit)
     if Secret(mx) or Secret(pcur) then
@@ -848,6 +850,7 @@ local function CreateUnitFrame(def)
     f.overlay = overlay
     f.healthText = overlay:CreateFontString(nil, "OVERLAY")
     f.healthText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(def.fontSize or 11), "OUTLINE")
+    f.cysHPSize = def.fontSize or 11
     f.healthText:SetPoint("RIGHT", f.health, "RIGHT", def.party and -19 or -5, 0) -- party: clear of the role icon
     if def.powerH and f.power then
         f.powerText = overlay:CreateFontString(nil, "OVERLAY")
@@ -1164,8 +1167,8 @@ local function FillPartyPreview(f, d)
         local fb = FALLBACK_POWER[d.ptype] or { 0.6, 0.6, 0.6 }
         f.power:SetMinMaxValues(0, 100)
         f.power:SetValue(d.power)
-        if pc and pc.r then Paint(f.power, f.powerBg, pc.r, pc.g, pc.b, HealthStyle() == "gradient" and "gradient" or "bright")
-        else Paint(f.power, f.powerBg, fb[1], fb[2], fb[3], HealthStyle() == "gradient" and "gradient" or "bright") end
+        if pc and pc.r then Paint(f.power, f.powerBg, pc.r * 0.8, pc.g * 0.8, pc.b * 0.8, HealthStyle() == "gradient" and "gradient" or "bright")
+        else Paint(f.power, f.powerBg, fb[1] * 0.8, fb[2] * 0.8, fb[3] * 0.8, HealthStyle() == "gradient" and "gradient" or "bright") end
         if f.costTex then f.costTex:Hide() end
     end
     if f.raidIcon then f.raidIcon:Hide() end
@@ -1272,13 +1275,21 @@ function UF.Enable()
     UF.ApplyTargetAccent()
     UF.SetupLeaderIcons()
     UF.ApplyPlayerPower()
-    C_Timer.After(3, UF.ApplyPlayerPower) -- once more after the modules (Resource Bar) are up
+    UF.DockToT()
+    C_Timer.After(3, function() UF.ApplyPlayerPower(); UF.DockToT() end) -- once more after the modules (Resource Bar, cast bars) are up
 end
 
 -- The player frame's own power bar. "auto" (default) hides it while Cys's Resource Bar is on and always shown,
 -- so rage / energy / mana isn't on screen twice; "show" / "hide" force it. The health bar takes the freed space.
 -- Our own child frames only, but they sit in a secure button, so it waits until out of combat.
 local powerWaiter
+-- player frame shrunk to match the target (FitPlayer) hangs from the top of its box, otherwise from the center
+local function AnchorToMover(f, m)
+    f:ClearAllPoints()
+    if f.cysTopAnchor then f:SetPoint("TOP", m.mover, "TOP", 0, 0)
+    else f:SetPoint("CENTER", m.mover, "CENTER", 0, 0) end
+end
+
 function UF.ApplyPlayerPower()
     local f = UF.frames.player
     if not (f and f.power and f.health) then return end
@@ -1314,6 +1325,64 @@ function UF.ApplyPlayerPower()
         f.health:SetPoint("BOTTOMLEFT", f.power, "TOPLEFT", 0, 1)
         f.health:SetPoint("BOTTOMRIGHT", f.power, "TOPRIGHT", 0, 1)
         if was then UF:Update(f) end
+    end
+    UF.FitPlayer()
+end
+
+-- secure frames only move out of combat: anything asked for mid-fight runs when it ends
+local afterCombat, afterFrame = {}, nil
+local function AfterCombat(fn)
+    afterCombat[fn] = true
+    if not afterFrame then
+        afterFrame = CreateFrame("Frame")
+        afterFrame:SetScript("OnEvent", function(self)
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            local list = afterCombat
+            afterCombat = {}
+            for f in pairs(list) do pcall(f) end
+        end)
+    end
+    afterFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+-- Matching heights: with the player power bar hidden (Resource Bar on), the player frame drops the power bar's
+-- height so its health bar is exactly as tall as the target's and both line up along the top.
+function UF.FitPlayer()
+    local f, m = UF.frames.player, CUI.movers and CUI.movers.player
+    if not (f and m and m.mover) then return end
+    if InCombatLockdown() then AfterCombat(UF.FitPlayer) return end
+    local e = CysUIDB.layout and CysUIDB.layout.player
+    local fullH = (e and e.height) or m.defH or f:GetHeight()
+    local cut = 0
+    if f.powerHidden and DB().matchHeights ~= false then
+        local t = UF.frames.target
+        cut = ((t and t.power and t.cysPowerH) or f.cysPowerH or 7) + 1
+    end
+    if math.abs(f:GetHeight() - (fullH - cut)) > 0.1 then f:SetHeight(fullH - cut) end
+    f.cysTopAnchor = cut > 0 or nil
+    AnchorToMover(f, m)
+end
+
+-- Target of target docked flush under the target frame's right edge (under the target cast bar when that is
+-- joined to the frame), so it moves with the target frame. Off: it goes back to its own layout spot.
+function UF.DockToT()
+    local f, t, m = UF.frames.targettarget, UF.frames.target, CUI.movers and CUI.movers.targettarget
+    if not (f and m and m.mover) then return end
+    if InCombatLockdown() then AfterCombat(UF.DockToT) return end
+    if DB().dockToT ~= false and t then
+        local gap = 3
+        local cdb, cb = CysUIDB.castbar, CUI.CastBar and CUI.CastBar.bars and CUI.CastBar.bars.target
+        if cdb and cdb.joinTarget and cb then gap = gap + cb:GetHeight() - 1 end
+        f:ClearAllPoints()
+        f:SetPoint("TOPRIGHT", t, "BOTTOMRIGHT", 0, -gap)
+        m.mover:ClearAllPoints()
+        m.mover:SetPoint("CENTER", f, "CENTER", 0, 0) -- its layout-mode box sits on it
+        f.cysDocked = true
+    elseif f.cysDocked then
+        f.cysDocked = nil
+        f:ClearAllPoints()
+        f:SetPoint("CENTER", m.mover, "CENTER", 0, 0)
+        CUI:ApplyLayout("targettarget")
     end
 end
 
@@ -1397,12 +1466,19 @@ function UF.ApplyNameStyle()
         f.name:ClearAllPoints()
         f.name:SetShadowColor(0, 0, 0, 1) -- a dark drop shadow keeps the name readable on bright class colors
         f.name:SetShadowOffset(1, -1)
+        local hpRight = f.isParty and -19 or -5
+        f.healthText:ClearAllPoints()
         if corner then
+            -- one clean top row: name on the left, health on the right; the middle stays free for combat text
             f.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(cornerSize), "OUTLINE")
+            f.healthText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(cornerSize + 1), "OUTLINE")
+            f.healthText:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", hpRight + 1, -2)
             f.name:SetPoint("TOPLEFT", f.health, "TOPLEFT", 4, -3)
-            f.name:SetPoint("TOPRIGHT", f.health, "TOPRIGHT", right or -4, -3)
+            f.name:SetPoint("RIGHT", f.healthText, "LEFT", -6, 0)
         else
             f.name:SetFont(CysUICompat.Font(), CysUICompat.FontSize(plainSize), "OUTLINE")
+            f.healthText:SetFont(CysUICompat.Font(), CysUICompat.FontSize(f.cysHPSize or 11), "OUTLINE")
+            f.healthText:SetPoint("RIGHT", f.health, "RIGHT", hpRight, 0)
             f.name:SetPoint("LEFT", f.health, "LEFT", 5, 0)
             f.name:SetPoint("RIGHT", f.healthText, "LEFT", -4, 0)
         end
@@ -1539,8 +1615,7 @@ function UF.KeepClear()
             m.mover:ClearAllPoints()
             m.mover:SetPoint(p, rel, rp, bx, my)
             m.cysShift = 0
-            f:ClearAllPoints()
-            f:SetPoint("CENTER", m.mover, "CENTER", 0, 0)
+            AnchorToMover(f, m)
             local fl, fb, fr, ft = ScreenRect(f)
             if on and fl then
                 local gap = CLEAR_GAP * UIParent:GetEffectiveScale()
@@ -1638,6 +1713,8 @@ clearWatch:SetScript("OnEvent", function(_, event)
             if (key == "player" or key == "target") and CUI.movers[key] then CUI.movers[key].cysShift = 0 end
             -- the Cooldown Manager re-places its stance icon (also mid-fight): pin it back straight away
             if key == "cooldowns_stance" then AttachStance() end
+            if key == "player" then UF.FitPlayer() end
+            if key == "targettarget" or key == "target" or key == "castbar_target" then UF.DockToT() end
             if key == "player" or key == "target" or (type(key) == "string" and key:find("^cooldowns_")) then QueueKeepClear() end
         end)
         if CUI.ApplyLayoutFilter then hooksecurefunc(CUI, "ApplyLayoutFilter", QueueKeepClear) end
@@ -1714,7 +1791,7 @@ CUI:RegisterPage("Unit Frames", function(page)
         function(on) db.combatIcon = on and true or false; if UF.ApplyCombatIcon then UF.ApplyCombatIcon() end end)
     combat:SetPoint("TOPLEFT", 4, y - 4)
     y = y - 30
-    local corner = W.Checkbox(page, "Small names in the top-left corner (player and target)", function() return db.nameCorner ~= false end,
+    local corner = W.Checkbox(page, "Name and health on one top row (player and target)", function() return db.nameCorner ~= false end,
         function(on) db.nameCorner = on and true or false; UF.ApplyNameStyle() end)
     corner:SetPoint("TOPLEFT", 4, y - 4)
     y = y - 28
@@ -1727,6 +1804,8 @@ CUI:RegisterPage("Unit Frames", function(page)
         { "nameCornerSmall", "Corner names on target of target, pet and party too", UF.ApplyNameStyle },
         { "eliteTag", "Elite / Rare / Boss tag beside the name", RefreshAll },
         { "targetAccent", "Gold accent and soft glow along the top of the target frame", function() UF.ApplyTargetAccent() end },
+        { "matchHeights", "Player health bar as tall as the target's (when the player power bar is hidden)", function() UF.FitPlayer() end },
+        { "dockToT", "Dock target of target under the target frame (off: place it yourself)", function() UF.DockToT() end },
         { "leaderIcon", "Crown beside the group leader (player and party frames)", function() UF.UpdateLeaders() end },
     }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
