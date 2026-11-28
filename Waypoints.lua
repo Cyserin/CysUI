@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 -- Cys's UI - Waypoints (a TomTom-style arrow)
 --
---   * Ctrl + left-click anywhere on the world map to drop a waypoint.
+--   * Alt + left-click anywhere on the world map to drop a waypoint.
 --   * A small gold arrow shows which way to walk, how far it is and roughly how long it takes.
 --   * /way 45.2 62.1 Some name     sets one in the zone you are in.
 --   * /way clear                   removes them all.   Right-click the arrow to clear the current one.
@@ -273,7 +273,7 @@ local function BuildArrow()
 end
 
 --------------------------------------------------------------------------------
--- Pin on the world map + Ctrl+click
+-- Pin on the world map + Alt+click
 --------------------------------------------------------------------------------
 
 local function MapID(map)
@@ -305,11 +305,11 @@ local function HookWorldMap()
         return (cx / es - l) / w, (t - cy / es) / h
     end
 
-    -- Ctrl + left-click is detected by watching the mouse while the map is open, so it does not depend
+    -- Alt + left-click is detected by watching the mouse while the map is open, so it does not depend
     -- on which frame the map puts on top.
     local wasDown = false
     local function Poll()
-        local down = IsMouseButtonDown("LeftButton") and IsControlKeyDown()
+        local down = IsMouseButtonDown("LeftButton") and IsAltKeyDown()
         if down and not wasDown then
             local area = map.ScrollContainer or canvas
             -- (the old MouseIsOver() helper is gone on WoW Forever: ask the frame itself)
@@ -399,7 +399,7 @@ local function Way(msg)
         return
     end
     if msg == "" or lower == "help" then
-        CUI:Print("/way 45.2 62.1 [name]  sets a waypoint in this zone.  /way clear  removes them.  Ctrl+click the world map to drop one.")
+        CUI:Print("/way 45.2 62.1 [name]  sets a waypoint in this zone.  /way clear  removes them.  Alt+click the world map to drop one.")
         return
     end
     local x, y, name = msg:match("^(%d+%.?%d*)[%s,]+(%d+%.?%d*)%s*(.*)$")
@@ -483,7 +483,7 @@ CUI:RegisterModule({
     key = "waypoints",
     name = "Waypoints",
     addon = "CysUI",
-    desc = "A TomTom-style arrow: Ctrl+click the world map (or type /way 45 62) and an arrow shows the way, the distance and the time left.",
+    desc = "A TomTom-style arrow: Alt+click the world map (or type /way 45 62) and an arrow shows the way, the distance and the time left.",
     onEnable = WP.Enable,
     open = function() CUI:OpenConfig("Waypoints") end,
 })
@@ -498,7 +498,7 @@ CUI:RegisterPage("Waypoints", function(page)
     how:SetWidth(width - 8)
     how:SetJustifyV("TOP")
     how:SetSpacing(3)
-    how:SetText("|cFFFFD100Ctrl + left-click|r the world map to set a waypoint, or type |cFFFFD100/way 45.2 62.1 Name|r. "
+    how:SetText("|cFFFFD100Alt + left-click|r the world map to set a waypoint, or type |cFFFFD100/way 45.2 62.1 Name|r. "
         .. "Right-click the arrow to clear it, |cFFFFD100/way clear|r clears everything.")
 
     local y = -84

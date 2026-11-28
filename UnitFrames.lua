@@ -1049,6 +1049,132 @@ local function BuildParty()
     HideBlizzard("party")
 end
 
+--------------------------------------------------------------------------------
+-- Party preview: four made-up members drawn on the real party frames, so the look can be checked while solo.
+-- The frames' show / hide rules are paused while it is on and put back when it is turned off (out of combat only).
+--------------------------------------------------------------------------------
+local PARTY_FAKE = {
+    { name = "Tankzilla", class = "WARRIOR", level = 60, pct = 0.82, power = 35, ptype = 1 },
+    { name = "Healbot", class = "PRIEST", level = 60, pct = 1, power = 70, ptype = 0, healer = true, debuff = "Magic" },
+    { name = "Backstab", class = "ROGUE", level = 59, pct = 0.46, power = 90, ptype = 3, debuff = "Poison" },
+    { name = "Frostbolt", class = "MAGE", level = 58, pct = 0.68, power = 55, ptype = 0, debuff = "Curse", faded = true },
+}
+local PREVIEW_ICON = {
+    Magic = "Interface\\Icons\\Spell_Shadow_ShadowWordPain",
+    Poison = "Interface\\Icons\\Ability_Creature_Poison_02",
+    Curse = "Interface\\Icons\\Spell_Shadow_CurseOfTounges",
+}
+
+local function PartyVisibility(f, i, preview)
+    if preview then
+        pcall(UnregisterStateDriver, f, "visibility")
+        pcall(UnregisterUnitWatch, f)
+        f:Show()
+    elseif not pcall(RegisterStateDriver, f, "visibility", format("[group:raid] hide; [@party%d,exists] show; hide", i)) then
+        RegisterUnitWatch(f)
+    end
+end
+
+local function FillPartyPreview(f, d)
+    local db = DB()
+    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[d.class] or { r = 0.6, g = 0.6, b = 0.6 }
+    local r, g, b = c.r, c.g, c.b
+    if not db.classColors then r, g, b = T.accent[1], T.accent[2], T.accent[3] end
+    if db.darkFill ~= false then r, g, b = r * DARK, g * DARK, b * DARK end
+    f.health:SetMinMaxValues(0, 4200)
+    f.health:SetValue(floor(4200 * d.pct))
+    f.health:SetStatusBarColor(r, g, b)
+    if f.healTex then f.healTex:Hide(); f.overhealTex:Hide() end
+    f.name:SetText(format("|cFFFFD100%d|r %s", d.level, d.name))
+    f.healthText:SetText(f.noHealthText and "" or HealthString(floor(4200 * d.pct), 4200))
+    if f.power then
+        local pc = PowerBarColor and PowerBarColor[d.ptype]
+        local fb = FALLBACK_POWER[d.ptype] or { 0.6, 0.6, 0.6 }
+        f.power:SetMinMaxValues(0, 100)
+        f.power:SetValue(d.power)
+        if pc and pc.r then f.power:SetStatusBarColor(pc.r, pc.g, pc.b) else f.power:SetStatusBarColor(fb[1], fb[2], fb[3]) end
+        if f.costTex then f.costTex:Hide() end
+    end
+    if f.raidIcon then f.raidIcon:Hide() end
+    if f.cysHealer then f.cysHealer:SetShown(d.healer and true or false) end
+
+    -- debuff icon beside the frame, and the outline colored by its type (same rules as the real thing)
+    f.cysPreviewIcons = f.cysPreviewIcons or {}
+    local a = f.cysPreviewIcons[1]
+    if d.debuff and db.partyDebuffs ~= false then
+        if not a then a = MakeAura(f); f.cysPreviewIcons[1] = a end
+        a:SetSize(PARTY_ICON, PARTY_ICON)
+        a.unit, a.index, a.filter, a.auraInstanceID = nil, nil, nil, nil
+        a.icon:SetTexture(PREVIEW_ICON[d.debuff])
+        a.count:SetText("")
+        a.cd:Hide()
+        local dr, dg, dbl = CysUICompat.DebuffColor(d.debuff)
+        W.SetBorder(a.edges, dr and { dr, dg, dbl } or { 0.8, 0.2, 0.2 })
+        a:ClearAllPoints()
+        a:SetPoint("TOPLEFT", f, "TOPRIGHT", 4, 0)
+        a:Show()
+    elseif a then
+        a:Hide()
+    end
+    if not f.cysPreviewEdges then f.cysPreviewEdges = W.Border(f, 2, { 1, 1, 1 }, "OVERLAY", 4) end
+    local showOutline = d.debuff and db.partyDispel ~= false
+        and (db.partyDispelOnly == false or CysUICompat.CanDispel(d.debuff))
+    local er, eg, eb
+    if showOutline then er, eg, eb = CysUICompat.DebuffColor(d.debuff) end
+    if er then W.SetBorder(f.cysPreviewEdges, { er, eg, eb }) end
+    for k = 1, 4 do f.cysPreviewEdges[k]:SetShown(er and true or false) end
+
+    -- out of range: the range check leaves the frame alone while it sees an empty slot at full alpha
+    local alpha = (d.faded and db.rangeFade ~= false) and 0.45 or 1
+    f.cysRangeAlpha = 1
+    f:SetAlpha(alpha)
+end
+
+local function ClearPartyPreview(f)
+    for _, a in ipairs(f.cysPreviewIcons or {}) do a:Hide() end
+    if f.cysPreviewEdges then for k = 1, 4 do f.cysPreviewEdges[k]:Hide() end end
+    f.cysRangeAlpha = nil
+    f:SetAlpha(1)
+    f.healthText:SetText("")
+    f.name:SetText("")
+end
+
+function UF.RefreshPartyPreview()
+    if not (UF.partyPreview and UF.party) then return end
+    for i, f in ipairs(UF.party) do
+        if PARTY_FAKE[i] and not UnitExists("party" .. i) then FillPartyPreview(f, PARTY_FAKE[i]) end
+    end
+end
+
+function UF.PartyTest(on)
+    if not UF.party then CUI:Print("Party frames are off (Unit Frames > Party). Turn them on and /reload to preview.") return end
+    if InCombatLockdown() then CUI:Print("The party preview waits until you leave combat.") return end
+    if on == nil then on = not UF.partyPreview end
+    if on and IsInGroup() then CUI:Print("You're in a group - your real party frames are already showing.") return end
+    UF.partyPreview = on and true or false
+    for i, f in ipairs(UF.party) do
+        PartyVisibility(f, i, on)
+        if on then
+            FillPartyPreview(f, PARTY_FAKE[i])
+        else
+            ClearPartyPreview(f)
+            UF:Update(f)
+        end
+    end
+    if not on and UF.UpdateHealers then pcall(UF.UpdateHealers) end
+    if UF.LayoutParty then pcall(UF.LayoutParty) end
+    CUI:Print("Party frame preview " .. (on and "ON - press Preview again to turn it off" or "off"))
+end
+
+-- joining a real group ends the preview (as soon as combat allows)
+do
+    local ev = CreateFrame("Frame")
+    for _, e in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_REGEN_ENABLED" }) do pcall(ev.RegisterEvent, ev, e) end
+    ev:SetScript("OnEvent", function()
+        if UF.partyPreview and IsInGroup() and not InCombatLockdown() then UF.PartyTest(false) end
+    end)
+end
+
 function UF.Enable()
     if InCombatLockdown() then
         CUI:Print("|cFFFF9F43Unit Frames: can't start in combat. Reload out of combat.|r")
@@ -1558,10 +1684,14 @@ CUI:RegisterPage("Unit Frames", function(page)
         { "partyDispelOnly", "Only outline debuffs I can remove" },
     }) do
         local cb = W.Checkbox(page, row[2], function() return db[row[1]] ~= false end,
-            function(on) db[row[1]] = on and true or false; PartyRefresh() end)
+            function(on) db[row[1]] = on and true or false; PartyRefresh(); UF.RefreshPartyPreview() end)
         cb:SetPoint("TOPLEFT", 4, y)
         y = y - 26
     end
+    local ptest = W.Button(page, 240, 22, "Preview a full party (on / off)")
+    ptest:SetPoint("TOPLEFT", 4, y - 4)
+    ptest:SetScript("OnClick", function() UF.PartyTest() end)
+    y = y - 32
 
     local note = W.Notes(page, 4, y - 52, width, "", {
             "Frames can only be moved or resized out of combat.",

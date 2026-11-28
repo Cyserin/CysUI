@@ -775,6 +775,11 @@ SLASH_CYSRAID1 = "/cysraid"
 SlashCmdList["CYSRAID"] = function(msg)
     msg = strtrim((msg or ""):lower())
     if msg == "test" then RF:Test() return end
+    if msg == "party" then
+        local UF = CUI.UnitFrames
+        if UF and UF.PartyTest then UF.PartyTest() end
+        return
+    end
     local rest = msg:match("^role%s+(.+)$")
     if rest then
         local words = {}
@@ -794,6 +799,7 @@ SlashCmdList["CYSRAID"] = function(msg)
         return
     end
     CUI:Print("/cysraid test - toggle a made-up 40-player preview")
+    CUI:Print("/cysraid party - toggle a made-up 5-player party preview")
     CUI:Print("/cysraid role [name] tank|healer|dps|clear - set a role by hand (uses your target without a name)")
 end
 
@@ -883,6 +889,12 @@ CUI:RegisterPage("Raid Frames", function(page)
     local test = W.Button(page, 240, 22, "Preview a full raid (on / off)")
     test:SetPoint("TOPLEFT", 4, y)
     test:SetScript("OnClick", function() RF:Test() end)
+    local ptest = W.Button(page, 200, 22, "Preview a party (on / off)")
+    ptest:SetPoint("LEFT", test, "RIGHT", 8, 0)
+    ptest:SetScript("OnClick", function()
+        local UF = CUI.UnitFrames
+        if UF and UF.PartyTest then UF.PartyTest() else CUI:Print("Party frames are part of the Unit Frames module.") end
+    end)
 
     local foot = W.Notes(page, 4, y - 38, width, "", {
             "Layout changes wait until combat ends.",
