@@ -561,6 +561,8 @@ if CysChangelog then
                   "Action bars: keybind text is smaller and a little see-through, so it doesn't crowd the icons.",
                   "Layout mode: Attach to and Where now sit at the bottom of the panel under their own heading, so their lists open below the panel.",
                   "Player frame: its power bar hides while Cys's Resource Bar is on, so rage / energy / mana isn't shown twice (Unit Frames page: Player power bar, auto / always show / always hide). Rage numbers drop the %, since rage tops out at 100.",
+                  "Damage Meter: new Grow dropdown (under the shrink option). Up from the bottom keeps the window's bottom edge in place and raises the title strip as players are added, so a 5-row window sits low and grows to fit a dungeon group.",
+                  "Micro menu: the data panel's Menu button now opens a short list above the button, on top of nearby bars and icons.",
               },
               fixed = {
                   "Dropdown lists (layout panel, settings) no longer open underneath the window they belong to, are wide enough for long choices, and open upward near the bottom of the screen. A choice cut off in its box shows in full when you point at it.",
