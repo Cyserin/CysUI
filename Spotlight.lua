@@ -14,12 +14,16 @@ local W = CUI.W
 local T = W.T
 
 local SPOTLIGHT = {
-    version = "0.58.31",
+    version = "0.58.35",
     items = {
-        { title = "Dungeon Runs", page = "Dungeon Runs", module = "runs",
-          icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
-          text = "Each dungeon run is timed and its XP counted. When you leave, a summary in your own chat shows XP from kills and quests, XP per hour and how many more runs take you to level. Works with Cys's Level Pace.",
-          where = "Just run a dungeon. /cuiruns prints the last run again."},
+        { title = "Profiles", page = "Profiles",
+          icon = "Interface\\Icons\\INV_Misc_Book_09",
+          text = "Save whole setups under a name and swap between them, like a General and a Healer layout. Each profile keeps your settings, frame positions and module switches. You can also tie a profile to each spec.",
+          where = "Profiles page, or the Profile dropdown at the top of this window. A swap loads on Reload UI."},
+        { title = "Bottom data panels", page = "Data Panels", module = "infobar",
+          icon = "Interface\\Icons\\INV_Misc_Note_01",
+          text = "ElvUI style: the info bar readouts move to two thin panels under the chat and damage meter, the micro menu hides behind a Menu button, and a slim XP bar sits on your action bars.",
+          where = "Data Panels tab under Minimap & Bars: Bottom data panels."},
     },
 }
 

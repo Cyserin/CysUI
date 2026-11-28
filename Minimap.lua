@@ -454,22 +454,67 @@ CUI:RegisterModule({
 CUI:RegisterPage("Minimap", function(page)
     local db = DB()
     local width = 480
+
     W.Header(page, "Minimap", width):SetPoint("TOPLEFT", 0, -4)
+
+    -- a small picture of the map on the right that follows the switches
+    local pv = CreateFrame("Frame", nil, page)
+    pv:SetSize(140, 182)
+    pv:SetPoint("TOPRIGHT", page, "TOPLEFT", width - 6, -32)
+    pv.zone = CreateFrame("Frame", nil, pv)
+    pv.zone:SetSize(140, 16)
+    pv.zone:SetPoint("TOP", 0, 0)
+    W.Texture(pv.zone, "BACKGROUND", T.header):SetAllPoints()
+    W.Border(pv.zone, 1, T.line, "BORDER")
+    pv.zoneText = W.Text(pv.zone, 10, T.green, "CENTER")
+    pv.zoneText:SetPoint("CENTER", 0, 0)
+    pv.map = CreateFrame("Frame", nil, pv)
+    pv.map:SetSize(140, 140)
+    pv.map:SetPoint("TOP", 0, -19)
+    W.Texture(pv.map, "BACKGROUND", { 0.13, 0.17, 0.11, 1 }):SetAllPoints()
+    W.Border(pv.map, 1, T.border, "BORDER")
+    local blob = W.Texture(pv.map, "ARTWORK", { 0.18, 0.24, 0.14, 1 })
+    blob:SetSize(70, 44); blob:SetPoint("TOPLEFT", 14, -22)
+    local blob2 = W.Texture(pv.map, "ARTWORK", { 0.16, 0.22, 0.13, 1 })
+    blob2:SetSize(60, 40); blob2:SetPoint("BOTTOMRIGHT", -10, 16)
+    local me = W.Glyph(pv.map, "up", 9, { 1, 1, 1 }, 2)
+    me:SetPoint("CENTER", 0, 0)
+    pv.coords = W.Text(pv.map, 10, T.text, "RIGHT")
+    pv.coords:SetPoint("BOTTOMRIGHT", -5, 4)
+    pv.clock = W.Text(pv, 10, T.desc, "CENTER")
+    pv.clock:SetPoint("TOP", pv.map, "BOTTOM", 0, -6)
+    function pv:Refresh()
+        local zone = (GetMinimapZoneText and GetMinimapZoneText()) or ""
+        self.zoneText:SetText(zone ~= "" and zone or "Your zone")
+        self.zone:SetShown(db.zoneText and true or false)
+        local x, y
+        local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+        if mapID and C_Map.GetPlayerMapPosition then
+            local ok, pos = pcall(C_Map.GetPlayerMapPosition, mapID, "player")
+            if ok and pos and pos.GetXY then x, y = pos:GetXY() end
+        end
+        self.coords:SetText(x and string.format("%.1f, %.1f", x * 100, y * 100) or "42.1, 65.8")
+        self.coords:SetShown(db.coords and true or false)
+        self.clock:SetText(date("%H:%M"))
+        self.clock:SetShown(db.clock and true or false)
+    end
+    page.preview = pv
 
     local function Check(label, key, y)
         local cb = W.Checkbox(page, label, function() return db[key] end,
-            function(on) db[key] = on; MM:Apply() end)
+            function(on) db[key] = on; MM:Apply(); pv:Refresh() end)
         cb:SetPoint("TOPLEFT", 4, y)
     end
-    Check("Show the zone bar above the map", "zoneText", -34)
-    Check("Show coordinates on the map", "coords", -60)
+    Check("Zone bar above the map", "zoneText", -34)
+    Check("Coordinates on the map", "coords", -60)
     Check("Zoom with the mouse wheel", "wheelZoom", -86)
-    Check("Show Blizzard's clock under the map", "clock", -112)
+    Check("Blizzard's clock under the map", "clock", -112)
 
-    local note = W.Notes(page, 4, -152, width, "", {
-            "Right-click the map for the tracking menu (Find Herbs, Find Minerals, Track Beasts...).",
-            "The map stays square when you resize it.",
-            "Tracking, mail, battleground and other status icons move to the map's corners. The calendar and zoom buttons are hidden.",
-            "If the minimap ever looks wrong, untick Minimap under Modules and reload: the round Blizzard one comes right back.",
-        })
-end)
+    W.Notes(page, 4, -150, 300, "", {
+        { "Right-click", "the map for tracking (herbs, minerals, beasts)." },
+        { "Status icons", "(mail, tracking, battlegrounds) sit in the map's corners." },
+        { "Looks wrong?", "untick Minimap under Modules and reload for the round Blizzard map." },
+    })
+    page.contentHeight = 230
+    pv:Refresh()
+end, function(page) if page.preview then page.preview:Refresh() end end)

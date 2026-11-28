@@ -59,7 +59,7 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 - **Cooldowns** (WoW Forever): the Cys look for the game's Cooldown Manager - square icons with a thin edge in your Border color, flat buff bars, and timer and stack numbers at your size. Optional own bars for the cooldown and utility rows: move them in Layout mode, set size and row length, and hide spells by stance.
 - **Resource Bar**: your rage, energy or mana as its own movable, resizable bar for every class; can match the main cooldown bar's width.
 - **Interrupt-ready cast bars**: enemy casts (target cast bar and nameplates) are grey while your interrupt is on cooldown, tick where it comes ready, green when it is up.
-- **Bags extras**: Pinned (Alt-click an item), New Items since you last closed the bags, categories of your own with a name and icon (+ New category; right-click to change), sub-categories (a category of yours inside another, like Consumables > Buff Food), drag a sidebar category up or down to reorder, a + drop slot at the end of each category, item level on gear and a BoE tag on Bind on Equip gear. Switches on the Automation page.
+- **Bags extras**: Pinned (Alt-click an item), New Items since you last closed the bags, categories of your own with a name and icon (+ New category; right-click to change), sub-categories (a category of yours inside another, like Consumables > Buff Food), drag a sidebar category up or down to reorder, a + drop slot at the end of each category, item level on gear and a BoE tag on Bind on Equip gear. Switches on the Bags tab (Vendor & Bags).
 - **Tracked Recipes** (WoW Forever): tick Track Recipe in a profession window and a small window lists every material, how many you carry (green when enough) and how many you can make; - and + set how many to make; materials you can craft list their own materials under them (two levels); click the recipe to open it, Shift-click or x to stop tracking; Shift-click a material to search the Auction House; AH cost of missing materials with Cys's Auction House. `/cuirecipes`.
 - **Quest Tracker** (WoW Forever, off until switched on): our own quest list in place of the game's tracker. Tracked quests under a gold header per zone (the zone you are in first), each header folds; a This zone only switch (also a Zone button on the tracker); objective counts on the right colored by progress; Ready to turn in with a sound, a softer sound per finished objective; hide grey quests; optional party notes when an objective or quest is done; click a quest to open it in the quest log, Shift-click to stop tracking it; Copy Wowhead link; quest item buttons; focus marker; fades in combat or while the mouse is away; can hide in raids. *(layout)*
 - **Swing Timer** (WoW Forever): your auto attack as a thin movable bar that fills from swing to swing, with lines for an off hand and a ranged weapon; can match the main cooldown bar's width. Turns orange and names it while Heroic Strike / Cleave / Maul / Raptor Strike is queued.
@@ -74,7 +74,18 @@ Every item below has its own switch in `/cui`. Anything marked *(layout)* can be
 ## Skins
 Gold-and-dark look for the Blizzard windows: Esc menu, character, reputation, skills, honor, spellbook, talents, macros, quest log and dialogs, gossip, loot, vendor, bank, mail, class trainer, trade, professions, enchanting, inspect, dressing room, battleground queue and scoreboard, world map, flight map, friends / Who / Guild, raid tab, LFG, guild and communities, options and key bindings, chat settings, AddOn list, pop-ups, right-click menus, dropdowns, pet stable, tabard and charters, clock and stopwatch. Also **Questie**'s tracker and the Details! meter, and the stock-looking widgets on other addons' pages inside the options window. Each skin has its own switch.
 
-## Tools (`/cui` -> General)
+## Profiles (`/cui` -> Profiles)
+
+- **Profiles**: whole setups (settings, frame positions, module switches) saved by name, for example General and Healer. Pick one from the Profile dropdown at the top of the settings window or on the Profiles page; it loads when you press Reload UI. New, Copy, Rename, Delete, Export one profile as a text line and Import it as a new profile.
+- **Swap by spec**: tie a profile to your Primary and Secondary spec; changing spec asks whether to load it. Character lists, run history, recruiter lists, Upgrade weights, talent plans and bug reports are shared by every profile.
+
+## Settings window
+
+- Sections sit on cards with gold headings; switch labels show the details in a softer color and a reload tag where a reload is needed. **Home** shows memory (per-addon list on mouseover), modules, profile and version tiles, then a Tools grid. Text uses the Barlow font.
+- **Minimap & Bars**: Minimap (map and Minimap Button settings with a live preview) and Data Panels (Info Bar and Micro Menu, Text size, left panel follows the chat's width).
+- **Layout mode Attach to**: pin a HUD piece to another one (player or target frame, resource bar, a cooldown bar). **Bottom data panels** (Info Bar page): readouts on two thin panels under the chat and meter, the micro menu behind a Menu button, a slim XP bar on the action bars.
+
+## Tools (`/cui` -> Home)
 - **Memory light**: shows addon memory in KB or MB with a green / yellow / red status.
 - **Copy debug info**, **Export / Import settings** (one pasteable line), **Reset everything**, **View changelog**.
 - **Conflicts**: lists addons that overlap with Cys's UI so you can turn one side off.

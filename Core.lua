@@ -386,6 +386,12 @@ events:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= ADDON then return end
         CysUIDB = CysUIDB or {}
+        CysUICharDB = CysUICharDB or {}
+        -- a profile picked before the reload swaps in now, before defaults are filled in or anything reads them
+        if CUI.ApplyPendingProfile then
+            local ok, err = pcall(CUI.ApplyPendingProfile, CUI)
+            if not ok then CUI:Print("|cFFFF4040Profile swap failed:|r " .. tostring(err)) end
+        end
         CopyDefaults(CysUIDB, DEFAULTS)
         CUI.db = CysUIDB
         -- per-character module switches; a character's first login copies the account-wide ones
@@ -532,9 +538,36 @@ end
 if CysChangelog then
     CysChangelog:Register({
         name = "Cys's UI",
-        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.34",
+        version = CUI:GetVersion(ADDON) ~= "?" and CUI:GetVersion(ADDON) or "0.58.35",
         db = function() return CysUIDB end,
         entries = {
+            { version = "0.58.35", date = "2026-11-28",
+              added = {
+                  "Profiles: save whole setups (settings, frame positions and which modules are on) under a name and swap between them, for example a General and a Healer layout. New Profiles page under Home, and a Profile dropdown at the top of the settings window. A swap loads when you press Reload UI. Copy, rename, delete, and share one profile as a text line.",
+                  "Swap by spec: tie a profile to your Primary and Secondary spec (Profiles page). When you change spec, a small box asks whether to load that profile.",
+                  "Bottom data panels (Info Bar page, ElvUI style): one switch moves the main bar's readouts to two thin panels under the chat and damage meter, hides the micro menu behind a Menu button on the right panel, and lays a slim XP bar along the top of your action bars. Each piece also has its own switch: the bar button per readout now steps Main bar, Left panel, Right panel, Minimap bar; Micro Menu page: open it from the Menu button; XP Bar page: thin line on the action bars.",
+                  "Unit frames: darker health bars with white, shadowed text, so names and numbers read easily on pale class colors (switch on the Unit Frames page).",
+                  "Layout mode: Attach to. Pin a HUD piece (a cooldown bar, alerts, timers) to the player frame, target frame, resource bar, another cooldown bar and more. It moves with that piece and grows away from the corner you pin it by, so a bar that gains an icon no longer shifts both ways. X and Y become the gap.",
+              },
+              improved = {
+                  "Settings window, new look: every section sits on its own card, headings are gold capitals, and switch labels show the main words in white with the details in a softer color after them. Settings that need a reload carry a small reload tag.",
+                  "Home (was General): tiles for memory (point at it for the per-addon list), modules, your profile and what's new, then Windows and input, a Tools grid and links.",
+                  "Minimap & Bars: two tabs instead of four. Minimap holds the map and Minimap Button settings with a small live preview of the map; Data Panels holds the Info Bar and Micro Menu settings.",
+                  "Data panels and info bars: bigger text (Auto now follows the bar height), with a Text size dropdown on the Data Panels tab. The left panel stays as wide as the chat, just under it, even after you resize the chat (switch on the Data Panels tab).",
+                  "Info Bar readouts: pick each one's bar (Main bar, Left panel, Right panel, Minimap bar) from a dropdown.",
+                  "Bags: the Cys's Bags options moved from Automation to their own Bags tab under Vendor and Bags. Automation is now split into Loot and quests, Group and social, Combat and safety, and Handy extras.",
+                  "Damage Meter: windows shrink to the rows they use (an empty window is just its title strip and one line), the title strip buttons show only when you point at the window, a slightly lighter title strip, dimmer rank numbers and bracketed figures, and long fights show hours (2:21:34). Both new options are on the Damage Meter page.",
+                  "Action bars: keybind text is smaller and a little see-through, so it doesn't crowd the icons.",
+                  "Layout mode: Attach to and Where now sit at the bottom of the panel under their own heading, so their lists open below the panel.",
+                  "Player frame: its power bar hides while Cys's Resource Bar is on, so rage / energy / mana isn't shown twice (Unit Frames page: Player power bar, auto / always show / always hide). Rage numbers drop the %, since rage tops out at 100.",
+              },
+              fixed = {
+                  "Dropdown lists (layout panel, settings) no longer open underneath the window they belong to, are wide enough for long choices, and open upward near the bottom of the screen. A choice cut off in its box shows in full when you point at it.",
+                  "Settings: the mouse wheel no longer changes a slider you happen to scroll over; it just scrolls the window. Want it back? Home page, Mouse wheel changes sliders. In Layout mode the wheel still nudges values.",
+                  "Info Bar and data panels: each readout gets room for its own text, so a short one (Menu) no longer squeezes a long one (gold). Gold drops the copper once you have a gold piece.",
+                  "XP bar on the action bars: 12 px tall with the numbers always shown inside it (change it under Numbers on the bar).",
+              },
+            },
             { version = "0.58.34", date = "2026-11-27",
               added = {
                   "A new UI font: Cys's UI now uses Barlow, a clean modern font, on every window, frame and HUD piece. Pick Game default or Arial Narrow under Look, Skins tab (needs a /reload). Chat keeps the game font.",
@@ -547,20 +580,9 @@ if CysChangelog then
                   "Cys's BiS is gone, to keep the UI lighter: no BiS window, BiS button, BiS tooltip lines or BiS drop pop-ups. Cys's Upgrade still scores your gear.",
                   "Upgrade: tank profiles set their Survival / Threat mix with the - and + buttons beside the Weights header on the Upgrade page (it used to live in the BiS window).",
                   "Crate Tracker: a crate's heading says Ready when you have everything for it, and 2 of 4 items while you're still gathering (it used to read 0 / 4).",
-                  "Layout mode: Attach to. Pin a HUD piece (a cooldown bar, alerts, timers) to the player frame, target frame, resource bar, another cooldown bar and more. It moves with that piece and grows away from the corner you pin it by, so a bar that gains an icon no longer shifts both ways. X and Y become the gap.",
-                  "Damage Meter: windows shrink to the rows they use (an empty window is just its title strip and one line), the title strip buttons show only when you point at the window, a slightly lighter title strip, dimmer rank numbers and bracketed figures, and long fights show hours (2:21:34). Both new options are on the Damage Meter page.",
-                  "Action bars: keybind text is smaller and a little see-through, so it doesn't crowd the icons.",
-                  "Layout mode: Attach to and Where now sit at the bottom of the panel under their own heading, so their lists open below the panel.",
-                  "Bottom data panels (Info Bar page, ElvUI style): one switch moves the main bar's readouts to two thin panels under the chat and damage meter, hides the micro menu behind a Menu button on the right panel, and lays a slim XP bar along the top of your action bars. Each piece also has its own switch: the bar button per readout now steps Main bar, Left panel, Right panel, Minimap bar; Micro Menu page: open it from the Menu button; XP Bar page: thin line on the action bars.",
-                  "Unit frames: darker health bars with white, shadowed text, so names and numbers read easily on pale class colors (switch on the Unit Frames page).",
-                  "Player frame: its power bar hides while Cys's Resource Bar is on, so rage / energy / mana isn't shown twice (Unit Frames page: Player power bar, auto / always show / always hide). Rage numbers drop the %, since rage tops out at 100.",
               },
               fixed = {
                   "Buff Helper: Blessing of Sanctuary is no longer offered (WoW Forever removed it). A saved Sanctuary pick falls back to Kings.",
-                  "Dropdown lists (layout panel, settings) no longer open underneath the window they belong to, are wide enough for long choices, and open upward near the bottom of the screen. A choice cut off in its box shows in full when you point at it.",
-                  "Settings: the mouse wheel no longer changes a slider you happen to scroll over; it just scrolls the window. Want it back? General page, Mouse wheel changes sliders. In Layout mode the wheel still nudges values.",
-                  "Info Bar and data panels: each readout gets room for its own text, so a short one (Menu) no longer squeezes a long one (gold). Gold drops the copper once you have a gold piece.",
-                  "XP bar on the action bars: 12 px tall with the numbers always shown inside it (change it under Numbers on the bar).",
               },
             },
             { version = "0.58.33", date = "2026-11-25",

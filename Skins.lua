@@ -2068,14 +2068,129 @@ local function ForeverMapExtras(f, panel)
             end
         end
     end
-    -- zone headers in the quest log (Westfall, Dun Morogh...): gold text instead of grey
+    -- zone headers in the quest log (Westfall, Dun Morogh...): gold text instead of grey. Blizzard repaints the
+    -- text on every mouse-over / mouse-out (white, then its grey "disabled" colour), so the colour is put back
+    -- after every repaint instead of once. Zones holding grey quests (too low to give much XP) get a grey
+    -- "n grey" tag by the [+], the name itself goes grey when every quest in the zone is grey, and hovering
+    -- the header lists those quests.
+    local GREY = { 0.55, 0.55, 0.55 }
+    local greyZones = {} -- [zone name] = { grey = n, total = n, names = { "[54] Quest name", ... } }
+    local function QuestIsGrey(id, level)
+        if C_QuestLog.IsQuestTrivial then
+            local ok, t = pcall(C_QuestLog.IsQuestTrivial, id)
+            if ok and type(t) == "boolean" then return t end
+        end
+        if not (type(level) == "number" and level > 0) then return false end
+        local range = GetQuestGreenRange and GetQuestGreenRange() or 8
+        return UnitLevel("player") - level > range
+    end
+    local function ScanGrey()
+        wipe(greyZones)
+        -- zone remembered per quest (shared with the CysUI quest list) for quests under collapsed headers
+        CysUIDB = CysUIDB or {}
+        CysUIDB.questlist = CysUIDB.questlist or {}
+        CysUIDB.questlist.zones = CysUIDB.questlist.zones or {}
+        local mem = CysUIDB.questlist.zones
+        local seen = {}
+        local function Add(zone, id, title, level)
+            if not zone then return end
+            local z = greyZones[zone]
+            if not z then z = { grey = 0, total = 0, names = {} }; greyZones[zone] = z end
+            z.total = z.total + 1
+            if QuestIsGrey(id, level) then
+                z.grey = z.grey + 1
+                z.names[#z.names + 1] = (type(level) == "number" and level > 0 and ("[" .. level .. "] ") or "") .. (title or ("Quest " .. id))
+            end
+        end
+        local n = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
+        local header
+        for i = 1, n do
+            local info = C_QuestLog.GetInfo(i)
+            if info then
+                if info.isHeader then
+                    header = info.title
+                elseif info.questID and info.questID > 0 and not info.isHidden and not seen[info.questID] then
+                    seen[info.questID] = true
+                    if header then mem[info.questID] = header end
+                    Add(header or mem[info.questID], info.questID, info.title, info.level)
+                end
+            end
+        end
+        -- quests the log did not list (their header is collapsed): place them by the remembered zone
+        for id, zone in pairs(mem) do
+            if not seen[id] then
+                local okOn, on = pcall(C_QuestLog.IsOnQuest, id)
+                if okOn and on == true then
+                    seen[id] = true
+                    local title, level
+                    local okI, idx = pcall(C_QuestLog.GetLogIndexForQuestID, id)
+                    if okI and idx then
+                        local okG, info = pcall(C_QuestLog.GetInfo, idx)
+                        if okG and info then title, level = info.title, info.level end
+                    end
+                    if not title and C_QuestLog.GetTitleForQuestID then title = C_QuestLog.GetTitleForQuestID(id) end
+                    Add(zone, id, title, level)
+                end
+            end
+        end
+    end
+    local function PaintHeader(c)
+        local fs = c.ButtonText
+        if not fs then return end
+        local zone = fs:GetText()
+        local g = zone and greyZones[zone]
+        local greyN = g and g.grey or 0
+        local col = T.accent
+        if c:IsMouseOver() then col = { 1, 1, 1 }
+        elseif greyN > 0 and greyN == g.total then col = GREY end
+        c.cysPainting = true
+        fs:SetTextColor(col[1], col[2], col[3])
+        c.cysPainting = false
+        local cb = c.CollapseButton or c.collapseButton
+        if greyN > 0 and not c.cysGreyTag then
+            local tag = Own(c:CreateFontString(nil, "OVERLAY"))
+            tag:SetFontObject(fs:GetFontObject() or GameFontNormalSmall)
+            local font, size, flags = tag:GetFont()
+            if font and size then tag:SetFont(font, max(size - 2, 9), flags) end
+            if cb then tag:SetPoint("RIGHT", cb, "LEFT", -6, 0) else tag:SetPoint("RIGHT", c, "RIGHT", -24, 0) end
+            c.cysGreyTag = tag
+        end
+        if c.cysGreyTag then
+            c.cysGreyTag:SetText(greyN > 0 and (greyN .. " grey") or "")
+            c.cysGreyTag:SetTextColor(GREY[1], GREY[2], GREY[3])
+            c.cysGreyTag:SetShown(greyN > 0)
+        end
+    end
+    local function HookHeader(c)
+        if c.cysGoldHooked then return end
+        c.cysGoldHooked = true
+        hooksecurefunc(c.ButtonText, "SetTextColor", function()
+            if not c.cysPainting then Safe(PaintHeader, c) end
+        end)
+        c:HookScript("OnEnter", function()
+            Safe(PaintHeader, c)
+            local zone = c.ButtonText:GetText()
+            local g = zone and greyZones[zone]
+            if not (g and g.grey > 0) then return end
+            GameTooltip:SetOwner(c, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(zone, T.accent[1], T.accent[2], T.accent[3])
+            GameTooltip:AddLine(g.grey .. " of " .. g.total .. " quests are grey (little or no XP):", 0.8, 0.8, 0.8, true)
+            for _, name in ipairs(g.names) do GameTooltip:AddLine(name, GREY[1], GREY[2], GREY[3]) end
+            GameTooltip:Show()
+        end)
+        c:HookScript("OnLeave", function()
+            Safe(PaintHeader, c)
+            if GameTooltip:IsOwned(c) then GameTooltip:Hide() end
+        end)
+    end
     local function GoldHeaders(fr, depth)
         if depth > 8 then return end
         for _, c in ipairs(Kids(fr)) do
             if not c.cysOwn then
                 local fs = c.ButtonText
                 if fs and fs.SetTextColor and (c.CollapseButton or c.collapseButton) then
-                    fs:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+                    HookHeader(c)
+                    PaintHeader(c)
                 end
                 GoldHeaders(c, depth + 1)
             end
@@ -2083,6 +2198,7 @@ local function ForeverMapExtras(f, panel)
     end
     local function Quest()
         if not qm then return end
+        Safe(ScanGrey)
         Safe(GoldHeaders, qm, 0)
         Safe(ForeverFadeTree, qm, 0)
         Safe(FlatInputs, qm, 0)
@@ -2095,6 +2211,14 @@ local function ForeverMapExtras(f, panel)
         qm:HookScript("OnShow", function() Safe(FitPanel); Safe(Quest) end)
         qm:HookScript("OnHide", function() Safe(FitPanel) end)
         if QuestMapFrame_UpdateAll then hooksecurefunc("QuestMapFrame_UpdateAll", function() Safe(Quest) end) end
+        -- quests turn grey when you level: refresh the grey tags if the log is open when it happens
+        local lv = CreateFrame("Frame")
+        lv:RegisterEvent("PLAYER_LEVEL_UP")
+        lv:SetScript("OnEvent", function()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.5, function() if qm:IsVisible() then Safe(Quest) end end)
+            end
+        end)
         -- a hairline between the map and the quest list
         local sc = f.ScrollContainer
         if sc then

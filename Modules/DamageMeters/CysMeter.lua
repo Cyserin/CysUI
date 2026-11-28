@@ -641,6 +641,14 @@ function CreateWindow(cfg)
         hoverAcc = 0
         local hot = (not db.quietHead) or CUI.layoutMode or back:IsMouseOver() or MenuFor(win) or false
         if hot ~= win.headHot then win.headHot = hot; win.PaintHead() end
+        -- the lock and resize grip sit in the bottom-right corner, which is on top of the last row's numbers
+        -- when the window has shrunk to fit: show them only while you point at the window (or drag / Layout mode)
+        local corner = CUI.layoutMode or win.resizing or back:IsMouseOver() or MenuFor(win) or false
+        if corner ~= win.cornerHot then
+            win.cornerHot = corner
+            if win.lock then win.lock:SetAlpha(corner and 1 or 0) end
+            if win.grip then win.grip:SetAlpha(corner and 1 or 0) end
+        end
     end)
     win.headHot = not db.quietHead
     win.PaintHead()
@@ -668,6 +676,7 @@ function CreateWindow(cfg)
     end)
     lock:SetScript("OnLeave", function() win.PaintLock(); GameTooltip:Hide() end)
     win.PaintLock()
+    lock:SetAlpha(0) -- shown on mouse-over (see the hover check above)
     -- resize: drag the bottom-right corner. Width follows the mouse, height snaps to whole rows, and the top-left
     -- corner stays where it is. Off while the window is locked.
     local grip = CreateFrame("Button", nil, holder)
@@ -679,6 +688,7 @@ function CreateWindow(cfg)
     grip.tex:SetAllPoints()
     grip.tex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     grip.tex:SetAlpha(0.6)
+    grip:SetAlpha(0) -- shown on mouse-over, like the lock
     local sizing
     local function StopSizing()
         sizing = nil

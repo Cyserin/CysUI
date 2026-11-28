@@ -797,85 +797,117 @@ CUI:RegisterModule({
 --------------------------------------------------------------------------------
 CUI:RegisterPage("Automation", function(page)
     local db = DB()
-    local width = 480
-    W.Header(page, "Automation", width):SetPoint("TOPLEFT", 0, -4)
-
-    local intro = W.Text(page, 12, T.text)
-    intro:SetPoint("TOPLEFT", 4, -34)
+    local width = 520
+    local intro = W.Text(page, 12, T.desc)
+    intro:SetPoint("TOPLEFT", 4, -4)
     intro:SetWidth(width - 8)
-    intro:SetJustifyV("TOP")
-    intro:SetSpacing(3)
-    intro:SetText("Tick what you want. Changes work straight away, no reload needed.")
+    intro:SetJustifyH("LEFT")
+    intro:SetText("Small jobs Cys's UI does for you. Changes work straight away, no reload needed.")
 
-    local y = -70
+    local y = -30
+    local function Head(text)
+        W.Header(page, text, width):SetPoint("TOPLEFT", 0, y)
+        y = y - 30
+    end
     local function Check(label, key)
         local c = W.Checkbox(page, label, function() return db[key] end, function(on) db[key] = on end)
         c:SetPoint("TOPLEFT", 4, y)
         y = y - 26
         return c
     end
+    local function Gap() y = y - 16 end
+
+    Head("Loot and quests")
     Check("Fast loot (takes everything at once when auto-loot is on)", "fastLoot")
     Check("Accept quests and turn in finished ones (hold Shift to pause)", "autoQuest")
-    Check("Release your spirit automatically when you die in a battleground", "autoRelease")
-    Check("Decline duels (friends and guildmates still get the popup)", "declineDuels")
-    Check("Close guild charter signing requests (hold Shift to read one)", "declineCharters")
-    Check("Gold ring around the mouse cursor while in combat", "cursorRing")
-    Check("Show who in the group is below the dungeon's level range", "groupCheck")
-    Check("Say Ding when you level up", "ding")
-    Check("Type DELETE for you when you destroy a good item", "autoDelete")
-    Check("Open Cys's Bags at a vendor, bank, mailbox or Auction House", "autoBags")
-    local hideEmpty = Check("Cys's Bags: hide empty categories in the sidebar", "hideEmptyBagCats")
-    hideEmpty:HookScript("OnClick", function() if _G.CysBags and CysBags.UpdateSidebar then pcall(CysBags.UpdateSidebar, CysBags) end end)
-    Check("Accept group invites from friends and guildmates (Shift: ask)", "acceptInvites")
     Check("Tell your party when you finish a quest's objectives", "questAnnounce")
     if not (CysUICompat and CysUICompat.isForever) then
         Check("Open clams, sacks and other openable items (out of combat)", "openContainers")
     end
-    Check("Cys's Bags: own split box on Shift-click (type the amount)", "bagSplit")
-    local function BagsRefresh() if _G.CysBags and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end
-    Check("Cys's Bags: New Items section at the top", "bagRecent"):HookScript("OnClick", BagsRefresh)
-    Check("Cys's Bags: Alt-click an item to pin or unpin it", "bagPin")
-    Check("Cys's Bags: + drop slot at the end of each category", "bagPlusSlots"):HookScript("OnClick", BagsRefresh)
-    Check("Cys's Bags: item level in the corner of gear", "bagItemLevel"):HookScript("OnClick", BagsRefresh)
-    Check("Cys's Bags: small BoE tag on Bind on Equip gear", "bagBoEText"):HookScript("OnClick", BagsRefresh)
-    if CysUICompat and CysUICompat.isForever then
-        Check("Cys's Bags: sorting also fills the reagent bag", "bagSortReagent")
-    end
-    Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
-    local fit = Check("Cys's Bags: grow to fit the items, so nothing scrolls", "bagsAutoSize")
-    fit:HookScript("OnClick", function() if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end)
-    W.Stepper(page, "Cys's Bags: tallest height", function() return db.bagsMaxH end, function(v)
-        db.bagsMaxH = v
-        if _G.CysBags and CysBags.Refresh and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end
-    end, 300, 1000, 25, " px"):SetPoint("TOPLEFT", 4, y)
-    y = y - 28
+    Gap()
+
+    Head("Group and social")
+    Check("Accept group invites from friends and guildmates (Shift: ask)", "acceptInvites")
+    Check("Decline duels (friends and guildmates still get the popup)", "declineDuels")
+    Check("Close guild charter signing requests (hold Shift to read one)", "declineCharters")
+    Check("Show who in the group is below the dungeon's level range", "groupCheck")
     Check("Accept resurrections (not while the caster is still fighting)", "autoResurrect")
-    Check("Skip cinematics (hold Shift when one starts to watch it)", "skipCinematics")
-    if CysUICompat and CysUICompat.isForever then
-        Check("Gear picker for weapon stones, armor kits and enchants", "gearTarget")
-    end
-    Check("Hide red error messages (bag full and similar still show)", "hideErrors"):HookScript("OnClick", function() pcall(CUI.ApplyErrorFilter) end)
-
-    local chLabel = W.Text(page, 12, T.accent)
-    chLabel:SetPoint("TOPLEFT", 4, y - 8)
+    Check("Say Ding when you level up", "ding")
+    local chLabel = W.Text(page, 12, T.text)
+    chLabel:SetPoint("TOPLEFT", 4, y - 4)
     chLabel:SetText("Where to say Ding")
-    local dd = W.Dropdown(page, 260, DING_CHANNELS, function() return db.dingChannel end, function(v) db.dingChannel = v end)
-    dd:SetPoint("TOPLEFT", 4, y - 28)
-
+    local dd = W.Dropdown(page, 200, DING_CHANNELS, function() return db.dingChannel end, function(v) db.dingChannel = v end)
+    dd:SetPoint("TOPLEFT", 140, y)
     local test = W.Button(page, 120, 22, "Show an example")
     test:SetPoint("LEFT", dd, "RIGHT", 10, 0)
     test:SetScript("OnClick", function()
         CUI:Print("Example: " .. string.format(DEFAULTS.dingText, (UnitLevel("player") or 1) + 1))
     end)
+    y = y - 30
+    Gap()
 
-    W.Notes(page, 4, y - 72, width, "", {
+    Head("Combat and safety")
+    Check("Release your spirit automatically when you die in a battleground", "autoRelease")
+    Check("Gold ring around the mouse cursor while in combat", "cursorRing")
+    Check("Type DELETE for you when you destroy a good item", "autoDelete")
+    Check("Hide red error messages (bag full and similar still show)", "hideErrors"):HookScript("OnClick", function() pcall(CUI.ApplyErrorFilter) end)
+    Gap()
+
+    Head("Handy extras")
+    Check("Train all button on trainer windows (cost on mouseover)", "trainAll")
+    Check("Skip cinematics (hold Shift when one starts to watch it)", "skipCinematics")
+    if CysUICompat and CysUICompat.isForever then
+        Check("Gear picker for weapon stones, armor kits and enchants", "gearTarget")
+    end
+    Gap()
+
+    W.Notes(page, 4, y, width - 8, "", {
         { "Auto quests", "never pays gold to finish a quest, and leaves the choice to you when a quest offers several rewards." },
         { "Auto release", "waits if you have a Soulstone or Reincarnation, so you can still use it." },
         { "Fast loot", "follows the game's auto-loot setting and the auto-loot key." },
         { "Resurrections", "are accepted a moment after the offer, unless the caster is still in combat; then the normal pop-up stays." },
-        { "Bags height", "with grow to fit on, the bags grow with your items up to the tallest height, then scroll. Dragging the corner grip sets your own height instead." },
         { "Gear picker", "using a sharpening stone, weightstone, armor kit or enchant shows a small box at the mouse with the pieces you are wearing that it fits; click one. Not in combat." },
         { "Red errors", "hides messages like Not enough rage and Out of range. Bags full, quest log full and not enough money still show." },
         { "Level check", "works while your group is listed in Looking For Group (using the listed dungeon) and inside the dungeon. It shows when someone joins; close it with the X and move it in layout mode." },
+    })
+end)
+
+-- Cys's Bags options (they used to sit on the Automation page)
+CUI:RegisterPage("Bags", function(page)
+    local db = DB()
+    local width = 520
+    local y = -4
+    W.Header(page, "Cys's Bags", width):SetPoint("TOPLEFT", 0, y)
+    y = y - 30
+    local function BagsRefresh() if _G.CysBags and CysBags.IsShown and CysBags:IsShown() then CysBags.dirty = true; pcall(CysBags.Refresh, CysBags) end end
+    local function Check(label, key, refresh)
+        local c = W.Checkbox(page, label, function() return db[key] end, function(on) db[key] = on end)
+        c:SetPoint("TOPLEFT", 4, y)
+        y = y - 26
+        if refresh then c:HookScript("OnClick", refresh) end
+        return c
+    end
+    Check("Open the bags at a vendor, bank, mailbox or Auction House", "autoBags")
+    Check("New Items section at the top", "bagRecent", BagsRefresh)
+    Check("Alt-click an item to pin or unpin it", "bagPin")
+    Check("Own split box on Shift-click (type the amount)", "bagSplit")
+    if CysUICompat and CysUICompat.isForever then
+        Check("Sorting also fills the reagent bag", "bagSortReagent")
+    end
+    y = y - 16
+    W.Header(page, "Look", width):SetPoint("TOPLEFT", 0, y)
+    y = y - 30
+    Check("Hide empty categories in the sidebar", "hideEmptyBagCats", function() if _G.CysBags and CysBags.UpdateSidebar then pcall(CysBags.UpdateSidebar, CysBags) end end)
+    Check("+ drop slot at the end of each category", "bagPlusSlots", BagsRefresh)
+    Check("Item level in the corner of gear", "bagItemLevel", BagsRefresh)
+    Check("Small BoE tag on Bind on Equip gear", "bagBoEText", BagsRefresh)
+    Check("Grow to fit the items, so nothing scrolls", "bagsAutoSize", BagsRefresh)
+    W.Stepper(page, "Tallest height", function() return db.bagsMaxH end, function(v)
+        db.bagsMaxH = v
+        BagsRefresh()
+    end, 300, 1000, 25, " px"):SetPoint("TOPLEFT", 4, y)
+    y = y - 34
+    W.Notes(page, 4, y, width - 8, "", {
+        { "Bags height", "with grow to fit on, the bags grow with your items up to the tallest height, then scroll. Dragging the corner grip sets your own height instead." },
     })
 end)

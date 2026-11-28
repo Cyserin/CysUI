@@ -299,6 +299,7 @@ end
 -- Every button has the same flat dark look with gold text. A "primary" button (the main action, or the
 -- selected choice in a row of options) gets a gold edge and a faint gold tint instead of a solid fill.
 local PRIMARY_TINT = 0.16
+local DANGER_TEXT = { 1, 0.55, 0.5 } -- buttons that wipe things (b.danger = true)
 local function PaintButton(b, hover)
     local base = T.button
     if b.primary then
@@ -312,7 +313,8 @@ local function PaintButton(b, hover)
         b.bg:SetColorTexture(bg[1], bg[2], bg[3], 1)
         W.SetBorder(b.edges, hover and T.glow or T.line)
     end
-    b.label:SetTextColor(T.accent[1], T.accent[2], T.accent[3])
+    local lc = b.danger and DANGER_TEXT or T.accent
+    b.label:SetTextColor(lc[1], lc[2], lc[3])
 end
 
 function W.Button(parent, width, height, label, primary)
@@ -355,6 +357,26 @@ local TRACK_W, TRACK_H, KNOB = 28, 14, 10
 local OFF_TRACK = { 0.24, 0.24, 0.24 }
 local OFF_KNOB = { 0.62, 0.62, 0.62 }
 local OFF_LABEL = { 0.74, 0.74, 0.74 }
+-- "Fast loot (takes everything at once)" -> the label in white, the part in brackets as a softer note after it;
+-- "(reload)" becomes a small gold tag. Labels without a closing bracketed part are left alone.
+local NOTE_HEX, TAG_HEX = "|cFFA8A196", "|cFFC9A24A"
+function W.RowLabel(label)
+    if type(label) ~= "string" then return label end
+    local main, extra = label:match("^(.-)%s+%(([^()]+)%)%s*$")
+    if not main or main == "" then return label end
+    local reload = false
+    local low = extra:lower()
+    if low == "reload" or low == "needs a /reload" or low == "needs a reload" then reload, extra = true, nil
+    else
+        local rest = extra:match("^(.-),?%s*reload$")
+        if rest and rest ~= "" then reload, extra = true, rest end
+    end
+    local out = main
+    if extra then out = out .. "   " .. NOTE_HEX .. extra .. "|r" end
+    if reload then out = out .. "   " .. TAG_HEX .. "reload|r" end
+    return out
+end
+
 local function Pill(parent, layer, sub, w, h)
     local p = {}
     p.l = parent:CreateTexture(nil, layer, nil, sub); p.l:SetTexture(CIRCLE)
@@ -394,7 +416,7 @@ function W.Checkbox(parent, label, get, set)
 
     c.label = W.Text(c, 12, T.text)
     c.label:SetPoint("LEFT", box, "RIGHT", 10, 0)
-    c.label:SetText(label)
+    c.label:SetText(W.RowLabel(label))
     -- a label too long for the settings page wraps onto a second line instead of running off the edge
     local labelW = c.label:GetStringWidth()
     if labelW > 440 then
@@ -500,7 +522,9 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     list:SetFrameStrata("TOOLTIP")
     list:SetFrameLevel(50)
     list:SetClampedToScreen(true)
-    list:SetSize(width, #options * ROW + 6)
+    -- options can be a function returning the list (read again each time the list opens)
+    local function Opts() if type(options) == "function" then return options() or {} end return options end
+    list:SetSize(width, #Opts() * ROW + 6)
     W.Texture(list, "BACKGROUND", { T.bg[1], T.bg[2], T.bg[3], 0.98 }):SetAllPoints()
     W.Border(list, 1, T.border, "BORDER")
     list:Hide()
@@ -520,8 +544,9 @@ function W.Dropdown(parent, width, options, get, set, prefix)
     end
     function b:Refresh()
         local cur = get()
-        local shown = options[1] and Text(options[1]) or ""
-        for _, o in ipairs(options) do
+        local opts = Opts()
+        local shown = opts[1] and Text(opts[1]) or ""
+        for _, o in ipairs(opts) do
             if o[1] == cur then shown = Text(o) end
         end
         self:SetLabel(shown)
@@ -529,7 +554,7 @@ function W.Dropdown(parent, width, options, get, set, prefix)
 
     -- list rows: a soft band under the mouse; the current choice in gold with a bar on its left
     local rows = {}
-    for i, o in ipairs(options) do
+    local function MakeRow(i)
         local row = CreateFrame("Button", nil, list)
         row:SetSize(width - 8, ROW)
         row:SetPoint("TOPLEFT", 4, -3 - (i - 1) * ROW)
@@ -543,7 +568,6 @@ function W.Dropdown(parent, width, options, get, set, prefix)
         row.label:SetPoint("LEFT", 10, 0)
         row.label:SetPoint("RIGHT", -6, 0)
         row.label:SetWordWrap(false)
-        row.label:SetText(o[2])
         function row:Paint()
             local c = self.current and T.accent or (self.hot and T.desc or T.text)
             self.label:SetTextColor(c[1], c[2], c[3])
@@ -553,23 +577,36 @@ function W.Dropdown(parent, width, options, get, set, prefix)
         function row:SetLabel(text) self.label:SetText(text) end
         row:SetScript("OnEnter", function(s) s.hot = true; s:Paint() end)
         row:SetScript("OnLeave", function(s) s.hot = false; s:Paint() end)
-        row:SetScript("OnClick", function()
+        row:SetScript("OnClick", function(s)
             list:Hide()
-            set(o[1])
+            set(s.value)
             b:Refresh()
         end)
         rows[i] = row
+        return row
     end
-    -- the list can be wider than the box, so long choices are never cut off
-    local listW = width
-    for _, row in ipairs(rows) do
-        local fs = row.label
-        local tw = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth() or 0
-        listW = math.max(listW, math.ceil(tw + 26))
+    -- (re)fill the rows from the current options; the list can be wider than the box, so long choices are never cut off
+    local function Fill()
+        local opts = Opts()
+        for i, o in ipairs(opts) do
+            local row = rows[i] or MakeRow(i)
+            row.value = o[1]
+            row.label:SetText(o[2])
+            row:Show()
+        end
+        for i = #opts + 1, #rows do rows[i]:Hide() end
+        local listW = width
+        for i = 1, #opts do
+            local fs = rows[i].label
+            local tw = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth() or 0
+            listW = math.max(listW, math.ceil(tw + 26))
+        end
+        listW = math.min(listW, 480)
+        list:SetSize(listW, #opts * ROW + 6)
+        for _, row in ipairs(rows) do row:SetWidth(listW - 8) end
+        return opts
     end
-    listW = math.min(listW, 480)
-    list:SetWidth(listW)
-    for _, row in ipairs(rows) do row:SetWidth(listW - 8) end
+    Fill()
 
     -- Open the list above whatever window holds the box (the settings window and the layout panel share its
     -- strata and climb in level when clicked), the click-catcher just under it. Opens upward near the bottom edge.
@@ -592,7 +629,7 @@ function W.Dropdown(parent, width, options, get, set, prefix)
         if list:IsShown() then list:Hide() return end
         GameTooltip:Hide()
         local cur = get()
-        for i, o in ipairs(options) do
+        for i, o in ipairs(Fill()) do
             rows[i].current = o[1] == cur
             rows[i].hot = false
             rows[i]:Paint()
@@ -780,6 +817,22 @@ end
 function W.Header(parent, text, width)
     local h = CreateFrame("Frame", nil, parent)
     h:SetSize(width or 400, 22)
+    if parent and parent.cysSettingsPage then
+        -- settings page: a gold title in capitals with a soft rule under it; the card behind the section
+        -- is drawn by the settings window once the page is laid out
+        h.isCardTitle = true
+        parent.cysHeaders = parent.cysHeaders or {}
+        parent.cysHeaders[#parent.cysHeaders + 1] = h
+        h.label = W.Text(h, 12, T.accent)
+        h.label:SetPoint("LEFT", 4, 0)
+        h.label:SetText(type(text) == "string" and text:upper() or text)
+        local rule = W.Texture(h, "ARTWORK", T.line)
+        rule:SetHeight(1)
+        rule:SetPoint("BOTTOMLEFT", 4, 0)
+        rule:SetPoint("BOTTOMRIGHT", -4, 0)
+        h.bar = rule
+        return h
+    end
     local bg = h:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     if bg.SetGradient and CreateColor then

@@ -317,7 +317,7 @@ local seps = { {}, {}, {}, {} }
 local readoutEvents = {} -- event -> list of readout keys
 local NUM_SLOTS = 4
 local SLOT_NAMES = { "Main bar", "Minimap bar", "Left panel", "Right panel" }
-local SLOT_CYCLE = { [1] = 3, [3] = 4, [4] = 2, [2] = 1 } -- the order the bar button steps through
+local SLOT_OPTIONS = { { 1, "Main bar" }, { 3, "Left panel" }, { 4, "Right panel" }, { 2, "Minimap bar" } }
 IB.SLOT_NAMES = SLOT_NAMES
 
 -- where readouts start: the minimap bar for guild / friends / clock, the right panel for the menu button
@@ -405,9 +405,15 @@ local function GetButton(key)
     return b
 end
 
--- text size follows the bar's height, and shrinks (down to 8) if a readout would overflow its slot
+-- text size: the Text size setting, or (Auto) it follows the bar's height; shrinks (down to 8) if a
+-- readout would overflow its slot
+local function TextSize(barH)
+    local want = DB().textSize
+    if type(want) == "number" and want > 0 then return want end
+    return max(10, min(13, floor(barH * 0.6 + 0.5)))
+end
 local function FitText(b)
-    local size = max(8, min(12, floor(b:GetHeight() * 0.46 + 0.5)))
+    local size = TextSize(b:GetHeight() + 2)
     local room = max(b:GetWidth() - 8, 20)
     b.text:SetFont(CysUICompat.Font(), CysUICompat.FontSize(size), "")
     while size > 8 and b.text:GetStringWidth() > room do
@@ -462,7 +468,7 @@ function IB:Layout()
             local barW, h = bar:GetWidth(), bar:GetHeight()
             -- each readout gets room for its own text (a short "Menu" takes less than the gold), and what's left
             -- over is shared evenly; if it doesn't all fit, everything shrinks by the same share
-            local size = max(8, min(12, floor((h - 2) * 0.46 + 0.5)))
+            local size = TextSize(h)
             local need, total = {}, 0
             for i, key in ipairs(keys) do
                 local b = GetButton(key)
@@ -542,6 +548,27 @@ local function PlaceUnder(slot, targetKey, alignRight)
     CUI:ApplyLayout(PANEL_KEYS[slot])
     return true
 end
+-- the left panel keeps the chat's width and sits just under it (Data Panels page switch, on by default)
+function IB:FollowChat()
+    local db = DB()
+    if not db.panels or db.followChat == false or InCombatLockdown() then return end
+    if PlaceUnder(3, "chat") then self:Layout() end
+end
+local followQueued
+local function QueueFollow()
+    if followQueued then return end
+    followQueued = true
+    C_Timer.After(0.3, function() followQueued = nil; IB:FollowChat() end)
+end
+function IB:HookChatFollow()
+    if self.chatHooked then return end
+    local m = CUI.movers and CUI.movers.chat
+    if not (m and m.frame) then return end
+    self.chatHooked = true
+    m.frame:HookScript("OnSizeChanged", QueueFollow)
+    hooksecurefunc(CUI, "ApplyLayout", function(_, key) if key == "chat" then QueueFollow() end end)
+end
+
 function IB:LineUpPanels()
     if InCombatLockdown() then CUI:Print("Out of combat, please.") return end
     PlaceUnder(3, "chat")
@@ -620,6 +647,7 @@ function IB.Enable()
         { point = "BOTTOMRIGHT", x = -4, y = 4, minW = 120, maxW = 2000, minH = 14, maxH = 40, h = 20 })
     IB:Apply()
     C_Timer.After(2, function() IB:Layout() end) -- the micro menu panel may come up after us
+    C_Timer.After(3, function() IB:HookChatFollow(); IB:FollowChat() end) -- the chat has its size by now
 
     local f = CreateFrame("Frame")
     for key, dt in pairs(DT) do
@@ -700,9 +728,20 @@ CUI:RegisterPage("Info Bar", function(page)
         GameTooltip:Show()
     end)
     lineUp:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    local follow = W.Checkbox(page, "Keep the left panel as wide as the chat, just under it",
+        function() return db.followChat ~= false end,
+        function(on) db.followChat = on and true or false; IB:HookChatFollow(); IB:FollowChat() end)
+    follow:SetPoint("TOPLEFT", 4, -112)
+    local sizeLabel = W.Text(page, 12, T.text)
+    sizeLabel:SetPoint("TOPLEFT", 4, -142)
+    sizeLabel:SetText("Text size")
+    local SIZES = { { 0, "Auto (follows the bar height)" }, { 10, "10" }, { 11, "11" }, { 12, "12" }, { 13, "13" }, { 14, "14" }, { 15, "15" }, { 16, "16" } }
+    local sizeDD = W.Dropdown(page, 200, SIZES, function() return db.textSize or 0 end,
+        function(v) db.textSize = (v ~= 0) and v or nil; IB:Layout() end)
+    sizeDD:SetPoint("TOPLEFT", 120, -138)
 
 
-    W.Header(page, "Items - tick to show, pick a bar, reorder with the arrows", width):SetPoint("TOPLEFT", 0, -128)
+    W.Header(page, "Items - tick to show, pick a bar, reorder with the arrows", width):SetPoint("TOPLEFT", 0, -180)
 
     local rows = {}
     local function RefreshRows()
@@ -714,8 +753,7 @@ CUI:RegisterPage("Info Bar", function(page)
             row.cb:Refresh()
             row.up:SetActive(i > 1)
             row.down:SetActive(i < #rows)
-            row.slot:SetLabel(SLOT_NAMES[SlotOf(key)] or SLOT_NAMES[1])
-            row.slot:SetPrimary(SlotOf(key) ~= 1)
+            row.slot:Refresh()
         end
     end
     local function Move(i, delta)
@@ -728,16 +766,15 @@ CUI:RegisterPage("Info Bar", function(page)
         local row = {}
         row.cb = W.Checkbox(page, "", function() return db.enabled[row.key] end,
             function(on) db.enabled[row.key] = on; IB:Apply() end)
-        row.cb:SetPoint("TOPLEFT", 4, -156 - (i - 1) * 26)
-        row.slot = W.Button(page, 100, 20, "Main bar")
-        row.slot:SetPoint("TOPLEFT", 180, -156 - (i - 1) * 26)
-        row.slot:SetScript("OnClick", function()
-            db.slot[row.key] = SLOT_CYCLE[SlotOf(row.key)] or 1
+        row.cb:SetPoint("TOPLEFT", 4, -208 - (i - 1) * 26)
+        row.slot = W.Dropdown(page, 110, SLOT_OPTIONS, function() return row.key and SlotOf(row.key) or 1 end, function(v)
+            db.slot[row.key] = v
             RefreshRows()
             IB:Apply()
         end)
+        row.slot:SetPoint("TOPLEFT", 180, -208 - (i - 1) * 26)
         row.up = W.Button(page, 44, 20, "Up")
-        row.up:SetPoint("TOPLEFT", 296, -156 - (i - 1) * 26)
+        row.up:SetPoint("TOPLEFT", 302, -208 - (i - 1) * 26)
         row.up:SetScript("OnClick", function() Move(i, -1) end)
         row.down = W.Button(page, 44, 20, "Down")
         row.down:SetPoint("LEFT", row.up, "RIGHT", 6, 0)

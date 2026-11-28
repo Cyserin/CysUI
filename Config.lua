@@ -15,17 +15,18 @@ local WIDTH, HEIGHT = 760, 600
 local SIDEBAR_W, HEADER_H, FOOTER_H, PAD = 180, 60, 36, 16
 local CONTENT_W = WIDTH - SIDEBAR_W - PAD * 2 - 2
 local VIEW_H = HEIGHT - HEADER_H - FOOTER_H - PAD * 2 - 2 -- visible height of a page
+local CARD_PAD = 8 -- room left of each page for the section cards
 
 -- sidebar grouping: { heading (nil = none), { page titles in order } }
 local GROUPS = {
-    { nil,                { "General", "New", "Modules", "Conflicts" } },
-    { "Interface",        { "Automation", "UI Scale", "Skins", "Tooltip", "Minimap", "Minimap Button", "Info Bar", "Micro Menu",
+    { nil,                { "General", "Profiles", "New", "Modules", "Conflicts" } },
+    { "Interface",        { "Automation", "UI Scale", "Skins", "Tooltip", "Minimap", "Data Panels",
                             "Chat", "Friends", "Guild Recruiter", "Cys's UI Users" } },
     { "Frames & Combat",  { "Unit Frames", "Raid Frames", "Cast Bar", "PlayerAuras", "Nameplates", "Action Bars", "Click-Casting",
                             "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log",
                             "Swing Timer", "Threat", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick",
                             "Marker Wheel", "Weapon Swap", "Trinkets", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
-    { "Items & Leveling", { "Vendor", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Tracked Recipes", "Upgrade",
+    { "Items & Leveling", { "Vendor", "Bags", "Consumables", "Durability", "Loot", "Roll Tracker", "Crate Tracker", "Tracked Recipes", "Upgrade",
                             "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
 }
 
@@ -33,13 +34,13 @@ local GROUPS = {
 -- sidebar entry). A group whose pages aren't all loaded keeps the ones that are; one page left = no tabs.
 local MERGED = {
     { "Look",           { "UI Scale", "Skins", "Tooltip" } },
-    { "Minimap & Bars", { "Minimap", "Minimap Button", "Info Bar", "Micro Menu" } },
+    { "Minimap & Bars", { "Minimap", "Data Panels" } },
     { "Social",         { "Chat", "Friends", "Guild Recruiter", "Cys's UI Users" } },
     { "Unit Frames",    { "Unit Frames", "Raid Frames", "Cast Bar", "PlayerAuras" } },
     { "Damage Meter",   { "Damage Meter", "Details Skin", "Combat Numbers", "Combat Log" } },
     { "Combat Helpers", { "Swing Timer", "Threat", "Taunt Alert", "Missing Buffs", "Buff Helper", "Raid Debuffs", "Alerts", "Mana Tick" } },
     { "Handy Extras",   { "Marker Wheel", "Weapon Swap", "Trinkets", "Vehicle Exit", "Flight Timer", "Quest Starter" } },
-    { "Vendor & Bags",  { "Vendor", "Consumables", "Durability" } },
+    { "Vendor & Bags",  { "Vendor", "Bags", "Consumables", "Durability" } },
     { "Loot",           { "Loot", "Roll Tracker", "Crate Tracker" } },
     { "Leveling",       { "Quest Tracker", "XP Bar", "Kill Tracker", "Dungeon Runs", "Skill Tracker", "Characters" } },
 }
@@ -50,8 +51,55 @@ local TAB_H = 30
 -- Class pages live under CLASS: a General page (works for every class), then a heading for your own class
 -- (in its class color) with that class's pages under it. Only your own class is listed.
 local CLASS_GENERAL = { "Level-Up Spells", "Spell Ranks", "Talent Planner", "Heal Advisor" }
-local LABELS = {} -- sidebar text when it differs from the page title
+local LABELS = { General = "Home" } -- sidebar text when it differs from the page title
 local tabGroup = {} -- page index -> { name, pages = { indices } } for pages shown as tabs
+-- Pages shown as one: their settings stack on one page (one card per section), in this order. The parts'
+-- titles still open it (CysUI:OpenConfig("Micro Menu") lands on Data Panels).
+local COMBINED = {
+    { "Minimap",     { "Minimap", "Minimap Button" } },
+    { "Data Panels", { "Info Bar", "Micro Menu" } },
+}
+local function CombinePages()
+    if CUI.pagesCombined then return end
+    CUI.pagesCombined = true
+    for _, c in ipairs(COMBINED) do
+        local parts, at = {}, nil
+        for _, title in ipairs(c[2]) do
+            for i, p in ipairs(CUI.pages) do
+                if p.title == title then parts[#parts + 1] = p; at = at and math.min(at, i) or i break end
+            end
+        end
+        if #parts >= 2 then
+            for _, p in ipairs(parts) do
+                for i = #CUI.pages, 1, -1 do if CUI.pages[i] == p then table.remove(CUI.pages, i) end end
+            end
+            local aliases = {}
+            for _, p in ipairs(parts) do aliases[p.title] = true end
+            table.insert(CUI.pages, math.min(at, #CUI.pages + 1), {
+                title = c[1], aliases = aliases, class = parts[1].class,
+                build = function(page)
+                    page.cysStack = {}
+                    for k, p in ipairs(parts) do
+                        local sub = CreateFrame("Frame", nil, page)
+                        sub:SetPoint("TOPLEFT", 0, 0)
+                        sub:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+                        sub:SetHeight(VIEW_H)
+                        sub.cysSettingsPage, sub.cysSubPage = true, true
+                        local ok, err = pcall(p.build, sub)
+                        if not ok then geterrorhandler()(err) end
+                        page.cysStack[k] = sub
+                    end
+                end,
+                onShow = function(page)
+                    for k, p in ipairs(parts) do
+                        if p.onShow and page.cysStack and page.cysStack[k] then pcall(p.onShow, page.cysStack[k]) end
+                    end
+                end,
+            })
+        end
+    end
+end
+
 local function BuildTabGroups()
     wipe(tabGroup)
     local byT = {}
@@ -94,10 +142,14 @@ local current
 --------------------------------------------------------------------------------
 local function UpdateFooter()
     if not window then return end
-    local pending = CUI:HasPendingReload()
+    local prof = CUI.ProfilePending and CUI:ProfilePending()
+    local pending = CUI:HasPendingReload() or prof ~= nil
     window.reload:SetPrimary(pending)
-    window.hint:SetText(pending and "|cFFFFD100Changes need a UI reload to take effect.|r" or "")
+    window.hint:SetText(prof and ("|cFFFFD100Reload to load the " .. prof .. " profile.|r")
+        or (pending and "|cFFFFD100Changes need a UI reload to take effect.|r" or ""))
+    if window.profileDD then window.profileDD:Refresh() end
 end
+CUI.UpdateSettingsFooter = UpdateFooter
 
 --------------------------------------------------------------------------------
 -- General page
@@ -130,21 +182,22 @@ end
 local function Hex(c) return format("|cFF%02X%02X%02X", c[1] * 255, c[2] * 255, c[3] * 255) end
 
 local function RefreshMemory(page)
-    if not (page and page.memNames) then return end
+    if not (page and page.memTile) then return end
     CUI:UpdateMemory()
-    local names, values, total = {}, {}, 0
+    local lines, total = {}, 0
     for _, addon in ipairs(AddonList()) do
         local kb = CUI:GetMemoryKB(addon)
-        names[#names + 1] = addon
-        values[#values + 1] = kb and FmtMem(kb) or "-"
+        lines[#lines + 1] = { addon, kb and FmtMem(kb) or "-" }
         total = total + (kb or 0)
     end
-    names[#names + 1] = "|cFFFFD100Total|r"
-    values[#values + 1] = "|cFFFFD100" .. FmtMem(total) .. "|r"
-    page.memNames:SetText(table.concat(names, "\n"))
-    page.memValues:SetText(table.concat(values, "\n"))
+    page.memLines = lines
     local col, word = MemColor(total)
-    page.memStatus:SetText(format("%s%s|r   %s%s|r", Hex(col), FmtMem(total), Hex(col), word))
+    local t = page.memTile
+    t.value:SetText(FmtMem(total))
+    t.sub:SetText(Hex(col) .. word .. "|r  |cFFA8A196under " .. MEM_YELLOW .. " MB is light|r")
+    t.fill:SetVertexColor(col[1], col[2], col[3], 1)
+    t.fill:SetWidth(math.max(2, math.min(1, (total / 1024) / MEM_RED) * (t:GetWidth() - 24)))
+    if page.RefreshTiles then page:RefreshTiles() end
 end
 
 local function ModuleCounts()
@@ -180,118 +233,139 @@ local function CopyField(parent, width, text)
 end
 
 CUI:RegisterPage("General", function(page)
-    local title = W.Text(page, 18, T.accent)
-    title:SetPoint("TOPLEFT", 0, -4)
-    title:SetText("Welcome, " .. (UnitName("player") or "friend"))
+    local W2 = CONTENT_W
+    local title = W.Text(page, 18, T.text)
+    title:SetPoint("TOPLEFT", 4, -4)
+    title:SetText("Welcome back, |cFFFFD100" .. (UnitName("player") or "friend") .. "|r")
     local ver = W.Text(page, 11, T.desc)
-    ver:SetPoint("LEFT", title, "RIGHT", 8, -2)
-    ver:SetText("v" .. CUI:GetVersion("CysUI")
-        .. (CUI.newerVersion and ("   |cFF6CB6FFv" .. CUI.newerVersion .. " is out|r") or ""))
+    ver:SetPoint("LEFT", title, "RIGHT", 10, -1)
+    ver:SetText((CUI.newerVersion and ("|cFF6CB6FFv" .. CUI.newerVersion .. " is out|r") or ""))
+    local desc = W.Text(page, 12, T.desc)
+    desc:SetPoint("TOPLEFT", 4, -30)
+    desc:SetWidth(W2 - 8)
+    desc:SetJustifyH("LEFT")
+    desc:SetText("A light, minimal UI built from small modules that share one look. Type |cFFFFD100/cui|r any time to come back here.")
 
-    local desc = W.Text(page, 12, T.text)
-    desc:SetPoint("TOPLEFT", 0, -34)
-    desc:SetWidth(CONTENT_W)
-    desc:SetJustifyV("TOP")
-    desc:SetSpacing(3)
-    desc:SetText("A light, minimal UI made of small addons that share one look. "
-        .. "Turn the pieces you want on or off under |cFFFFD100Modules|r. Type |cFFFFD100/cui|r any time to come back here.")
-
-    local on, all = ModuleCounts()
-    local client = W.Text(page, 11, T.desc)
-    client:SetPoint("TOPLEFT", 0, -84)
-    client:SetText(format("Client: |cFFE0E0E0%s|r (interface %d)    Modules on: |cFFE0E0E0%d of %d|r", CUI.flavor, CUI.interface, on, all))
-
-    local layoutHeader = W.Header(page, "Layout", CONTENT_W)
-    layoutHeader:SetPoint("TOPLEFT", 0, -112)
-    local unlock = W.Button(page, 200, 22, "Layout mode: move and resize")
-    unlock:SetPoint("TOPLEFT", 4, -140)
-    unlock:SetScript("OnClick", function() CUI:ToggleLayout() end)
-    local resetAll = W.Button(page, 140, 22, "Reset all positions")
-    resetAll:SetPoint("LEFT", unlock, "RIGHT", 8, 0)
-    resetAll:SetScript("OnClick", function() CUI:ResetAllMovers() end)
-    local stack = W.Checkbox(page, "Open windows side by side like Blizzard's (reload)",
-        function() return CysUIDB.stackWindows ~= false end,
-        function(v) CysUIDB.stackWindows = v and true or false end)
-    stack:SetPoint("TOPLEFT", 4, -170)
-    local menuBtn = W.Checkbox(page, "Cys's UI button in the Esc menu (reload)",
-        function() return CysUIDB.menuButton ~= false end,
-        function(v) CysUIDB.menuButton = v and true or false end)
-    menuBtn:SetPoint("TOPLEFT", 4, -192)
-    local wheel = W.Checkbox(page, "Mouse wheel changes sliders in the settings (off: the wheel only scrolls)",
-        function() return CysUIDB.wheelSliders == true end,
-        function(v) CysUIDB.wheelSliders = v and true or false end)
-    wheel:SetPoint("TOPLEFT", 4, -214)
-
-    local memHeader = W.Header(page, "Memory use", CONTENT_W)
-    memHeader:SetPoint("TOPLEFT", 0, -236)
-    page.memStatus = W.Text(page, 16, T.text)
-    page.memStatus:SetPoint("TOPLEFT", 4, -262)
-    local legend = W.Text(page, 10, T.desc)
-    legend:SetPoint("TOPLEFT", 4, -286)
-    legend:SetWidth(CONTENT_W - 12)
-    legend:SetJustifyV("TOP")
-    legend:SetSpacing(2)
-    legend:SetText(format("|cFF59D959Green|r under %d MB   |cFFFFD100Yellow|r %d-%d MB   |cFFFF4D4DRed|r over %d MB\nAddon memory only; other addons are not counted.", MEM_YELLOW, MEM_YELLOW, MEM_RED, MEM_RED))
-    page.memNames = W.Text(page, 11, T.text)
-    page.memNames:SetPoint("TOPLEFT", 4, -322)
-    page.memNames:SetSpacing(3)
-    page.memValues = W.Text(page, 11, T.accent, "RIGHT")
-    page.memValues:SetPoint("TOPLEFT", 160, -322)
-    page.memValues:SetWidth(90)
-    page.memValues:SetSpacing(3)
-
-    -- tools sit below the memory list, wherever it ends
-    local tools = W.Header(page, "Tools", CONTENT_W)
-    tools:SetPoint("TOPLEFT", page.memNames, "BOTTOMLEFT", -4, -18)
-    local b1 = W.Button(page, 150, 22, "Copy debug info")
-    b1:SetPoint("TOPLEFT", tools, "BOTTOMLEFT", 4, -10)
-    b1:SetScript("OnClick", function() CUI:ShowDebugBox() end)
-    local b2 = W.Button(page, 130, 22, "Export settings")
-    b2:SetPoint("LEFT", b1, "RIGHT", 8, 0)
-    b2:SetScript("OnClick", function() CUI:ShowExportBox() end)
-    local b3 = W.Button(page, 130, 22, "Import settings")
-    b3:SetPoint("LEFT", b2, "RIGHT", 8, 0)
-    b3:SetScript("OnClick", function() CUI:ShowImportBox() end)
-    local b4 = W.Button(page, 150, 22, "Reset everything")
-    b4:SetPoint("TOPLEFT", b1, "BOTTOMLEFT", 0, -8)
-    b4:SetScript("OnClick", function() CUI:ResetEverything() end)
-    if CysChangelog then
-        local b5 = W.Button(page, 130, 22, #CysChangelog.order == 1 and "View changelog" or "Changelogs")
-        b5:SetPoint("LEFT", b4, "RIGHT", 8, 0)
-        b5:SetScript("OnClick", function()
-            local first = CysChangelog.order[1]
-            if first then CysChangelog:Show(first) end
-        end)
-        if #CysChangelog.order > 1 then
-            local y = 0
-            for i = 2, #CysChangelog.order do
-                local name = CysChangelog.order[i]
-                local bx = W.Button(page, 150, 22, "Changelog: " .. name)
-                bx:SetPoint("LEFT", i == 2 and b5 or page["clog" .. (i - 1)], "RIGHT", 8, 0)
-                bx:SetScript("OnClick", function() CysChangelog:Show(name) end)
-                page["clog" .. i] = bx
-            end
+    -- four tiles: memory, modules, profile, what's new
+    local gap = 8
+    local tileW = math.floor((W2 - 8 - gap * 3) / 4)
+    local function Tile(i, label, onClick)
+        local t = CreateFrame("Button", nil, page)
+        t:SetSize(tileW, 66)
+        t:SetPoint("TOPLEFT", 4 + (i - 1) * (tileW + gap), -56)
+        W.Texture(t, "BACKGROUND", T.card):SetAllPoints()
+        t.edges = W.Border(t, 1, T.line, "BORDER")
+        t.label = W.Text(t, 10, T.desc)
+        t.label:SetPoint("TOPLEFT", 10, -9)
+        t.label:SetText(label)
+        t.value = W.Text(t, 17, T.text)
+        t.value:SetPoint("TOPLEFT", 10, -23)
+        t.value:SetPoint("RIGHT", -8, 0)
+        t.value:SetJustifyH("LEFT")
+        t.value:SetWordWrap(false)
+        t.sub = W.Text(t, 10, T.desc)
+        t.sub:SetPoint("BOTTOMLEFT", 10, 8)
+        t.sub:SetPoint("RIGHT", -6, 0)
+        t.sub:SetJustifyH("LEFT")
+        t.sub:SetWordWrap(false)
+        if onClick then
+            t:SetScript("OnClick", onClick)
+            t:SetScript("OnEnter", function(s) W.SetBorder(s.edges, T.glow); if s.tip then s.tip(s) end end)
+            t:SetScript("OnLeave", function(s) W.SetBorder(s.edges, T.line); GameTooltip:Hide() end)
         end
+        return t
+    end
+    local mem = Tile(1, "MEMORY", function() RefreshMemory(page) end)
+    mem.track = W.Texture(mem, "ARTWORK", T.line)
+    mem.track:SetPoint("BOTTOMLEFT", 10, 23); mem.track:SetPoint("BOTTOMRIGHT", -14, 23); mem.track:SetHeight(3)
+    mem.fill = mem:CreateTexture(nil, "ARTWORK", nil, 1)
+    mem.fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+    mem.fill:SetPoint("LEFT", mem.track, "LEFT"); mem.fill:SetHeight(3); mem.fill:SetWidth(2)
+    mem.tip = function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+        GameTooltip:AddLine("Addon memory", 1, 0.82, 0)
+        for _, l in ipairs(page.memLines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 1, 1, 1, 1, 0.82, 0) end
+        GameTooltip:AddLine(format("Green under %d MB, yellow %d-%d MB, red over %d MB. Other addons are not counted. Click to measure again.", MEM_YELLOW, MEM_YELLOW, MEM_RED, MEM_RED), 0.75, 0.75, 0.75, true)
+        GameTooltip:Show()
+    end
+    page.memTile = mem
+    local mods = Tile(2, "MODULES", function() CUI:OpenConfig("Modules") end)
+    local prof = Tile(3, "PROFILE", function() CUI:OpenConfig("Profiles") end)
+    local news = Tile(4, "WHAT'S NEW", function()
+        if CysChangelog and CysChangelog.order[1] then CysChangelog:Show(CysChangelog.order[1]) end
+    end)
+    function page:RefreshTiles()
+        local on, all = ModuleCounts()
+        mods.value:SetText(on .. " |cFFA8A196of " .. all .. " on|r")
+        mods.sub:SetText("|cFFFFD100Manage modules|r")
+        local active = CUI.ActiveProfile and CUI:ActiveProfile() or "Default"
+        prof.value:SetText(active)
+        local pend = CUI.ProfilePending and CUI:ProfilePending()
+        prof.sub:SetText(pend and ("|cFFFFD100" .. pend .. " after reload|r") or "|cFFFFD100Swap or share|r")
+        news.value:SetText("v" .. CUI:GetVersion("CysUI"))
+        news.sub:SetText("|cFFFFD100View the changelog|r")
     end
 
-    local links = W.Header(page, "Links and bug reports", CONTENT_W)
-    links:SetPoint("TOPLEFT", b4, "BOTTOMLEFT", -4, -20)
-    local gh = CopyField(page, 300, "https://github.com/Cyserin/CysUI")
-    gh:SetPoint("TOPLEFT", links, "BOTTOMLEFT", 4, -10)
-    local note = W.Text(page, 11, T.desc)
-    note:SetPoint("TOPLEFT", gh, "BOTTOMLEFT", 0, -8)
-    note:SetWidth(CONTENT_W - 8)
-    note:SetJustifyV("TOP")
-    note:SetSpacing(3)
-    note:SetText("Found a bug? Press |cFFFFD100Copy debug info|r, then post it with a screenshot at the address above under Issues.")
-
-    local upd = W.Checkbox(page, "Tell me when a newer version is out (via guild and group)",
+    local y = -138
+    W.Header(page, "Windows and input", W2):SetPoint("TOPLEFT", 0, y)
+    y = y - 30
+    local function Check(label, get, set)
+        local c = W.Checkbox(page, label, get, set)
+        c:SetPoint("TOPLEFT", 4, y)
+        y = y - 26
+        return c
+    end
+    Check("Open windows side by side like Blizzard's (reload)",
+        function() return CysUIDB.stackWindows ~= false end,
+        function(v) CysUIDB.stackWindows = v and true or false end)
+    Check("Cys's UI button in the Esc menu (reload)",
+        function() return CysUIDB.menuButton ~= false end,
+        function(v) CysUIDB.menuButton = v and true or false end)
+    Check("Mouse wheel changes sliders (off: the wheel only scrolls the page)",
+        function() return CysUIDB.wheelSliders == true end,
+        function(v) CysUIDB.wheelSliders = v and true or false end)
+    Check("Tell me when a newer version is out (via guild and group)",
         function() return CysUIDB.update and CysUIDB.update.enabled ~= false end,
         function(v) CysUIDB.update = CysUIDB.update or {}; CysUIDB.update.enabled = v and true or false end)
-    upd:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -14)
 
-    page.contentHeight = 852
+    y = y - 14
+    W.Header(page, "Tools", W2):SetPoint("TOPLEFT", 0, y)
+    y = y - 32
+    local bw = math.floor((W2 - 8 - 16) / 3)
+    local tools = {
+        { "Layout mode", function() CUI:ToggleLayout() end, true },
+        { "Reset all positions", function() CUI:ResetAllMovers() end },
+        { "Profiles and sharing", function() CUI:OpenConfig("Profiles") end },
+        { "Copy debug info", function() CUI:ShowDebugBox() end },
+        { "View changelog", function() if CysChangelog and CysChangelog.order[1] then CysChangelog:Show(CysChangelog.order[1]) end end },
+        { "Reset everything", function() CUI:ResetEverything() end },
+    }
+    if CysChangelog then
+        for i = 2, #CysChangelog.order do
+            local name = CysChangelog.order[i]
+            tools[#tools + 1] = { "Changelog: " .. name, function() CysChangelog:Show(name) end }
+        end
+    end
+    for i, t in ipairs(tools) do
+        local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+        local b = W.Button(page, bw, 26, t[1], t[3])
+        b:SetPoint("TOPLEFT", 4 + col * (bw + 8), y - row * 34)
+        b:SetScript("OnClick", t[2])
+        if t[1] == "Reset everything" then b.danger = true; b:SetPrimary(false) end
+    end
+    y = y - math.ceil(#tools / 3) * 34 - 12
+
+    W.Header(page, "Links and bug reports", W2):SetPoint("TOPLEFT", 0, y)
+    local gh = CopyField(page, 300, "https://github.com/Cyserin/CysUI")
+    gh:SetPoint("TOPLEFT", 4, y - 32)
+    local note = W.Text(page, 11, T.desc)
+    note:SetPoint("TOPLEFT", gh, "BOTTOMLEFT", 0, -8)
+    note:SetWidth(W2 - 12)
+    note:SetJustifyH("LEFT")
+    note:SetText("Found a bug? Press |cFFFFD100Copy debug info|r, then post it with a screenshot at the address above under Issues.")
+    page.contentHeight = -y + 100
     RefreshMemory(page)
+    if CUI.OnProfilesChanged then CUI:OnProfilesChanged(function() if page.RefreshTiles then page:RefreshTiles() end end) end
 end, RefreshMemory)
 
 --------------------------------------------------------------------------------
@@ -504,7 +578,10 @@ local function EnsurePage(index)
     if page then return page end
     local def = CUI.pages[index]
     page = CreateFrame("Frame", nil, window.content)
-    page:SetAllPoints()
+    -- the page starts CARD_PAD in from the scroll area, so the cards drawn behind sections have room on the left
+    page:SetPoint("TOPLEFT", CARD_PAD, 0)
+    page:SetPoint("BOTTOMRIGHT", 0, 0)
+    page.cysSettingsPage = true -- W.Header draws card titles here
     page:Hide()
     pageFrames[index] = page
     local ok, err = pcall(def.build, page)
@@ -524,6 +601,133 @@ local function RefreshHeadTags()
         end
         h.tag:SetShown(any)
     end
+end
+
+--------------------------------------------------------------------------------
+-- Cards: every section of a page (a header and everything under it, down to the next header) sits on a
+-- softly lit panel with a thin edge. Worked out from where things really are once the page is laid out,
+-- so pages don't have to do anything; called again whenever the page is shown or changes size.
+--------------------------------------------------------------------------------
+-- combined pages: each part sits under the one before it, as tall as its own content
+local function StackParts(page)
+    local y = 0
+    for _, sub in ipairs(page.cysStack) do
+        sub:ClearAllPoints()
+        sub:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -y)
+        sub:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+        local top = sub:GetTop()
+        if not top then return end
+        local low = top - (sub.contentHeight or 0)
+        for _, c in ipairs({ sub:GetChildren() }) do
+            local b = c:IsShown() and c:GetBottom()
+            if b and b < low then low = b end
+        end
+        for _, r in ipairs({ sub:GetRegions() }) do
+            local b = r:IsShown() and r:GetBottom()
+            if b and b < low then low = b end
+        end
+        local h = math.max(top - low, 10)
+        sub:SetHeight(h)
+        y = y + h + 22
+    end
+    page.contentHeight = y
+end
+
+local function LayCards(page)
+    if page and page.cysStack and page:IsShown() then
+        StackParts(page)
+        if window and window.content and pageFrames[current] == page then
+            window.content:SetHeight(max(VIEW_H, page.contentHeight or 0))
+        end
+    end
+    local allHeads = {}
+    for _, h in ipairs(page and page.cysHeaders or {}) do allHeads[#allHeads + 1] = h end
+    for _, sub in ipairs(page and page.cysStack or {}) do
+        for _, h in ipairs(sub.cysHeaders or {}) do allHeads[#allHeads + 1] = h end
+    end
+    if not (page and page:IsShown() and #allHeads > 0) then return end
+    local pTop, pLeft, pBottom = page:GetTop(), page:GetLeft(), page:GetBottom()
+    if not (pTop and pLeft and pBottom) then return end
+    local heads = {}
+    for _, h in ipairs(allHeads) do
+        if h:IsShown() and h:GetTop() then heads[#heads + 1] = h end
+    end
+    table.sort(heads, function(a, b)
+        local ta, tb = a:GetTop(), b:GetTop()
+        if ta ~= tb then return ta > tb end
+        return (a:GetLeft() or 0) < (b:GetLeft() or 0)
+    end)
+    -- everything on the page that could belong to a section
+    local items = {}
+    local function Collect(fr)
+        for _, c in ipairs({ fr:GetChildren() }) do
+            if c:IsShown() and not c.isCardTitle then
+                if c.cysSubPage then Collect(c) else items[#items + 1] = c end
+            end
+        end
+        for _, r in ipairs({ fr:GetRegions() }) do
+            if r:IsShown() and not r.isCard then items[#items + 1] = r end
+        end
+    end
+    Collect(page)
+    page.cards = page.cards or {}
+    local lowest = 0
+    for i, h in ipairs(heads) do
+        local top = h:GetTop()
+        local nextTop = heads[i + 1] and heads[i + 1]:GetTop() or -math.huge
+        local bottom = h:GetBottom() or top
+        for _, it in ipairs(items) do
+            local t, b = it:GetTop(), it:GetBottom()
+            -- (frames stretched to the page's bottom edge are containers, not content)
+            if t and b and t <= top + 1 and t > nextTop + 1 and b < bottom and b > pBottom + 1 then bottom = b end
+        end
+        local card = page.cards[i]
+        if not card then
+            card = {}
+            card.bg = page:CreateTexture(nil, "BACKGROUND", nil, -6)
+            card.bg.isCard = true
+            card.edges = {}
+            for k = 1, 4 do
+                local t = page:CreateTexture(nil, "BACKGROUND", nil, -5)
+                t:SetColorTexture(T.line[1], T.line[2], T.line[3], 1)
+                t.isCard = true
+                card.edges[k] = t
+            end
+            page.cards[i] = card
+        end
+        local x = (h:GetLeft() or pLeft) - pLeft - CARD_PAD
+        local w = (h:GetWidth() or 300) + CARD_PAD + 2
+        local y1 = math.min(top - pTop + 6, 0) -- never above the page (the scroll area would cut it off)
+        local hgt = (pTop + y1) - bottom + 12
+        card.bg:ClearAllPoints()
+        card.bg:SetPoint("TOPLEFT", page, "TOPLEFT", x, y1)
+        card.bg:SetSize(w, hgt)
+        card.bg:SetColorTexture(T.card[1] + 0.012, T.card[2] + 0.01, T.card[3] + 0.006, 0.92)
+        card.bg:Show()
+        local e = card.edges
+        for k = 1, 4 do e[k]:ClearAllPoints() end
+        e[1]:SetPoint("TOPLEFT", card.bg, "TOPLEFT"); e[1]:SetPoint("TOPRIGHT", card.bg, "TOPRIGHT"); e[1]:SetHeight(1)
+        e[2]:SetPoint("BOTTOMLEFT", card.bg, "BOTTOMLEFT"); e[2]:SetPoint("BOTTOMRIGHT", card.bg, "BOTTOMRIGHT"); e[2]:SetHeight(1)
+        e[3]:SetPoint("TOPLEFT", card.bg, "TOPLEFT"); e[3]:SetPoint("BOTTOMLEFT", card.bg, "BOTTOMLEFT"); e[3]:SetWidth(1)
+        e[4]:SetPoint("TOPRIGHT", card.bg, "TOPRIGHT"); e[4]:SetPoint("BOTTOMRIGHT", card.bg, "BOTTOMRIGHT"); e[4]:SetWidth(1)
+        for k = 1, 4 do e[k]:Show() end
+        lowest = math.max(lowest, -(y1 - hgt))
+    end
+    for i = #heads + 1, #page.cards do
+        local card = page.cards[i]
+        card.bg:Hide()
+        for k = 1, 4 do card.edges[k]:Hide() end
+    end
+    -- keep the page scrollable down to the last card
+    if lowest + 8 > (page.contentHeight or 0) then
+        page.contentHeight = lowest + 8
+        if window and window.content and pageFrames[current] == page then
+            window.content:SetHeight(max(VIEW_H, page.contentHeight))
+        end
+    end
+end
+CUI.RelayoutSettingsPage = function(page)
+    if C_Timer then C_Timer.After(0, function() pcall(LayCards, page) end) end
 end
 
 local CreateTab -- defined after SelectPage (its click selects a page)
@@ -581,7 +785,7 @@ local function SelectPage(index)
         bar:SetShown(g ~= nil)
         local top = -PAD - (g and (TAB_H + 8) or 0)
         window.scroll:ClearAllPoints()
-        window.scroll:SetPoint("TOPLEFT", window.sidebar, "TOPRIGHT", PAD, top)
+        window.scroll:SetPoint("TOPLEFT", window.sidebar, "TOPRIGHT", PAD - CARD_PAD, top)
         window.scroll:SetPoint("BOTTOMRIGHT", window.footer, "TOPRIGHT", -PAD, PAD)
     end
     if window.where then
@@ -592,6 +796,7 @@ local function SelectPage(index)
     end
     if def.onShow then def.onShow(page) end
     UpdateFooter()
+    CUI.RelayoutSettingsPage(page)
 end
 
 CreateTab = function(bar)
@@ -621,6 +826,7 @@ CreateTab = function(bar)
 end
 
 local function CreateWindow()
+    CombinePages()
     BuildTabGroups()
     local f = CreateFrame("Frame", "CysUIConfigFrame", UIParent)
     window = f
@@ -953,7 +1159,9 @@ local function CreateWindow()
         index = {}
         for i, def in ipairs(CUI.pages) do
             local page = EnsurePage(i)
-            local list = { { text = ((LABELS[def.title] or def.title) .. " " .. def.title .. " " .. (tabGroup[i] and tabGroup[i].name or "")):lower() } }
+            local alias = ""
+            for a in pairs(def.aliases or {}) do alias = alias .. " " .. a end
+            local list = { { text = ((LABELS[def.title] or def.title) .. " " .. def.title .. " " .. (tabGroup[i] and tabGroup[i].name or "") .. alias):lower() } }
             local function Walk(fr, depth)
                 if depth > 8 then return end
                 local okR, regions = pcall(function() return { fr:GetRegions() } end)
@@ -1009,6 +1217,21 @@ local function CreateWindow()
     local box = CreateFrame("EditBox", nil, header)
     box:SetSize(170, 22)
     box:SetPoint("RIGHT", layoutBtn, "LEFT", -8, 0)
+    -- profile switcher beside the search box (Profile.lua); the swap happens on the next reload
+    if CUI.ProfileOptions then
+        local pdd = W.Dropdown(header, 128, CUI.ProfileOptions, function() return CUI:NextProfile() end,
+            function(v) CUI:SwitchProfile(v) end, "Profile: ")
+        pdd:SetPoint("RIGHT", box, "LEFT", -8, 0)
+        pdd:HookScript("OnEnter", function(s)
+            if s.label.IsTruncated and s.label:IsTruncated() then return end
+            GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+            GameTooltip:AddLine("Profile", 1, 0.82, 0)
+            GameTooltip:AddLine("Pick a saved setup; it loads when you press Reload UI. Manage them on the Profiles page.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        pdd:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        f.profileDD = pdd
+    end
     box:SetAutoFocus(false)
     box:SetFontObject(ChatFontNormal)
     box:SetFont(CysUICompat.Font(), CysUICompat.FontSize(11), "")
@@ -1112,7 +1335,7 @@ local function CreateWindow()
     -- content
     -- pages scroll (mouse wheel) when they're taller than the window, so adding modules never overflows it
     local scroll = CreateFrame("ScrollFrame", nil, f)
-    scroll:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", PAD, -PAD)
+    scroll:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", PAD - CARD_PAD, -PAD)
     scroll:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", -PAD, PAD)
     scroll:EnableMouseWheel(true)
     f.scroll = scroll
@@ -1127,7 +1350,7 @@ local function CreateWindow()
     tabBar:Hide()
     f.tabBar = tabBar
     f.content = CreateFrame("Frame", nil, scroll)
-    f.content:SetSize(CONTENT_W, VIEW_H)
+    f.content:SetSize(CONTENT_W + CARD_PAD, VIEW_H)
     scroll:SetScrollChild(f.content)
 
     local thumb = W.Texture(f, "ARTWORK", { T.brand[1], T.brand[2], T.brand[3], 0.5 })
@@ -1237,7 +1460,7 @@ function CUI:OpenConfig(pageTitle)
     if not window then CreateWindow() end
     CUI:ShowWindow(window)
     for i, page in ipairs(CUI.pages) do
-        if page.title == pageTitle then SelectPage(i) return end
+        if page.title == pageTitle or (page.aliases and page.aliases[pageTitle]) then SelectPage(i) return end
     end
 end
 
